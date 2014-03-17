@@ -759,39 +759,6 @@ class Application {
 
   void run()
   {
-    try
-    {
-      auto platforms = CLHost.getPlatforms();
-      if ( platforms.length < 1 )
-      {
-        writeln( "No platforms available." );
-        return;
-      }
-      foreach ( CLPlatform platform; platforms )
-      {
-        writeln( "Platform ", platform.name, "\nvendor\t\t", platform.vendor, ", ", platform.clversion, "\nprofile\t\t", platform.profile, "\nextensions\t", platform.extensions, "\n" );
-        auto devices = platform.allDevices;
-        if ( devices.length < 1 )
-        {
-          writeln( "No devices available." );
-          return;
-        }
-        foreach ( CLDevice device; devices )
-        {
-          writeln( "Device ", device.name );
-          writeln( "vendor\t\t", device.vendor, " ", device.driverVersion, ", ", device.clVersion, "\nprofile\t\t", device.profile, "\nextensions\t", device.extensions, "\n" );
-        }
-      }
-    }
-    catch( Exception e )
-    {
-      write( e );
-    }
-
-
-
-
-
     StopWatch timer;
     TickDuration ticks;
     timer.start();
@@ -817,7 +784,191 @@ class Application {
     foreach( ii; 0 .. F.length ) if ( F[ii] != G[ii] ) ++diff;
     if ( diff > 0 ) writeln( "DIFFs ", diff );
     //compute_alignments();
+    opencl_diamonds();
+    diff = 0;
+    foreach( ii; 0 .. F.length ) if ( F[ii] != G[ii] ) ++diff;
+    if ( diff > 0 ) writeln( "DIFFs ", diff );
     save();
+  }
+
+  void opencl_diamonds()
+  {
+    try
+    {
+      CLDevices devices;
+      CLPlatforms platforms = CLHost.getPlatforms();
+      if ( platforms.length < 1 )
+      {
+        writeln( "No platforms available." );
+        return;
+      }
+      foreach ( CLPlatform platform; platforms )
+      {
+        static if ( DEBUG )
+          writeln( "Platform ", platform.name, "\nvendor\t\t", platform.vendor, ", ", platform.clversion, "\nprofile\t\t", platform.profile, "\nextensions\t", platform.extensions, "\n" );
+        devices = platform.allDevices;
+        if ( devices.length < 1 )
+        {
+          writeln( "No devices available." );
+          return;
+        }
+        static if ( DEBUG )
+        foreach ( CLDevice device; devices )
+        {
+          writeln( "Device ", device.name );
+          writeln( "vendor\t\t", device.vendor, " ", device.driverVersion, ", ", device.clVersion, "\nprofile\t\t", device.profile, "\nextensions\t", device.extensions, "\n" );
+        }
+      }
+      auto context = CLContext( platforms[0], CL_DEVICE_TYPE_GPU );
+      auto queue = CLCommandQueue( context, devices[1] );
+      auto program = context.createProgram( mixin( CL_PROGRAM_STRING_DEBUG_INFO ) ~ q{
+          #define BLOCK_SIZE 32
+          int maximum( int a, int b, int c );
+          int maximum( int a, int b, int c )
+          {
+            int k = a > b ? a : b;
+            return k > c ? k : c;
+          }
+          __kernel void diamond( __global const int* S, __global int* F, int Y, int X, int cols, int penalty, __local int* s, __local int* t )
+          {
+            int bx = get_group_id( 0 );
+            int tx = get_local_id( 0 );
+            int xx = X + 2 * bx;
+            int yy = Y -     bx;
+
+            if ( xx == 0 )
+            {
+              // 1.
+              int index    = cols * BLOCK_SIZE * yy + tx * cols + cols + 1;
+              int index_w  = cols * BLOCK_SIZE * yy + tx * cols + cols;
+              int index_nw = cols * BLOCK_SIZE * yy + tx * cols;
+              int index_n0 = cols * BLOCK_SIZE * yy + 1;
+
+              if ( tx == 0 ) t[0] = F[index_nw];
+              for ( int ty = 0; ty < BLOCK_SIZE; ++ty ) s[tx * BLOCK_SIZE + ty] = S[index + ty];
+
+              t[tx + 1] = F[index_n0 + tx];
+              t[(tx + 1) * (BLOCK_SIZE + 2)] = F[index_w];
+              barrier( CLK_LOCAL_MEM_FENCE );
+              // 2.
+              for ( int m = 0; m < BLOCK_SIZE; ++m )
+              {
+                if ( m < BLOCK_SIZE - tx )
+                {
+                  int x = m + 1;
+                  int y = tx + 1;
+
+                  t[y * (BLOCK_SIZE + 2) + x] = maximum( t[(y-1) * (BLOCK_SIZE + 2) + x-1] + s[(y-1) * BLOCK_SIZE + x-1], t[(y-1) * (BLOCK_SIZE + 2) + x] - penalty, t[y * (BLOCK_SIZE + 2) + x-1] - penalty );
+                }
+                barrier( CLK_LOCAL_MEM_FENCE );
+              }
+              // 3.
+              for ( int ty = 0; ty < BLOCK_SIZE - tx; ++ty )
+                F[index + ty] = t[(tx+1) * (BLOCK_SIZE + 2) + ty+1];
+            }
+            else if ( xx < cols / BLOCK_SIZE )
+            {
+              // 1.
+              int index    = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + tx * (cols - 1) + cols + 1;
+              int index_w  = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + tx * (cols - 1) + cols;
+              int index_nw = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + tx * (cols - 1);
+              int index_n0 = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + 1;
+
+              if ( tx == 0 ) t[0] = F[index_nw];
+
+              for ( int ty = 0; ty < BLOCK_SIZE; ++ty ) s[tx * BLOCK_SIZE + ty] = S[index + ty];
+              t[tx + 1] = F[index_n0 + tx];
+              t[(tx + 1) * (BLOCK_SIZE + 2)] = F[index_w - 1];
+              t[(tx + 1) * (BLOCK_SIZE + 2) + 1] = F[index_w];
+              barrier( CLK_LOCAL_MEM_FENCE );
+              // 2.
+              for ( int m = 0; m < BLOCK_SIZE; ++m )
+              {
+                int x =  m + 2;
+                int y =  tx + 1;
+
+                t[y * (BLOCK_SIZE + 2) + x] = maximum( t[(y-1) * (BLOCK_SIZE + 2) + x-2] + s[(y-1) * BLOCK_SIZE + x-2], t[(y-1) * (BLOCK_SIZE + 2) + x-1] - penalty, t[y * (BLOCK_SIZE + 2) + x-1] - penalty );
+                barrier( CLK_LOCAL_MEM_FENCE );
+              }
+              // 3.
+              for ( int ty = 0; ty < BLOCK_SIZE; ++ty )
+                F[index + ty] = t[(tx+1) * (BLOCK_SIZE + 2) + ty+2];
+            }
+            else if ( xx == cols / BLOCK_SIZE )
+            {
+              // 1.
+              int index    = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + tx * (cols - 1) + cols + 1;
+              int index_w  = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + tx * (cols - 1) + cols;
+
+              for ( int ty = 0; ty < tx; ++ty ) s[tx * BLOCK_SIZE + ty] = S[index + ty];
+              t[(tx + 1) * (BLOCK_SIZE + 2)] = F[index_w - 1];
+              t[(tx + 1) * (BLOCK_SIZE + 2) + 1] = F[index_w];
+              barrier( CLK_LOCAL_MEM_FENCE );
+              // 2.
+              for ( int m = 0; m < BLOCK_SIZE; ++m )
+              {
+                if ( m < tx )
+                {
+                  int x =  m + 2;
+                  int y =  tx + 1;
+
+                  t[y * (BLOCK_SIZE + 2) + x] = maximum( t[(y-1) * (BLOCK_SIZE + 2) + x-2] + s[(y-1) * BLOCK_SIZE + x-2], t[(y-1) * (BLOCK_SIZE + 2) + x-1] - penalty, t[y * (BLOCK_SIZE + 2) + x-1] - penalty );
+                }
+                barrier( CLK_LOCAL_MEM_FENCE );
+              }
+              // 3.
+              for ( int ty = 0; ty < tx; ++ty )
+                F[index + ty] = t[(tx+1) * (BLOCK_SIZE + 2) + ty+2];
+            }
+          }
+        } );
+      program.build( "" );
+      static if ( DEBUG )
+      {
+        auto diagnostics = program.buildLog( devices[1] );
+        writeln( diagnostics );
+      }
+      auto kernel = CLKernel( program, "diamond" );
+      StopWatch timer;
+      timer.start();
+      auto aS = LocalArgSize( BLOCK_SIZE * BLOCK_SIZE );
+      auto aT = LocalArgSize( (BLOCK_SIZE + 1) * (BLOCK_SIZE + 2) );
+      auto bS = CLBuffer( context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, S.sizeof, S.ptr );
+      auto bF = CLBuffer( context, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, F.sizeof, F.ptr);
+      kernel.setArg( 0, bS );
+      kernel.setArg( 1, bF );
+      kernel.setArg( 4, cols );
+      kernel.setArg( 5, penalty );
+      kernel.setArg( 6, aS );
+      kernel.setArg( 7, aT );
+      auto wgroup = NDRange( BLOCK_SIZE );
+      for ( int i = 0; i < rows / BLOCK_SIZE; ++i )
+      {
+        auto global = NDRange( BLOCK_SIZE * (i + 1) );
+        kernel.setArg( 2, i );
+        kernel.setArg( 3, 0 );
+        queue.enqueueNDRangeKernel( kernel, global, wgroup );
+
+        kernel.setArg( 3, 1 );
+        queue.enqueueNDRangeKernel( kernel, global, wgroup );
+      }
+      for ( int i = 2; i <= cols / BLOCK_SIZE; ++i )
+      {
+        auto global = NDRange( rows - 1 );
+        kernel.setArg( 2, rows / BLOCK_SIZE - 1);
+        kernel.setArg( 3, i );
+        queue.enqueueNDRangeKernel( kernel, global, wgroup );
+      }
+      queue.enqueueReadBuffer( bF, CL_TRUE, 0, F.sizeof, F.ptr );
+      timer.stop();
+      TickDuration ticks = timer.peek();
+      writeln( "PARALLEL ", ticks.usecs, " [us]" );
+    }
+    catch( Exception e )
+    {
+      write( e );
+      writeln();
+    }
   }
 }
 
