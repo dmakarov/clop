@@ -795,6 +795,9 @@ class Application {
   {
     try
     {
+      F[] = 0;
+      foreach ( ii; 0 .. rows ) F[ii * cols] = -penalty * ii;
+      foreach ( jj; 0 .. cols ) F[jj       ] = -penalty * jj;
       CLDevices devices;
       CLPlatforms platforms = CLHost.getPlatforms();
       if ( platforms.length < 1 )
@@ -931,8 +934,8 @@ class Application {
       auto kernel = CLKernel( program, "diamond" );
       StopWatch timer;
       timer.start();
-      auto aS = LocalArgSize( BLOCK_SIZE * BLOCK_SIZE );
-      auto aT = LocalArgSize( (BLOCK_SIZE + 1) * (BLOCK_SIZE + 2) );
+      auto aS = LocalArgSize( BLOCK_SIZE * BLOCK_SIZE * cl_int.sizeof );
+      auto aT = LocalArgSize( (BLOCK_SIZE + 1) * (BLOCK_SIZE + 2) * cl_int.sizeof );
       auto bS = CLBuffer( context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, S.sizeof, S.ptr );
       auto bF = CLBuffer( context, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, F.sizeof, F.ptr);
       kernel.setArg( 0, bS );
