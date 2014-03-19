@@ -80,8 +80,8 @@ class Application {
     for ( int ii = 1; ii < rows; ++ii )
       for ( int jj = 1; jj < cols; ++jj )
         S[ii * cols + jj] = BLOSUM62[M[ii]][N[jj]];
-    foreach ( ii; 0 .. rows ) F[ii * cols] = -penalty * ii;
-    foreach ( jj; 0 .. cols ) F[jj       ] = -penalty * jj;
+    foreach ( r; 1 .. rows ) F[r * cols] = -penalty * r;
+    foreach ( c; 0 .. cols ) F[c       ] = -penalty * c;
   }
 
   void save()
@@ -796,8 +796,8 @@ class Application {
     try
     {
       F[] = 0;
-      foreach ( ii; 0 .. rows ) F[ii * cols] = -penalty * ii;
-      foreach ( jj; 0 .. cols ) F[jj       ] = -penalty * jj;
+      foreach ( r; 1 .. rows ) F[r * cols] = -penalty * r;
+      foreach ( c; 0 .. cols ) F[c       ] = -penalty * c;
       CLDevices devices;
       CLPlatforms platforms = CLHost.getPlatforms();
       if ( platforms.length < 1 )
@@ -856,10 +856,10 @@ class Application {
               // 2.
               for ( int m = 0; m < BLOCK_SIZE; ++m )
               {
-                if ( m < BLOCK_SIZE - tx )
+                if ( tx <= m )
                 {
-                  int x = m + 1;
-                  int y = tx + 1;
+                  int x = tx + 1;
+                  int y = m - tx + 1;
 
                   t[y * (BLOCK_SIZE + 2) + x] = maximum( t[(y-1) * (BLOCK_SIZE + 2) + x-1] + s[(y-1) * BLOCK_SIZE + x-1], t[(y-1) * (BLOCK_SIZE + 2) + x] - penalty, t[y * (BLOCK_SIZE + 2) + x-1] - penalty );
                 }
@@ -936,8 +936,8 @@ class Application {
       timer.start();
       auto aS = LocalArgSize( BLOCK_SIZE * BLOCK_SIZE * cl_int.sizeof );
       auto aT = LocalArgSize( (BLOCK_SIZE + 1) * (BLOCK_SIZE + 2) * cl_int.sizeof );
-      auto bS = CLBuffer( context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, S.sizeof, S.ptr );
-      auto bF = CLBuffer( context, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, F.sizeof, F.ptr);
+      auto bS = CLBuffer( context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, cl_int.sizeof * rows * cols, S.ptr );
+      auto bF = CLBuffer( context, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, cl_int.sizeof * rows * cols, F.ptr );
       kernel.setArg( 0, bS );
       kernel.setArg( 1, bF );
       kernel.setArg( 4, cols );
@@ -962,7 +962,7 @@ class Application {
         kernel.setArg( 3, i );
         queue.enqueueNDRangeKernel( kernel, global, wgroup );
       }
-      queue.enqueueReadBuffer( bF, CL_TRUE, 0, F.sizeof, F.ptr );
+      queue.enqueueReadBuffer( bF, CL_TRUE, 0, cl_int.sizeof * rows * cols, F.ptr );
       timer.stop();
       TickDuration ticks = timer.peek();
       writeln( "PARALLEL ", ticks.usecs, " [us]" );
