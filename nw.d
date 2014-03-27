@@ -861,7 +861,9 @@ class Application {
                   int x = tx + 1;
                   int y = m - tx + 1;
 
-                  t[y * (BLOCK_SIZE + 2) + x] = maximum( t[(y-1) * (BLOCK_SIZE + 2) + x-1] + s[(y-1) * BLOCK_SIZE + x-1], t[(y-1) * (BLOCK_SIZE + 2) + x] - penalty, t[y * (BLOCK_SIZE + 2) + x-1] - penalty );
+                  t[y * (BLOCK_SIZE + 2) + x] = maximum( t[(y-1) * (BLOCK_SIZE + 2) + x-1] + s[(y-1) * BLOCK_SIZE + x-1],
+                                                         t[(y-1) * (BLOCK_SIZE + 2) + x] - penalty,
+                                                         t[y * (BLOCK_SIZE + 2) + x-1] - penalty );
                 }
                 barrier( CLK_LOCAL_MEM_FENCE );
               }
@@ -936,8 +938,8 @@ class Application {
       timer.start();
       auto aS = LocalArgSize( BLOCK_SIZE * BLOCK_SIZE * cl_int.sizeof );
       auto aT = LocalArgSize( (BLOCK_SIZE + 1) * (BLOCK_SIZE + 2) * cl_int.sizeof );
-      auto bS = CLBuffer( context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, cl_int.sizeof * rows * cols, S.ptr );
-      auto bF = CLBuffer( context, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, cl_int.sizeof * rows * cols, F.ptr );
+      auto bS = CLBuffer( context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, cl_int.sizeof * S.length, S.ptr );
+      auto bF = CLBuffer( context, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, cl_int.sizeof * F.length, F.ptr );
       kernel.setArg( 0, bS );
       kernel.setArg( 1, bF );
       kernel.setArg( 4, cols );
@@ -962,7 +964,7 @@ class Application {
         kernel.setArg( 3, i );
         queue.enqueueNDRangeKernel( kernel, global, wgroup );
       }
-      queue.enqueueReadBuffer( bF, CL_TRUE, 0, cl_int.sizeof * rows * cols, F.ptr );
+      queue.enqueueReadBuffer( bF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr );
       timer.stop();
       TickDuration ticks = timer.peek();
       writeln( "PARALLEL ", ticks.usecs, " [us]" );
