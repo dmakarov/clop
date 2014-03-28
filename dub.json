@@ -1,0 +1,6 @@
+{
+	"name" : "clop",
+	"description" : "A minimal D bundle.",
+	"dependencies" : {
+	}
+}
