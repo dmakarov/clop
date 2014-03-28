@@ -11,7 +11,7 @@ class Application {
   static immutable int CHARS =   24;
   static immutable int LIMIT = -999;
   static immutable int SEED  =    1;
-  static immutable int BLOCK_SIZE = 32;
+  static immutable int BLOCK_SIZE = 16;
   static immutable int BLOSUM62[CHARS][CHARS] = [
   [ 4, -1, -2, -2,  0, -1, -1,  0, -2, -1, -1, -1, -1, -2, -1,  1,  0, -3, -2,  0, -2, -1,  0, -4],
   [-1,  5,  0, -2, -3,  1,  0, -2,  0, -3, -2,  2, -1, -3, -2, -1, -1, -3, -2, -3, -1,  0, -1, -4],
@@ -53,6 +53,8 @@ class Application {
   int cols;
   int penalty;
   string outfile;
+  CLContext context;
+  CLCommandQueue queue;
 
   this( string[] args )
   {
@@ -82,6 +84,33 @@ class Application {
         S[ii * cols + jj] = BLOSUM62[M[ii]][N[jj]];
     foreach ( r; 1 .. rows ) F[r * cols] = -penalty * r;
     foreach ( c; 0 .. cols ) F[c       ] = -penalty * c;
+
+    CLDevices devices;
+    CLPlatforms platforms = CLHost.getPlatforms();
+    if ( platforms.length < 1 )
+    {
+      writeln( "No platforms available." );
+      return;
+    }
+    foreach ( CLPlatform platform; platforms )
+    {
+      static if ( DEBUG )
+        writeln( "Platform ", platform.name, "\nvendor\t\t", platform.vendor, ", ", platform.clversion, "\nprofile\t\t", platform.profile, "\nextensions\t", platform.extensions, "\n" );
+      devices = platform.allDevices;
+      if ( devices.length < 1 )
+      {
+        writeln( "No devices available." );
+        return;
+      }
+      static if ( DEBUG )
+        foreach ( CLDevice device; devices )
+        {
+          writeln( "Device ", device.name );
+          writeln( "vendor\t\t", device.vendor, " ", device.driverVersion, ", ", device.clVersion, "\nprofile\t\t", device.profile, "\nextensions\t", device.extensions, "\n" );
+        }
+      }
+    context = CLContext( platforms[0], CL_DEVICE_TYPE_GPU );
+    queue = CLCommandQueue( context, devices[1] );
   }
 
   void save()
@@ -789,6 +818,9 @@ class Application {
     foreach( ii; 0 .. F.length ) if ( F[ii] != G[ii] ) ++diff;
     if ( diff > 0 ) writeln( "DIFFs ", diff );
     opencl_rectangles();
+    diff = 0;
+    foreach( ii; 0 .. F.length ) if ( F[ii] != G[ii] ) ++diff;
+    if ( diff > 0 ) writeln( "DIFFs ", diff );
     save();
   }
 
@@ -799,47 +831,22 @@ class Application {
       F[] = 0;
       foreach ( r; 1 .. rows ) F[r * cols] = -penalty * r;
       foreach ( c; 0 .. cols ) F[c       ] = -penalty * c;
-      CLDevices devices;
-      CLPlatforms platforms = CLHost.getPlatforms();
-      if ( platforms.length < 1 )
-      {
-        writeln( "No platforms available." );
-        return;
-      }
-      foreach ( CLPlatform platform; platforms )
-      {
-        static if ( DEBUG )
-          writeln( "Platform ", platform.name, "\nvendor\t\t", platform.vendor, ", ", platform.clversion, "\nprofile\t\t", platform.profile, "\nextensions\t", platform.extensions, "\n" );
-        devices = platform.allDevices;
-        if ( devices.length < 1 )
-        {
-          writeln( "No devices available." );
-          return;
-        }
-        static if ( DEBUG )
-        foreach ( CLDevice device; devices )
-        {
-          writeln( "Device ", device.name );
-          writeln( "vendor\t\t", device.vendor, " ", device.driverVersion, ", ", device.clVersion, "\nprofile\t\t", device.profile, "\nextensions\t", device.extensions, "\n" );
-        }
-      }
-      auto context = CLContext( platforms[0], CL_DEVICE_TYPE_GPU );
-      auto queue = CLCommandQueue( context, devices[1] );
       auto program = context.createProgram( mixin( CL_PROGRAM_STRING_DEBUG_INFO ) ~ q{
-          #define BLOCK_SIZE 32
+          #define BLOCK_SIZE 16
           int maximum( int a, int b, int c );
           int maximum( int a, int b, int c )
           {
             int k = a > b ? a : b;
             return k > c ? k : c;
           }
-          __kernel void rectangles( __global const int* S, __global int* F, int cols, int penalty, int i, bool is_upper, __local int* s, __local int* t )
+          __kernel void rectangles( __global const int* S, __global int* F, int cols, int penalty, int i, int is_upper, __local int* s, __local int* t )
           {
             int bx = get_group_id( 0 );
             int tx = get_local_id( 0 );
-            int xx = ( is_upper ) ?         bx : (cols - 1) / BLOCK_SIZE + bx - i;
-            int yy = ( is_upper ) ? i - 1 - bx : (cols - 1) / BLOCK_SIZE - bx - 1;
-
+            int xx =         bx;
+            if ( is_upper == 1 ) xx = (cols - 1) / BLOCK_SIZE + bx - i;
+            int yy = i - 1 - bx;
+            if ( is_upper == 1 ) yy = (cols - 1) / BLOCK_SIZE - bx - 1;
             // 1.
             int index    = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + tx + cols + 1;
             int index_n  = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + tx + 1;
@@ -860,7 +867,7 @@ class Application {
                 int x = tx + 1;
                 int y = m - tx + 1;
 
-                t[y * (BLOCK_SIZE + 1) + x] = maximum( t[(y-1) * (BLOCK_SIZE + 1) + x-1] + s[y * BLOCK_SIZE + x],
+                t[y * (BLOCK_SIZE + 1) + x] = maximum( t[(y-1) * (BLOCK_SIZE + 1) + x-1] + s[(y-1) * BLOCK_SIZE + x-1],
                                                        t[(y-1) * (BLOCK_SIZE + 1) + x  ] - penalty,
                                                        t[(y  ) * (BLOCK_SIZE + 1) + x-1] - penalty );
               }
@@ -874,7 +881,7 @@ class Application {
                 int x = BLOCK_SIZE + tx - m;
                 int y = BLOCK_SIZE - tx;
 
-                t[y * (BLOCK_SIZE + 1) + x] = maximum( t[(y-1) * (BLOCK_SIZE + 1) + x-1] + s[y * BLOCK_SIZE + x],
+                t[y * (BLOCK_SIZE + 1) + x] = maximum( t[(y-1) * (BLOCK_SIZE + 1) + x-1] + s[(y-1) * BLOCK_SIZE + x-1],
                                                        t[(y-1) * (BLOCK_SIZE + 1) + x  ] - penalty,
                                                        t[(y  ) * (BLOCK_SIZE + 1) + x-1] - penalty );
               }
@@ -886,43 +893,38 @@ class Application {
           }
         } );
       program.build( "" );
-      static if ( DEBUG )
-      {
-        auto diagnostics = program.buildLog( devices[1] );
-        writeln( diagnostics );
-      }
       auto kernel = CLKernel( program, "rectangles" );
       StopWatch timer;
       timer.start();
       auto aS = LocalArgSize( BLOCK_SIZE * BLOCK_SIZE * cl_int.sizeof );
-      auto aT = LocalArgSize( (BLOCK_SIZE + 1) * (BLOCK_SIZE + 2) * cl_int.sizeof );
+      auto aT = LocalArgSize( (BLOCK_SIZE + 1) * (BLOCK_SIZE + 1) * cl_int.sizeof );
       auto bS = CLBuffer( context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, cl_int.sizeof * S.length, S.ptr );
       auto bF = CLBuffer( context, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, cl_int.sizeof * F.length, F.ptr );
       kernel.setArg( 0, bS );
       kernel.setArg( 1, bF );
-      kernel.setArg( 4, cols );
-      kernel.setArg( 5, penalty );
+      kernel.setArg( 2, cols );
+      kernel.setArg( 3, penalty );
       kernel.setArg( 6, aS );
       kernel.setArg( 7, aT );
       auto wgroup = NDRange( BLOCK_SIZE );
       for ( int i = 1; i <= (cols - 1) / BLOCK_SIZE; ++i )
       {
-        auto global = NDRange( BLOCK_SIZE * (i + 1) );
-        kernel.setArg( 2, i );
-        kernel.setArg( 3, 0 );
+        auto global = NDRange( BLOCK_SIZE * i );
+        kernel.setArg( 4, i );
+        kernel.setArg( 5, 0 );
         queue.enqueueNDRangeKernel( kernel, global, wgroup );
       }
-      for ( int i = (cols - 1) / BLOCK_SIZE - 1; i >= 1; -i )
+      for ( int i = (cols - 1) / BLOCK_SIZE - 1; i > 0; --i )
       {
-        auto global = NDRange( rows - 1 );
-        kernel.setArg( 2, rows / BLOCK_SIZE - 1);
-        kernel.setArg( 3, i );
+        auto global = NDRange( BLOCK_SIZE * i );
+        kernel.setArg( 4, i );
+        kernel.setArg( 5, 1 );
         queue.enqueueNDRangeKernel( kernel, global, wgroup );
       }
       queue.enqueueReadBuffer( bF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr );
       timer.stop();
       TickDuration ticks = timer.peek();
-      writeln( "BLOCKEDCL ", ticks.usecs, " [us]" );
+      writeln( "BLOCKEDC ", ticks.usecs, " [us]" );
     }
     catch( Exception e )
     {
@@ -938,34 +940,8 @@ class Application {
       F[] = 0;
       foreach ( r; 1 .. rows ) F[r * cols] = -penalty * r;
       foreach ( c; 0 .. cols ) F[c       ] = -penalty * c;
-      CLDevices devices;
-      CLPlatforms platforms = CLHost.getPlatforms();
-      if ( platforms.length < 1 )
-      {
-        writeln( "No platforms available." );
-        return;
-      }
-      foreach ( CLPlatform platform; platforms )
-      {
-        static if ( DEBUG )
-          writeln( "Platform ", platform.name, "\nvendor\t\t", platform.vendor, ", ", platform.clversion, "\nprofile\t\t", platform.profile, "\nextensions\t", platform.extensions, "\n" );
-        devices = platform.allDevices;
-        if ( devices.length < 1 )
-        {
-          writeln( "No devices available." );
-          return;
-        }
-        static if ( DEBUG )
-        foreach ( CLDevice device; devices )
-        {
-          writeln( "Device ", device.name );
-          writeln( "vendor\t\t", device.vendor, " ", device.driverVersion, ", ", device.clVersion, "\nprofile\t\t", device.profile, "\nextensions\t", device.extensions, "\n" );
-        }
-      }
-      auto context = CLContext( platforms[0], CL_DEVICE_TYPE_GPU );
-      auto queue = CLCommandQueue( context, devices[1] );
       auto program = context.createProgram( mixin( CL_PROGRAM_STRING_DEBUG_INFO ) ~ q{
-          #define BLOCK_SIZE 32
+          #define BLOCK_SIZE 16
           int maximum( int a, int b, int c );
           int maximum( int a, int b, int c )
           {
