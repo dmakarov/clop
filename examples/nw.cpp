@@ -36,6 +36,7 @@ struct Application {
     kernel_file = "Kernels.cl";
     kernel_names[0] = "nw1";
     kernel_names[1] = "nw2";
+    kernel_names[2] = "rhombus";
     outfile = NULL;
     platform_index = 0;
     device_index = 0;
@@ -106,7 +107,7 @@ struct Application {
     free( I );
     free( O );
     t2 = gettime();
-    fprintf( stdout, "TOTAL  %f\n", t2 - t1 );
+    fprintf( stdout, "TOTAL   %f\n", t2 - t1 );
 #ifdef __MACH__
     mach_port_deallocate( self, cclock );
 #endif
@@ -235,7 +236,7 @@ struct Application {
 
     // 5: Load CL file, build CL program object, create CL kernel object
     load_kernels( kernel_file, device_index );
-    for ( int kn = 0; kn < 2; ++kn )
+    for ( int kn = 0; kn < 3; ++kn )
     {
       // get a kernel object handle for a kernel with the given name
       cl_kernel kernel = clCreateKernel( program, ( kernel_names[kn] ).c_str(), &status );
@@ -444,10 +445,12 @@ struct Application {
    */
   void compute_alignments()
   {
+#if 0
     for ( int ii = 0; ii < rows; ++ii )
       for ( int jj = 0; jj < cols; ++jj )
         if ( F[ii * cols + jj] != O[ii * cols + jj] )
           fprintf( stderr, "mismatch %d,%d %d != %d\n", ii, jj, F[ii * cols + jj], O[ii * cols + jj] );
+#endif
     int i = rows - 2;
     int j = cols - 2;
     int m = i;
@@ -546,6 +549,61 @@ struct Application {
     clReleaseMemObject( S_d );
   }
 
+  void compute_scores_device_rhombus()
+  {
+    for ( int ii = 1; ii < rows; ++ii ) I[ii * cols] = -ii * penalty;
+    for ( int jj = 1; jj < cols; ++jj ) I[jj       ] = -jj * penalty;
+    int nworkitems = 16, workgroupsize = 0;
+    // set global and local workitems
+    size_t local_work = workgroupsize > 0 ? workgroupsize : 1;
+    size_t global_work = nworkitems; //nworkitems = no. of GPU threads
+    cl_int status;
+    cl_mem I_d = clCreateBuffer( context, CL_MEM_READ_WRITE, cols * rows * sizeof(int), NULL, &status );
+    check_status( status, "compute_scores_device clCreateBuffer 1 " );
+    cl_mem S_d = clCreateBuffer( context, CL_MEM_READ_WRITE, cols * rows * sizeof(int), NULL, &status );
+    check_status( status, "compute_scores_device clCreateBuffer 2 " );
+    status = clEnqueueWriteBuffer( queue, I_d, CL_TRUE, 0, cols * rows * sizeof(int), I, 0, NULL, NULL );
+    check_status( status, "compute_scores_device clEnqueueWriteBuffer 1 " );
+    status = clEnqueueWriteBuffer( queue, S_d, CL_TRUE, 0, cols * rows * sizeof(int), S, 0, NULL, NULL );
+    check_status( status, "compute_scores_device clEnqueueWriteBuffer 2 " );
+
+    clSetKernelArg( kernels[2], 0, sizeof(cl_mem)                             , &S_d         );
+    clSetKernelArg( kernels[2], 1, sizeof(cl_mem)                             , &I_d         );
+    clSetKernelArg( kernels[2], 4, sizeof(int)                                , &cols        );
+    clSetKernelArg( kernels[2], 5, sizeof(int)                                , &penalty     );
+    clSetKernelArg( kernels[2], 6, sizeof(int) * ( BLOCK + 1 ) * ( BLOCK + 2 ), NULL         );
+    clSetKernelArg( kernels[2], 7, sizeof(int) * ( BLOCK     ) * ( BLOCK     ), NULL         );
+
+    for( int blk = 0; blk < rows / BLOCK; ++blk )
+    {
+      global_work = BLOCK * (blk+1);
+      local_work  = BLOCK;
+      int Y = 0;
+      clSetKernelArg( kernels[2], 2, sizeof(int), &blk );
+      clSetKernelArg( kernels[2], 3, sizeof(int), &Y );
+      status = clEnqueueNDRangeKernel( queue, kernels[2], 1, NULL, &global_work, &local_work, 0, NULL, NULL );
+      check_status( status, "compute_scores_device_rhombus clEnqueueNDRangeKernel 1 " );
+      Y = 1;
+      clSetKernelArg( kernels[2], 3, sizeof(int), &Y );
+      status = clEnqueueNDRangeKernel( queue, kernels[2], 1, NULL, &global_work, &local_work, 0, NULL, NULL );
+      check_status( status, "compute_scores_device_rhombus clEnqueueNDRangeKernel 2 " );
+    }
+    for( int blk = 2; blk <= cols / BLOCK; ++blk )
+    {
+      global_work = rows - 1;
+      local_work  = BLOCK;
+      int X = rows / BLOCK - 1;
+      clSetKernelArg( kernels[2], 2, sizeof(int), &X );
+      clSetKernelArg( kernels[2], 3, sizeof(int), &blk );
+      status = clEnqueueNDRangeKernel( queue, kernels[2], 1, NULL, &global_work, &local_work, 0, NULL, NULL );
+      check_status( status, "compute_scores_device_rhombus clEnqueueNDRangeKernel 2 " );
+    }
+    status = clEnqueueReadBuffer( queue, I_d, CL_TRUE, 0, cols * rows * sizeof(int), O, 0, NULL, NULL );
+    check_status( status, "compute_scores_device clEnqueueReadBuffer " );
+    clReleaseMemObject( I_d );
+    clReleaseMemObject( S_d );
+  }
+
   void usage( char **argv )
   {
     const char *help = "Usage: %s [-p <platform>] [-d <device>] [-o <outfile>]  <size> <penalty>\n"
@@ -565,9 +623,11 @@ struct Application {
     double t2 = gettime();
     compute_scores_device();
     double t3 = gettime();
+    compute_scores_device_rhombus();
+    double t4 = gettime();
     compute_alignments();
     fini();
-    fprintf( stdout, "DEVICE %f\nSERIAL %f\n", t3 - t2, t2 - t1 );
+    fprintf( stdout, "BLOCKED %f\nSERIAL  %f\nRHOMBUS %f\n", t3 - t2, t2 - t1, t4 - t3 );
   }
 
   int *A;
@@ -589,8 +649,8 @@ struct Application {
   cl_device_id *devices;
   cl_device_id device;
   string kernel_file;
-  string kernel_names[2];
-  cl_kernel kernels[2];
+  string kernel_names[3];
+  cl_kernel kernels[3];
   cl_context context;
   cl_command_queue queue;
   cl_program program;

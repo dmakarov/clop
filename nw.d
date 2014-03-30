@@ -794,13 +794,13 @@ class Application {
     upperleftbottomright();
     timer.stop();
     ticks = timer.peek();
-    writeln( "BLOCKED  ", ticks.usecs, " [us]" );
+    writeln( "BLOCKED  ", ticks.usecs / 1E6, " [s]" );
     timer.reset();
     timer.start();
     usingdiamonds();
     timer.stop();
     ticks = timer.peek();
-    writeln( "DIAMONDS ", ticks.usecs, " [us]" );
+    writeln( "DIAMONDS ", ticks.usecs / 1E6, " [s]" );
     G[] = F[];
     timer.reset();
     timer.start();
@@ -808,7 +808,7 @@ class Application {
     compute_scores_serial();
     timer.stop();
     ticks = timer.peek();
-    writeln( "SERIAL   ", ticks.usecs, " [us]" );
+    writeln( "SERIAL   ", ticks.usecs / 1E6, " [s]" );
     int diff = 0;
     foreach( ii; 0 .. F.length ) if ( F[ii] != G[ii] ) ++diff;
     if ( diff > 0 ) writeln( "DIFFs ", diff );
