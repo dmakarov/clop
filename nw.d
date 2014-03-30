@@ -895,6 +895,7 @@ class Application {
       program.build( "" );
       auto kernel = CLKernel( program, "rectangles" );
       StopWatch timer;
+      timer.reset();
       timer.start();
       auto aS = LocalArgSize( BLOCK_SIZE * BLOCK_SIZE * cl_int.sizeof );
       auto aT = LocalArgSize( (BLOCK_SIZE + 1) * (BLOCK_SIZE + 1) * cl_int.sizeof );
@@ -1044,13 +1045,9 @@ class Application {
           }
         } );
       program.build( "" );
-      static if ( DEBUG )
-      {
-        auto diagnostics = program.buildLog( devices[1] );
-        writeln( diagnostics );
-      }
       auto kernel = CLKernel( program, "diamond" );
       StopWatch timer;
+      timer.reset();
       timer.start();
       auto aS = LocalArgSize( BLOCK_SIZE * BLOCK_SIZE * cl_int.sizeof );
       auto aT = LocalArgSize( (BLOCK_SIZE + 1) * (BLOCK_SIZE + 2) * cl_int.sizeof );

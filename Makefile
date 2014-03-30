@@ -17,10 +17,10 @@ endif
 #	$(CXX) $(CXXFLAGS) -o $@ $< $(OPENCL_LIB)
 
 nw: nw.d lib/libcl4d.a
-	$(DC) $< -of$@ -Icl4d $(DOCL_LIB) -L-Llib -L-lcl4d
+	$(DC) $< -d -release -O -of$@ -Icl4d $(DOCL_LIB) -L-Llib -L-lcl4d
 
 lib/libcl4d.a: cl4d/opencl/*.d cl4d/opencl/c/cl.d cl4d/opencl/c/opencl.d
-	$(DC) -Icl4d -lib -of$@ $^
+	$(DC) -d -release -O -Icl4d -lib -of$@ $^
 
 clean:
 	@rm -rf nw nw.o
