@@ -1,6 +1,7 @@
 {
 	"name" : "clop",
-	"description" : "A minimal D bundle.",
+	"description" : "OpenCL OPtimizer DSL.",
 	"dependencies" : {
+    "pegged": "~master"
 	}
 }
