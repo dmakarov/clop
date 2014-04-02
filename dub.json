@@ -1,7 +1,16 @@
 {
-	"name" : "clop",
-	"description" : "OpenCL OPtimizer DSL.",
-	"dependencies" : {
-    "pegged": "~master"
-	}
+  "name" : "clop",
+  "description" : "OpenCL OPtimizer DSL.",
+  "compiler" : "ldc",
+  "dependencies" : {
+    "pegged" : "~master",
+    "clop:cl4d" : "~master"
+  },
+  "importPaths" : [
+    "./cl4d/"
+  ],
+  "subPackages" : [
+    "./cl4d/"
+  ],
+  "lflags" : ["-framework", "OpenCL"]
 }

@@ -925,7 +925,7 @@ class Application {
       queue.enqueueReadBuffer( bF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr );
       timer.stop();
       TickDuration ticks = timer.peek();
-      writeln( "BLOCKEDC ", ticks.usecs, " [us]" );
+      writeln( "RECT     ", ticks.usecs / 1E6, "  [s]" );
     }
     catch( Exception e )
     {
@@ -1080,7 +1080,7 @@ class Application {
       queue.enqueueReadBuffer( bF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr );
       timer.stop();
       TickDuration ticks = timer.peek();
-      writeln( "PARALLEL ", ticks.usecs, " [us]" );
+      writeln( "RHOMBUS  ", ticks.usecs / 1E6, "  [s]" );
     }
     catch( Exception e )
     {
