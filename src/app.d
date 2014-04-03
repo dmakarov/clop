@@ -104,7 +104,6 @@ class Application
 
   void run()
   {
-    int x;
     // use CLOP DSL to generate the loops around the computation
     mixin( compile(
     q{
