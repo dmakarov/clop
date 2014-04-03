@@ -1,8 +1,8 @@
 {
   "name" : "clop",
   "description" : "OpenCL OPtimizer DSL.",
-  "compiler" : "ldc",
   "dependencies" : {
+    "derelict_extras-opencl" : ">=1.2.0",
     "pegged" : "~master",
     "clop:cl4d" : "~master"
   },

@@ -1,112 +1,153 @@
-import opencl.all;
-import pegged.grammar;
+module clop.app;
 
+import std.conv;
+import std.random;
 import std.stdio;
 import std.string;
 
-template
-Kernel( string name, string code )
+import derelict.opencl.cl;
+
+import clop.compiler;
+
+/**
+*/
+class Application
 {
-  const char[] Kernel = "writeln( q{__kernel void " ~ name ~ "()\n{" ~ code.outdent() ~ "}\n} );";
-}
+  static immutable int SEED  =  1;
+  static immutable int BLOCK = 16;
+  static immutable int CHARS = 24;
+  static immutable int BLOSUM62[CHARS][CHARS] = [
+  [ 4, -1, -2, -2,  0, -1, -1,  0, -2, -1, -1, -1, -1, -2, -1,  1,  0, -3, -2,  0, -2, -1,  0, -4],
+  [-1,  5,  0, -2, -3,  1,  0, -2,  0, -3, -2,  2, -1, -3, -2, -1, -1, -3, -2, -3, -1,  0, -1, -4],
+  [-2,  0,  6,  1, -3,  0,  0,  0,  1, -3, -3,  0, -2, -3, -2,  1,  0, -4, -2, -3,  3,  0, -1, -4],
+  [-2, -2,  1,  6, -3,  0,  2, -1, -1, -3, -4, -1, -3, -3, -1,  0, -1, -4, -3, -3,  4,  1, -1, -4],
+  [ 0, -3, -3, -3,  9, -3, -4, -3, -3, -1, -1, -3, -1, -2, -3, -1, -1, -2, -2, -1, -3, -3, -2, -4],
+  [-1,  1,  0,  0, -3,  5,  2, -2,  0, -3, -2,  1,  0, -3, -1,  0, -1, -2, -1, -2,  0,  3, -1, -4],
+  [-1,  0,  0,  2, -4,  2,  5, -2,  0, -3, -3,  1, -2, -3, -1,  0, -1, -3, -2, -2,  1,  4, -1, -4],
+  [ 0, -2,  0, -1, -3, -2, -2,  6, -2, -4, -4, -2, -3, -3, -2,  0, -2, -2, -3, -3, -1, -2, -1, -4],
+  [-2,  0,  1, -1, -3,  0,  0, -2,  8, -3, -3, -1, -2, -1, -2, -1, -2, -2,  2, -3,  0,  0, -1, -4],
+  [-1, -3, -3, -3, -1, -3, -3, -4, -3,  4,  2, -3,  1,  0, -3, -2, -1, -3, -1,  3, -3, -3, -1, -4],
+  [-1, -2, -3, -4, -1, -2, -3, -4, -3,  2,  4, -2,  2,  0, -3, -2, -1, -2, -1,  1, -4, -3, -1, -4],
+  [-1,  2,  0, -1, -3,  1,  1, -2, -1, -3, -2,  5, -1, -3, -1,  0, -1, -3, -2, -2,  0,  1, -1, -4],
+  [-1, -1, -2, -3, -1,  0, -2, -3, -2,  1,  2, -1,  5,  0, -2, -1, -1, -1, -1,  1, -3, -1, -1, -4],
+  [-2, -3, -3, -3, -2, -3, -3, -3, -1,  0,  0, -3,  0,  6, -4, -2, -2,  1,  3, -1, -3, -3, -1, -4],
+  [-1, -2, -2, -1, -3, -1, -1, -2, -2, -3, -3, -1, -2, -4,  7, -1, -1, -4, -3, -2, -2, -1, -2, -4],
+  [ 1, -1,  1,  0, -1,  0,  0,  0, -1, -2, -2,  0, -1, -2, -1,  4,  1, -3, -2, -2,  0,  0,  0, -4],
+  [ 0, -1,  0, -1, -1, -1, -1, -2, -2, -1, -1, -1, -1, -2, -1,  1,  5, -2, -2,  0, -1, -1,  0, -4],
+  [-3, -3, -4, -4, -2, -2, -3, -2, -2, -3, -2, -3, -1,  1, -4, -3, -2, 11,  2, -3, -4, -3, -2, -4],
+  [-2, -2, -2, -3, -2, -1, -2, -3,  2, -1, -1, -2, -1,  3, -3, -2, -2,  2,  7, -1, -3, -2, -1, -4],
+  [ 0, -3, -3, -3, -1, -2, -2, -3, -3,  3,  1, -2,  1, -1, -2, -2,  0, -3, -1,  4, -3, -2, -1, -4],
+  [-2, -1,  3,  4, -3,  0,  1, -1,  0, -3, -4,  0, -3, -3, -2,  0, -1, -4, -3, -3,  4,  1, -1, -4],
+  [-1,  0,  0,  1, -3,  3,  4, -2,  0, -3, -3,  1, -1, -3, -1,  0, -1, -3, -2, -2,  1,  4, -1, -4],
+  [ 0, -1, -1, -1, -2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -2,  0,  0, -2, -1, -1, -1, -1, -1, -4],
+  [-4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4,  1]];
 
-mixin( grammar(q{
-CLOP:
-    Term     < Factor (Add / Sub)*
-    Add      < "+" Factor
-    Sub      < "-" Factor
-    Factor   < Primary (Mul / Div)*
-    Mul      < "*" Primary
-    Div      < "/" Primary
-    Primary  < Parens / Neg / Number / Variable
-    Parens   < :"(" Term :")"
-    Neg      < "-" Primary
-    Number   < ~([0-9]+)
-    Variable <- identifier
-}));
+  int[] F;
+  int[] G;
+  int[] S;
+  int rows;
+  int cols;
+  int penalty;
 
-float
-interpreter( string expr )
-{
-  auto p = CLOP( expr );
-
-  float value( ParseTree p )
+  this( string[] args )
   {
-      switch ( p.name )
-      {
-      case "CLOP":         return value(p.children[0]);
-      case "CLOP.Term":
-          float v = 0.0;
-          foreach(child; p.children) v += value(child);
-          return v;
-      case "CLOP.Add":     return value(p.children[0]);
-      case "CLOP.Sub":     return -value(p.children[0]);
-      case "CLOP.Factor":
-          float v = 1.0;
-          foreach(child; p.children) v *= value(child);
-          return v;
-      case "CLOP.Mul":     return value(p.children[0]);
-      case "CLOP.Div":     return 1.0/value(p.children[0]);
-      case "CLOP.Primary": return value(p.children[0]);
-      case "CLOP.Parens":  return value(p.children[0]);
-      case "CLOP.Neg":     return -value(p.children[0]);
-      case "CLOP.Number":  return to!float(p.matches[0]);
-      default: return float.nan;
-      }
+    rows    = to!(int)( args[1] ) + 1;
+    cols    = to!(int)( args[1] ) + 1;
+    penalty = to!(int)( args[2] );
+    if ( ( rows - 1 ) % BLOCK != 0 )
+    {
+      auto r = to!(string)(rows - 1);
+      auto b = to!(string)(BLOCK);
+      throw new Exception( "ERROR: rows # (" ~ r ~ ") must be a multiple of " ~ b );
+    }
+    Mt19937 gen;
+    gen.seed( SEED );
+    S = new int[rows * cols]; assert( null != S );
+    F = new int[rows * cols]; assert( null != F );
+    G = new int[rows * cols]; assert( null != G );
+    auto M = new int[rows]; assert( null != M );
+    auto N = new int[cols]; assert( null != N );
+    foreach ( r; 1 .. rows )
+    {
+      F[r * cols] = -penalty * r;
+      G[r * cols] = -penalty * r;
+      M[r] = uniform( 1, CHARS, gen );
+    }
+    foreach ( c; 1 .. cols )
+    {
+      F[c] = -penalty * c;
+      G[c] = -penalty * c;
+      N[c] = uniform( 1, CHARS, gen );
+    }
+    foreach ( r; 1 .. rows )
+      foreach ( c; 1 .. cols )
+        S[r * cols + c] = BLOSUM62[M[r]][N[c]];
   }
 
-  return value(p);
-}
-
-string toString( float v )
-{
-  int d = to!(int)(v);
-  static if ( false )
-  return format( "%f", v );
-  else
-  switch( d )
+  void print( const string msg, const int[] A ) const
   {
-  case 0: return "0";
-  case 1: return "1";
-  case 2: return "2";
-  case 3: return "3";
-  case 4: return "4";
-  case 5: return "5";
-  case 6: return "6";
-  case 7: return "7";
-  case 8: return "8";
-  case 9: return "9";
-  default: return "";
+    writeln( msg );
+    foreach ( r; 0 .. rows )
+    {
+      writef( "%4d", A[r * cols] );
+      foreach ( c; 1 .. cols )
+        writef( " %4d", A[r * cols + c] );
+      writeln();
+    }
+  }
+
+  int max3( immutable int a, immutable int b, immutable int c ) const
+  {
+    immutable k = a > b ? a : b;
+    return k > c ? k : c;
+  }
+
+  void run()
+  {
+    int x;
+    // use CLOP DSL to generate the loops around the computation
+    mixin( compile(
+    q{
+       NDRange( r ; 1 .. rows, c ; 1 .. cols );
+       F[r * cols + c] = max3( F[(r - 1) * cols + c - 1] + S[r * cols + c],
+                               F[(r - 1) * cols + c    ] - penalty,
+                               F[ r      * cols + c - 1] - penalty );
+     } ) );
+
+    print( "The scores matrix:", F );
+
+    // compute the same matrix explicitly
+    foreach ( r; 1 .. rows )
+      foreach ( c; 1 .. cols )
+        G[r * cols + c] = max3( G[(r - 1) * cols + c - 1] + S[r * cols + c],
+                                G[(r - 1) * cols + c    ] - penalty,
+                                G[ r      * cols + c - 1] - penalty );
+
+    // compare the results and count differences
+    int diffs = 0;
+    foreach ( r; 0 .. rows )
+      foreach ( c; 0 .. cols )
+        if ( F[r * cols + c] != G[r * cols + c] )
+          ++diffs;
+
+    writeln( "\nDIFFS ", diffs );
+    if ( diffs != 0 ) print( "The correct results:", G );
   }
 }
 
-string result( string expr )
-{
-  static if (true)
-  return "\"writefln( \\\"%d\\\", " ~ toString( interpreter( expr ) ) ~ " );\"";
-  else
-  return "writefln( \\\"%d\\\", " ~ toString( interpreter( expr ) ) ~ " );";
-}
 
 int
 main( string[] args )
 {
-
-  mixin( Kernel!( "kernel",
-  q{
-       c[tx] = a[tx] + b[tx];
-   } ) );
-  static if ( true )
+  try
   {
-    string s = mixin( result( q{
-          (3 + 5 - 1 + 2) / 3
-    } ) );
-    writefln( "%s", s );
+    auto app = new Application( args );
+    app.run();
   }
-  else
-  mixin( result(
-       q{
-          (3 + 5 - 1 + 2) / 3
-        } ) );
+  catch ( Exception msg )
+  {
+    writeln( "NW: ", msg );
+    return -1;
+  }
   return 0;
 }
