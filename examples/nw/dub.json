@@ -1,0 +1,10 @@
+{
+  "name" : "nw",
+  "description" : "NW implementation.",
+  "targetType" : "executable",
+  "dependencies" : {
+    "derelict_extras-opencl" : ">=1.2.0",
+    "pegged" : ">=0.0.0"
+  },
+  "lflags" : ["-framework", "OpenCL"]
+}

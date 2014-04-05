@@ -1,9 +1,8 @@
 .dub
 .settings
 bin
-cl4d
 clop
 lib
-nw
 *.o
 dub.selections.json
+examples/nw/nw
