@@ -3,14 +3,7 @@
   "description" : "OpenCL OPtimizer DSL.",
   "dependencies" : {
     "derelict_extras-opencl" : ">=1.2.0",
-    "pegged" : "~master",
-    "clop:cl4d" : "~master"
+    "pegged" : ">=0.0.0"
   },
-  "importPaths" : [
-    "./cl4d/"
-  ],
-  "subPackages" : [
-    "./cl4d/"
-  ],
   "lflags" : ["-framework", "OpenCL"]
 }
