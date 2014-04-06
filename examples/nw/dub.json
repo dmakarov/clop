@@ -6,5 +6,6 @@
     "derelict_extras-opencl" : ">=1.2.0",
     "pegged" : ">=0.0.0"
   },
-  "lflags" : ["-framework", "OpenCL"]
+  "lflags-osx" : ["-framework", "OpenCL"],
+  "lflags-linux" : ["-lOpenCL", "-lrt"]
 }
