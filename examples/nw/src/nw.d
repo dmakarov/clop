@@ -274,6 +274,10 @@ class Application {
     diff = 0;
     foreach( ii; 0 .. F.length ) if ( F[ii] != G[ii] ) ++diff;
     if ( diff > 0 ) writeln( "DIFFs ", diff );
+    auto status = clReleaseCommandQueue( queue );
+    assert( status == CL_SUCCESS );
+    status = clReleaseContext( context );
+    assert( status == CL_SUCCESS );
   }
 
   void opencl_rectangles()
@@ -393,6 +397,14 @@ class Application {
       timer.stop();
       TickDuration ticks = timer.peek();
       writeln( "RECT     ", ticks.usecs / 1E6, "  [s]" );
+      status = clReleaseMemObject( bS );
+      assert( status == CL_SUCCESS );
+      status = clReleaseMemObject( bF );
+      assert( status == CL_SUCCESS );
+      status = clReleaseKernel( kernel );
+      assert( status == CL_SUCCESS );
+      status = clReleaseProgram( program );
+      assert( status == CL_SUCCESS );
     }
     catch( Exception e )
     {
@@ -571,6 +583,14 @@ class Application {
       timer.stop();
       TickDuration ticks = timer.peek();
       writeln( "RHOMBUS  ", ticks.usecs / 1E6, "  [s]" );
+      status = clReleaseMemObject( bS );
+      assert( status == CL_SUCCESS );
+      status = clReleaseMemObject( bF );
+      assert( status == CL_SUCCESS );
+      status = clReleaseKernel( kernel );
+      assert( status == CL_SUCCESS );
+      status = clReleaseProgram( program );
+      assert( status == CL_SUCCESS );
     }
     catch( Exception e )
     {
