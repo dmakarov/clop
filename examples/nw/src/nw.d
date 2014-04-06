@@ -92,6 +92,7 @@ class Application {
     cl_uint num_platforms;
     cl_int status = clGetPlatformIDs( 0, null, &num_platforms );
     assert( status == CL_SUCCESS && num_platforms > 0 );
+    writeln( "# platforms ", num_platforms );
     cl_platform_id[] platforms = new cl_platform_id[num_platforms];
     assert( platforms != null );
     status = clGetPlatformIDs( num_platforms, platforms.ptr, null );
@@ -100,6 +101,7 @@ class Application {
     cl_uint num_devices;
     status = clGetDeviceIDs( platform, CL_DEVICE_TYPE_ALL, 0, null, &num_devices );
     assert( status == CL_SUCCESS && num_devices > 0 );
+    writeln( "# devices ", num_devices );
     cl_device_id[] devices = new cl_device_id[num_devices];
     status = clGetDeviceIDs( platform, CL_DEVICE_TYPE_ALL, num_devices, devices.ptr, null );
     assert( status == CL_SUCCESS );
@@ -289,14 +291,14 @@ class Application {
             int k = a > b ? a : b;
             return k > c ? k : c;
           }
-          __kernel void rectangles( __global const int* S, __global int* F, int cols, int penalty, int i, int is_upper, __local int* s, __local int* t )
+          __kernel void rectangles( __global const int* S, __global int* F,
+                                    int cols, int penalty, int i, int is_upper,
+                                    __local int* s, __local int* t )
           {
             int bx = get_group_id( 0 );
             int tx = get_local_id( 0 );
-            int xx =         bx;
-            if ( is_upper == 1 ) xx = (cols - 1) / BLOCK_SIZE + bx - i;
-            int yy = i - 1 - bx;
-            if ( is_upper == 1 ) yy = (cols - 1) / BLOCK_SIZE - bx - 1;
+            int xx =         bx; if ( is_upper == 1 ) xx = (cols - 1) / BLOCK_SIZE + bx - i;
+            int yy = i - 1 - bx; if ( is_upper == 1 ) yy = (cols - 1) / BLOCK_SIZE - bx - 1;
             // 1.
             int index    = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + tx + cols + 1;
             int index_n  = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + tx + 1;
@@ -307,19 +309,19 @@ class Application {
             for ( int ty = 0; ty < BLOCK_SIZE; ++ty ) s[ty * BLOCK_SIZE + tx] = S[ty * cols + index];
 
             t[(tx + 1) * (BLOCK_SIZE + 1)] = F[tx * cols + index_w];
-            t[(tx + 1)]                    = F[index_n];
+            t[(tx + 1)                   ] = F[            index_n];
             barrier( CLK_LOCAL_MEM_FENCE );
             // 2.
             for ( int m = 0; m < BLOCK_SIZE; ++m )
             {
               if ( tx <= m )
               {
-                int x  = tx + 1;
-                int y  = m - tx + 1;
-                int nw = t[(y-1) * (BLOCK_SIZE + 1) + x-1] + s[(y-1) * BLOCK_SIZE + x-1];
-                int n  = t[(y-1) * (BLOCK_SIZE + 1) + x  ] - penalty;
-                int w  = t[(y  ) * (BLOCK_SIZE + 1) + x-1] - penalty;
-                t[y * (BLOCK_SIZE + 1) + x] = max3( nw, n, w );
+                int x = tx + 1;
+                int y = m - tx + 1;
+                int m = t[(y-1) * (BLOCK_SIZE + 1) + x-1] + s[(y-1) * BLOCK_SIZE + x-1];
+                int d = t[(y-1) * (BLOCK_SIZE + 1) + x  ] - penalty;
+                int i = t[(y  ) * (BLOCK_SIZE + 1) + x-1] - penalty;
+                t[y * (BLOCK_SIZE + 1) + x] = max3( m, d, i );
               }
               barrier( CLK_LOCAL_MEM_FENCE );
             }
@@ -328,12 +330,12 @@ class Application {
             {
               if ( tx <= m )
               {
-                int x  = BLOCK_SIZE + tx - m;
-                int y  = BLOCK_SIZE - tx;
-                int nw = t[(y-1) * (BLOCK_SIZE + 1) + x-1] + s[(y-1) * BLOCK_SIZE + x-1];
-                int n  = t[(y-1) * (BLOCK_SIZE + 1) + x  ] - penalty;
-                int w  = t[(y  ) * (BLOCK_SIZE + 1) + x-1] - penalty;
-                t[y * (BLOCK_SIZE + 1) + x] = max3( nw, n, w );
+                int x = BLOCK_SIZE + tx - m;
+                int y = BLOCK_SIZE - tx;
+                int m = t[(y-1) * (BLOCK_SIZE + 1) + x-1] + s[(y-1) * BLOCK_SIZE + x-1];
+                int d = t[(y-1) * (BLOCK_SIZE + 1) + x  ] - penalty;
+                int i = t[(y  ) * (BLOCK_SIZE + 1) + x-1] - penalty;
+                t[y * (BLOCK_SIZE + 1) + x] = max3( m, d, i );
               }
               barrier( CLK_LOCAL_MEM_FENCE );
             }
@@ -344,47 +346,53 @@ class Application {
       }.dup;
       cl_int status;
       size_t size = code.length;
-      char*[] strs = new char*[1];
-      strs[0] = code.ptr;
+      char*[] strs = [code.ptr];
       auto program = clCreateProgramWithSource( context, 1, strs.ptr, &size, &status );
       assert( status == CL_SUCCESS );
       status = clBuildProgram( program, 1, &device, "", null, null );
       assert( status == CL_SUCCESS );
       cl_kernel kernel = clCreateKernel( program, "rectangles", &status );
-/+
+      assert( status == CL_SUCCESS );
+
       StopWatch timer;
       timer.reset();
       timer.start();
-      auto aS = LocalArgSize( BLOCK_SIZE * BLOCK_SIZE * cl_int.sizeof );
-      auto aT = LocalArgSize( (BLOCK_SIZE + 1) * (BLOCK_SIZE + 1) * cl_int.sizeof );
-      auto bS = CLBuffer( context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, cl_int.sizeof * S.length, S.ptr );
-      auto bF = CLBuffer( context, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, cl_int.sizeof * F.length, F.ptr );
-      kernel.setArg( 0, bS );
-      kernel.setArg( 1, bF );
-      kernel.setArg( 2, cols );
-      kernel.setArg( 3, penalty );
-      kernel.setArg( 6, aS );
-      kernel.setArg( 7, aT );
-      auto wgroup = NDRange( BLOCK_SIZE );
+      cl_mem bS = clCreateBuffer( context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, cl_int.sizeof * S.length, S.ptr, &status );
+      assert( status == CL_SUCCESS );
+      cl_mem bF = clCreateBuffer( context, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, cl_int.sizeof * F.length, F.ptr, &status );
+      assert( status == CL_SUCCESS );
+      clSetKernelArg( kernel, 0, cl_mem.sizeof, &bS      );
+      clSetKernelArg( kernel, 1, cl_mem.sizeof, &bF      );
+      clSetKernelArg( kernel, 2, cl_int.sizeof, &cols    );
+      clSetKernelArg( kernel, 3, cl_int.sizeof, &penalty );
+      size_t aS =  BLOCK_SIZE      *  BLOCK_SIZE      * cl_int.sizeof;
+      size_t aT = (BLOCK_SIZE + 1) * (BLOCK_SIZE + 1) * cl_int.sizeof;
+      clSetKernelArg( kernel, 6, aS, null );
+      clSetKernelArg( kernel, 7, aT, null );
+      size_t wgroup = BLOCK_SIZE;
       for ( int i = 1; i <= (cols - 1) / BLOCK_SIZE; ++i )
       {
-        auto global = NDRange( BLOCK_SIZE * i );
-        kernel.setArg( 4, i );
-        kernel.setArg( 5, 0 );
-        queue.enqueueNDRangeKernel( kernel, global, wgroup );
+        int u = 0;
+        size_t global = BLOCK_SIZE * i;
+        clSetKernelArg( kernel, 4, cl_int.sizeof, &i );
+        clSetKernelArg( kernel, 5, cl_int.sizeof, &u );
+        status = clEnqueueNDRangeKernel( queue, kernel, 1, null, &global, &wgroup, 0, null, null );
+        assert( status == CL_SUCCESS );
       }
       for ( int i = (cols - 1) / BLOCK_SIZE - 1; i > 0; --i )
       {
-        auto global = NDRange( BLOCK_SIZE * i );
-        kernel.setArg( 4, i );
-        kernel.setArg( 5, 1 );
-        queue.enqueueNDRangeKernel( kernel, global, wgroup );
+        int u = 1;
+        size_t global = BLOCK_SIZE * i;
+        clSetKernelArg( kernel, 4, cl_int.sizeof, &i );
+        clSetKernelArg( kernel, 5, cl_int.sizeof, &u );
+        status = clEnqueueNDRangeKernel( queue, kernel, 1, null, &global, &wgroup, 0, null, null );
+        assert( status == CL_SUCCESS );
       }
-      queue.enqueueReadBuffer( bF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr );
+      status = clEnqueueReadBuffer( queue, bF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr, 0, null, null );
+      assert( status == CL_SUCCESS );
       timer.stop();
       TickDuration ticks = timer.peek();
       writeln( "RECT     ", ticks.usecs / 1E6, "  [s]" );
-+/
     }
     catch( Exception e )
     {
@@ -400,7 +408,7 @@ class Application {
       F[] = 0;
       foreach ( r; 1 .. rows ) F[r * cols] = -penalty * r;
       foreach ( c; 0 .. cols ) F[c       ] = -penalty * c;
-      auto code = q{
+      char[] code = q{
           #define BLOCK_SIZE 16
           int max3( int a, int b, int c );
           int max3( int a, int b, int c )
@@ -408,7 +416,9 @@ class Application {
             int k = a > b ? a : b;
             return k > c ? k : c;
           }
-          __kernel void diamond( __global const int* S, __global int* F, int Y, int X, int cols, int penalty, __local int* s, __local int* t )
+          __kernel void diamond( __global const int* S, __global int* F,
+                                 int Y, int X, int cols, int penalty,
+                                 __local int* s, __local int* t )
           {
             int bx = get_group_id( 0 );
             int tx = get_local_id( 0 );
@@ -436,10 +446,10 @@ class Application {
                 {
                   int x = tx + 1;
                   int y = m - tx + 1;
-                  int nw = t[(y-1) * (BLOCK_SIZE + 2) + x-1] + s[(y-1) * BLOCK_SIZE + x-1];
-                  int n  = t[(y-1) * (BLOCK_SIZE + 2) + x] - penalty;
-                  int w  = t[(y  ) * (BLOCK_SIZE + 2) + x-1] - penalty;
-                  t[y * (BLOCK_SIZE + 2) + x] = max3( nw, n, w );
+                  int m = t[(y-1) * (BLOCK_SIZE + 2) + x-1] + s[(y-1) * BLOCK_SIZE + x-1];
+                  int d = t[(y-1) * (BLOCK_SIZE + 2) + x  ] - penalty;
+                  int i = t[(y  ) * (BLOCK_SIZE + 2) + x-1] - penalty;
+                  t[y * (BLOCK_SIZE + 2) + x] = max3( m, d, i );
                 }
                 barrier( CLK_LOCAL_MEM_FENCE );
               }
@@ -467,10 +477,10 @@ class Application {
               {
                 int x =  m + 2;
                 int y =  tx + 1;
-                int nw = t[(y-1) * (BLOCK_SIZE + 2) + x-2] + s[(y-1) * BLOCK_SIZE + x-2];
-                int n  = t[(y-1) * (BLOCK_SIZE + 2) + x-1] - penalty;
-                int w  = t[(y  ) * (BLOCK_SIZE + 2) + x-1] - penalty;
-                t[y * (BLOCK_SIZE + 2) + x] = max3( nw, n, w );
+                int m = t[(y-1) * (BLOCK_SIZE + 2) + x-2] + s[(y-1) * BLOCK_SIZE + x-2];
+                int d = t[(y-1) * (BLOCK_SIZE + 2) + x-1] - penalty;
+                int i = t[(y  ) * (BLOCK_SIZE + 2) + x-1] - penalty;
+                t[y * (BLOCK_SIZE + 2) + x] = max3( m, d, i );
                 barrier( CLK_LOCAL_MEM_FENCE );
               }
               // 3.
@@ -494,10 +504,10 @@ class Application {
                 {
                   int x =  m + 2;
                   int y =  tx + 1;
-                  int nw = t[(y-1) * (BLOCK_SIZE + 2) + x-2] + s[(y-1) * BLOCK_SIZE + x-2];
-                  int n  = t[(y-1) * (BLOCK_SIZE + 2) + x-1] - penalty;
-                  int w  = t[(y  ) * (BLOCK_SIZE + 2) + x-1] - penalty;
-                  t[y * (BLOCK_SIZE + 2) + x] = max3( nw, n, w );
+                  int m = t[(y-1) * (BLOCK_SIZE + 2) + x-2] + s[(y-1) * BLOCK_SIZE + x-2];
+                  int d = t[(y-1) * (BLOCK_SIZE + 2) + x-1] - penalty;
+                  int i = t[(y  ) * (BLOCK_SIZE + 2) + x-1] - penalty;
+                  t[y * (BLOCK_SIZE + 2) + x] = max3( m, d, i );
                 }
                 barrier( CLK_LOCAL_MEM_FENCE );
               }
@@ -506,44 +516,61 @@ class Application {
                 F[index + ty] = t[(tx+1) * (BLOCK_SIZE + 2) + ty+2];
             }
           }
-        };
-/+
+        }.dup;
+      cl_int status;
+      size_t size = code.length;
+      char*[] strs = [code.ptr];
+      auto program = clCreateProgramWithSource( context, 1, strs.ptr, &size, &status );
+      assert( status == CL_SUCCESS );
+      status = clBuildProgram( program, 1, &device, "", null, null );
+      assert( status == CL_SUCCESS );
+      cl_kernel kernel = clCreateKernel( program, "diamond", &status );
+      assert( status == CL_SUCCESS );
+
       StopWatch timer;
       timer.reset();
       timer.start();
-      auto aS = LocalArgSize( BLOCK_SIZE * BLOCK_SIZE * cl_int.sizeof );
-      auto aT = LocalArgSize( (BLOCK_SIZE + 1) * (BLOCK_SIZE + 2) * cl_int.sizeof );
-      auto bS = CLBuffer( context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, cl_int.sizeof * S.length, S.ptr );
-      auto bF = CLBuffer( context, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, cl_int.sizeof * F.length, F.ptr );
-      kernel.setArg( 0, bS );
-      kernel.setArg( 1, bF );
-      kernel.setArg( 4, cols );
-      kernel.setArg( 5, penalty );
-      kernel.setArg( 6, aS );
-      kernel.setArg( 7, aT );
-      auto wgroup = NDRange( BLOCK_SIZE );
+      cl_mem bS = clCreateBuffer( context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, cl_int.sizeof * S.length, S.ptr, &status );
+      assert( status == CL_SUCCESS );
+      cl_mem bF = clCreateBuffer( context, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, cl_int.sizeof * F.length, F.ptr, &status );
+      assert( status == CL_SUCCESS );
+      clSetKernelArg( kernel, 0, cl_mem.sizeof, &bS      );
+      clSetKernelArg( kernel, 1, cl_mem.sizeof, &bF      );
+      clSetKernelArg( kernel, 4, cl_int.sizeof, &cols    );
+      clSetKernelArg( kernel, 5, cl_int.sizeof, &penalty );
+      size_t aS =  BLOCK_SIZE      *  BLOCK_SIZE      * cl_int.sizeof;
+      size_t aT = (BLOCK_SIZE + 1) * (BLOCK_SIZE + 2) * cl_int.sizeof;
+      clSetKernelArg( kernel, 6, aS, null );
+      clSetKernelArg( kernel, 7, aT, null );
+      size_t wgroup = BLOCK_SIZE;
       for ( int i = 0; i < rows / BLOCK_SIZE; ++i )
       {
-        auto global = NDRange( BLOCK_SIZE * (i + 1) );
-        kernel.setArg( 2, i );
-        kernel.setArg( 3, 0 );
-        queue.enqueueNDRangeKernel( kernel, global, wgroup );
+        int Y = 0;
+        size_t global = BLOCK_SIZE * (i + 1);
+        clSetKernelArg( kernel, 2, cl_int.sizeof, &i );
+        clSetKernelArg( kernel, 3, cl_int.sizeof, &Y );
+        status = clEnqueueNDRangeKernel( queue, kernel, 1, null, &global, &wgroup, 0, null, null );
+        assert( status == CL_SUCCESS );
 
-        kernel.setArg( 3, 1 );
-        queue.enqueueNDRangeKernel( kernel, global, wgroup );
+        Y = 1;
+        clSetKernelArg( kernel, 3, cl_int.sizeof, &Y );
+        status = clEnqueueNDRangeKernel( queue, kernel, 1, null, &global, &wgroup, 0, null, null );
+        assert( status == CL_SUCCESS );
       }
       for ( int i = 2; i <= cols / BLOCK_SIZE; ++i )
       {
-        auto global = NDRange( rows - 1 );
-        kernel.setArg( 2, rows / BLOCK_SIZE - 1);
-        kernel.setArg( 3, i );
-        queue.enqueueNDRangeKernel( kernel, global, wgroup );
+        size_t global = rows - 1;
+        int X = rows / BLOCK_SIZE - 1;
+        clSetKernelArg( kernel, 2, cl_int.sizeof, &X );
+        clSetKernelArg( kernel, 3, cl_int.sizeof, &i );
+        status = clEnqueueNDRangeKernel( queue, kernel, 1, null, &global, &wgroup, 0, null, null );
+        assert( status == CL_SUCCESS );
       }
-      queue.enqueueReadBuffer( bF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr );
+      status = clEnqueueReadBuffer( queue, bF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr, 0, null, null );
+      assert( status == CL_SUCCESS );
       timer.stop();
       TickDuration ticks = timer.peek();
       writeln( "RHOMBUS  ", ticks.usecs / 1E6, "  [s]" );
-+/
     }
     catch( Exception e )
     {

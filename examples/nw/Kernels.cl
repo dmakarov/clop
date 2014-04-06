@@ -14,7 +14,13 @@ maximum( int a, int b, int c )
 }
 
 __kernel void
-nw1(__global int *similarity_d, __global int *input_itemsets_d, int cols, int penalty, int blk, int block_width, int worksize, int offset_r, int offset_c, __local int *input_itemsets_l, __local int *similarity_l )
+nw1( __global int *similarity_d,
+     __global int *input_itemsets_d,
+     int cols, int penalty, int blk,
+     int block_width, int worksize,
+     int offset_r, int offset_c,
+     __local int *input_itemsets_l,
+     __local int *similarity_l )
 {
   // Block index
   int bx = get_group_id(0);
@@ -44,9 +50,9 @@ nw1(__global int *similarity_d, __global int *input_itemsets_d, int cols, int pe
       int t_index_x =  tx + 1;
       int t_index_y =  m - tx + 1;
       int match = NW( t_index_y, t_index_x ) + S( t_index_y - 1, t_index_x - 1 );
-      int delete = W( t_index_y, t_index_x ) - penalty;
+      int remove = W( t_index_y, t_index_x ) - penalty;
       int insert = N( t_index_y, t_index_x ) - penalty;
-      F(t_index_y, t_index_x) = maximum( match, delete, insert );
+      F(t_index_y, t_index_x) = maximum( match, remove, insert );
     }
     barrier( CLK_LOCAL_MEM_FENCE );
   }
@@ -58,9 +64,9 @@ nw1(__global int *similarity_d, __global int *input_itemsets_d, int cols, int pe
       int t_index_x =  tx + BLOCK_SIZE - m ;
       int t_index_y =  BLOCK_SIZE - tx;
       int match = NW( t_index_y, t_index_x ) + S( t_index_y - 1, t_index_x - 1 );
-      int delete = W( t_index_y, t_index_x ) - penalty;
+      int remove = W( t_index_y, t_index_x ) - penalty;
       int insert = N( t_index_y, t_index_x ) - penalty;
-      F(t_index_y, t_index_x) = maximum( match, delete, insert );
+      F(t_index_y, t_index_x) = maximum( match, remove, insert );
     }
     barrier( CLK_LOCAL_MEM_FENCE );
   }
@@ -69,7 +75,13 @@ nw1(__global int *similarity_d, __global int *input_itemsets_d, int cols, int pe
 }
 
 __kernel void
-nw2( __global int *similarity_d, __global int *input_itemsets_d, int cols, int penalty, int blk, int block_width, int worksize, int offset_r, int offset_c, __local int *input_itemsets_l, __local int *similarity_l )
+nw2( __global int *similarity_d,
+     __global int *input_itemsets_d,
+     int cols, int penalty, int blk,
+     int block_width, int worksize,
+     int offset_r, int offset_c,
+     __local int *input_itemsets_l,
+     __local int *similarity_l )
 {
   int bx = get_group_id(0);
   // Thread index
@@ -97,9 +109,9 @@ nw2( __global int *similarity_d, __global int *input_itemsets_d, int cols, int p
       int t_index_x =  tx + 1;
       int t_index_y =  m - tx + 1;
       int match = NW( t_index_y, t_index_x ) + S( t_index_y - 1, t_index_x - 1 );
-      int delete = W( t_index_y, t_index_x ) - penalty;
+      int remove = W( t_index_y, t_index_x ) - penalty;
       int insert = N( t_index_y, t_index_x ) - penalty;
-      F(t_index_y, t_index_x) = maximum( match, delete, insert );
+      F(t_index_y, t_index_x) = maximum( match, remove, insert );
     }
     barrier( CLK_LOCAL_MEM_FENCE );
   }
@@ -110,9 +122,9 @@ nw2( __global int *similarity_d, __global int *input_itemsets_d, int cols, int p
       int t_index_x =  tx + BLOCK_SIZE - m ;
       int t_index_y =  BLOCK_SIZE - tx;
       int match = NW( t_index_y, t_index_x ) + S( t_index_y - 1, t_index_x - 1 );
-      int delete = W( t_index_y, t_index_x ) - penalty;
+      int remove = W( t_index_y, t_index_x ) - penalty;
       int insert = N( t_index_y, t_index_x ) - penalty;
-      F(t_index_y, t_index_x) = maximum( match, delete, insert );
+      F(t_index_y, t_index_x) = maximum( match, remove, insert );
     }
     barrier( CLK_LOCAL_MEM_FENCE );
   }
@@ -149,10 +161,10 @@ rhombus( __global const int* S, __global int* F, int Y, int X, int cols, int pen
       {
         int x = tx + 1;
         int y = m - tx + 1;
-
-        t[y * (BLOCK_SIZE + 2) + x] = maximum( t[(y-1) * (BLOCK_SIZE + 2) + x-1] + s[(y-1) * BLOCK_SIZE + x-1],
-                                               t[(y-1) * (BLOCK_SIZE + 2) + x] - penalty,
-                                               t[y * (BLOCK_SIZE + 2) + x-1] - penalty );
+        int match = t[(y-1) * (BLOCK_SIZE + 2) + x-1] + s[(y-1) * BLOCK_SIZE + x-1];
+        int remove = t[(y-1) * (BLOCK_SIZE + 2) + x] - penalty;
+        int insert = t[y * (BLOCK_SIZE + 2) + x-1] - penalty;
+        t[y * (BLOCK_SIZE + 2) + x] = maximum( match, remove, insert );
       }
       barrier( CLK_LOCAL_MEM_FENCE );
     }
@@ -180,8 +192,10 @@ rhombus( __global const int* S, __global int* F, int Y, int X, int cols, int pen
     {
       int x =  m + 2;
       int y =  tx + 1;
-
-      t[y * (BLOCK_SIZE + 2) + x] = maximum( t[(y-1) * (BLOCK_SIZE + 2) + x-2] + s[(y-1) * BLOCK_SIZE + x-2], t[(y-1) * (BLOCK_SIZE + 2) + x-1] - penalty, t[y * (BLOCK_SIZE + 2) + x-1] - penalty );
+      int match = t[(y-1) * (BLOCK_SIZE + 2) + x-2] + s[(y-1) * BLOCK_SIZE + x-2];
+      int remove = t[(y-1) * (BLOCK_SIZE + 2) + x-1] - penalty;
+      int insert = t[y * (BLOCK_SIZE + 2) + x-1] - penalty;
+      t[y * (BLOCK_SIZE + 2) + x] = maximum( match, remove, insert );
       barrier( CLK_LOCAL_MEM_FENCE );
     }
     // 3.
@@ -205,8 +219,10 @@ rhombus( __global const int* S, __global int* F, int Y, int X, int cols, int pen
       {
         int x =  m + 2;
         int y =  tx + 1;
-
-        t[y * (BLOCK_SIZE + 2) + x] = maximum( t[(y-1) * (BLOCK_SIZE + 2) + x-2] + s[(y-1) * BLOCK_SIZE + x-2], t[(y-1) * (BLOCK_SIZE + 2) + x-1] - penalty, t[y * (BLOCK_SIZE + 2) + x-1] - penalty );
+        int match = t[(y-1) * (BLOCK_SIZE + 2) + x-2] + s[(y-1) * BLOCK_SIZE + x-2];
+        int remove = t[(y-1) * (BLOCK_SIZE + 2) + x-1] - penalty;
+        int insert = t[y * (BLOCK_SIZE + 2) + x-1] - penalty;
+        t[y * (BLOCK_SIZE + 2) + x] = maximum( match, remove, insert );
       }
       barrier( CLK_LOCAL_MEM_FENCE );
     }
