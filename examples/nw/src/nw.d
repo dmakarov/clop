@@ -830,6 +830,10 @@ class Application {
     foreach( ii; 0 .. F.length ) if ( F[ii] != G[ii] ) ++diff;
     if ( diff > 0 ) writeln( "DIFFs ", diff );
     //compute_alignments();
+    opencl_noblocks();
+    diff = 0;
+    foreach( ii; 0 .. F.length ) if ( F[ii] != G[ii] ) ++diff;
+    if ( diff > 0 ) writeln( "DIFFs ", diff );
     opencl_diamonds();
     diff = 0;
     foreach( ii; 0 .. F.length ) if ( F[ii] != G[ii] ) ++diff;
@@ -839,6 +843,86 @@ class Application {
     foreach( ii; 0 .. F.length ) if ( F[ii] != G[ii] ) ++diff;
     if ( diff > 0 ) writeln( "DIFFs ", diff );
     save();
+  }
+
+  void opencl_noblocks()
+  {
+    try
+    {
+      F[] = 0;
+      foreach ( r; 1 .. rows ) F[r * cols] = -penalty * r;
+      foreach ( c; 0 .. cols ) F[c       ] = -penalty * c;
+      char[] code = q{
+          #define BLOCK_SIZE 16
+          int max3( int a, int b, int c );
+          int max3( int a, int b, int c )
+          {
+            int k = a > b ? a : b;
+            return k > c ? k : c;
+          }
+          __kernel void nw( __global const int* S, __global int* F, int cols, int penalty, int diagonal )
+          {
+            int tx = get_global_id( 0 );
+            int x =            tx + 1;
+            int y = diagonal - tx - 1;
+            if ( diagonal >= cols )
+            {
+              x = diagonal - cols + tx + 1;
+              y =            cols - tx - 1;
+            }
+            int m = F[(y-1) * cols + x-1] + S[y * cols + x];
+            int r = F[(y-1) * cols + x  ] - penalty;
+            int i = F[(y  ) * cols + x-1] - penalty;
+            F[y * cols + x] = max3( m, r, i );
+          }
+        }.dup;
+      cl_int status;
+      size_t size = code.length;
+      char*[] strs = [code.ptr];
+      auto program = clCreateProgramWithSource( context, 1, strs.ptr, &size, &status );
+      assert( status == CL_SUCCESS );
+      status = clBuildProgram( program, 1, &device, "", null, null );
+      assert( status == CL_SUCCESS );
+      cl_kernel kernel = clCreateKernel( program, "nw", &status );
+      assert( status == CL_SUCCESS );
+
+      StopWatch timer;
+      timer.reset();
+      timer.start();
+      cl_mem bS = clCreateBuffer( context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, cl_int.sizeof * S.length, S.ptr, &status );
+      assert( status == CL_SUCCESS );
+      cl_mem bF = clCreateBuffer( context, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, cl_int.sizeof * F.length, F.ptr, &status );
+      assert( status == CL_SUCCESS );
+      clSetKernelArg( kernel, 0, cl_mem.sizeof, &bS      );
+      clSetKernelArg( kernel, 1, cl_mem.sizeof, &bF      );
+      clSetKernelArg( kernel, 2, cl_int.sizeof, &cols    );
+      clSetKernelArg( kernel, 3, cl_int.sizeof, &penalty );
+      foreach ( i; 2 .. 2 * cols - 1 )
+      {
+        size_t global = (i < cols) ? i - 1 : 2 * cols - i - 1;
+        clSetKernelArg( kernel, 4, cl_int.sizeof, &i );
+        status = clEnqueueNDRangeKernel( queue, kernel, 1, null, &global, null, 0, null, null );
+        assert( status == CL_SUCCESS );
+      }
+      status = clEnqueueReadBuffer( queue, bF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr, 0, null, null );
+      assert( status == CL_SUCCESS );
+      timer.stop();
+      TickDuration ticks = timer.peek();
+      writeln( "NOBLOCK  ", ticks.usecs / 1E6, "  [s]" );
+      status = clReleaseMemObject( bS );
+      assert( status == CL_SUCCESS );
+      status = clReleaseMemObject( bF );
+      assert( status == CL_SUCCESS );
+      status = clReleaseKernel( kernel );
+      assert( status == CL_SUCCESS );
+      status = clReleaseProgram( program );
+      assert( status == CL_SUCCESS );
+    }
+    catch( Exception e )
+    {
+      write( e );
+      writeln();
+    }
   }
 
   void opencl_rectangles()
