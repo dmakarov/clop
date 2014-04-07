@@ -5,4 +5,4 @@ clop
 lib
 *.o
 dub.selections.json
-examples/nw/nw
+examples/*/bin

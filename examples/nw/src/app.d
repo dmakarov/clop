@@ -7,6 +7,7 @@ import std.random;
 import std.stdio;
 
 import derelict.opencl.cl;
+import clop.compiler;
 
 class Application {
   static immutable int SEED  =  1;

@@ -3,11 +3,13 @@
     "authors" : ["Dmitri Makarov"],
     "description" : "Needleman-Wunsch algorithm implementation.",
     "targetType" : "executable",
+    "targetPath" : "./bin",
     "dependencies" : {
         "derelict_extras-opencl" : ">=1.2.0",
         "pegged" : ">=0.0.0"
     },
-    "excludedSourceFiles" : ["src/nwcl4d.d"],
-    "lflags-osx" : ["-framework", "OpenCL"],
-    "lflags-linux" : ["-lOpenCL", "-lrt"]
+    "importPaths" : ["../../src"],
+    "libs" : ["clop"],
+    "lflags-linux" : ["-L../../lib", "-lOpenCL", "-lrt"],
+    "lflags-osx"   : ["-L../../lib", "-framework", "OpenCL"]
 }
