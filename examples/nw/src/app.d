@@ -843,7 +843,38 @@ class Application {
     diff = 0;
     foreach( ii; 0 .. F.length ) if ( F[ii] != G[ii] ) ++diff;
     if ( diff > 0 ) writeln( "DIFFs ", diff );
+    clop_dsl();
+    diff = 0;
+    foreach( ii; 0 .. F.length ) if ( F[ii] != G[ii] ) ++diff;
+    if ( diff > 0 ) writeln( "DIFFs ", diff );
     save();
+  }
+
+  void clop_dsl()
+  {
+    try
+    {
+      F[] = 0;
+      foreach ( r; 1 .. rows ) F[r * cols] = -penalty * r;
+      foreach ( c; 0 .. cols ) F[c       ] = -penalty * c;
+      StopWatch timer;
+      timer.reset();
+      timer.start();
+      // use CLOP DSL to generate the loops around the computation
+      mixin( compile( q{
+         NDRange( r ; 1 .. rows, c ; 1 .. cols );
+         F[r * cols + c] = max3( F[(r - 1) * cols + c - 1] + S[r * cols + c],
+                                 F[(r - 1) * cols + c    ] - penalty,
+                                 F[ r      * cols + c - 1] - penalty );
+      } ) );
+      timer.stop();
+      TickDuration ticks = timer.peek();
+      writeln( "DSL      ", ticks.usecs / 1E6, "  [s]" );
+    }
+    catch( Exception e )
+    {
+      writeln( e );
+    }
   }
 
   void opencl_noblocks()
@@ -854,7 +885,6 @@ class Application {
       foreach ( r; 1 .. rows ) F[r * cols] = -penalty * r;
       foreach ( c; 0 .. cols ) F[c       ] = -penalty * c;
       char[] code = q{
-          #define BLOCK_SIZE 16
           int max3( int a, int b, int c );
           int max3( int a, int b, int c )
           {

@@ -1,8 +1,10 @@
 module clop.grammar;
 
+import std.stdio;
+
 import pegged.grammar;
 
-mixin( grammar( q{
+enum clop_rules = q{
 CLOP:
 
 TranslationUnit   <  RangeDecl :Spacing StatementList
@@ -36,4 +38,12 @@ IntegerSuffix     <- "Lu" / "LU" / "uL" / "UL" / "L" / "u" / "U"
 FloatLiteral      <~ Sign? Integer "." Integer? (("e" / "E") Sign? Integer)?
 Sign              <- "-" / "+"
 
-} ) );
+};
+
+mixin( grammar( clop_rules ) );
+
+void
+print_parser()
+{
+  writeln( grammar( clop_rules ) );
+}
