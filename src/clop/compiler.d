@@ -53,7 +53,7 @@ struct Compiler
   string set_args( string kernel )
   {
     uint i = 0;
-    string result = "";
+    string result = "uint arg = 0;\n";
     foreach( sym; symtable.keys )
     {
       if ( localtab.get( sym, 0 ) == 0 )
@@ -61,7 +61,30 @@ struct Compiler
         static if ( false )
         result ~= "mixin( set_kernel_arg!(" ~ sym ~ ")(\"" ~ kernel ~ "\",\"" ~ ct_itoa!(typeof(i))(i) ~ "\",\"" ~ sym ~ "\") );\n";
         else
-        result ~= "mixin( set_kernel_arg!(typeof(" ~ sym ~ "))(\"" ~ kernel ~ "\",\"" ~ ct_itoa!(typeof(i))(i) ~ "\",\"" ~ sym ~ "\") );\n";
+        result ~= "mixin( set_kernel_arg!(typeof(" ~ sym ~ "))(\"" ~ kernel ~ "\",\"arg\",\"" ~ sym ~ "\") );\n";
+        ++i;
+      }
+    }
+    return result;
+  }
+
+  string set_params()
+  {
+    string result = "string param;\n";
+    uint i = 0;
+    foreach( sym; symtable.keys )
+    {
+      if ( localtab.get( sym, 0 ) == 0 )
+      {
+        result ~= "param = set_kernel_param!(typeof(" ~ sym ~ "))(\"" ~ sym ~ "\");\n";
+        if ( i == 0 )
+        {
+          result ~= "string kernel_params = param;\n";
+        }
+        else
+        {
+          result ~= "if ( param != \"\" ) kernel_params ~= \",\" ~ param;\n";
+        }
         ++i;
       }
     }
@@ -117,7 +140,7 @@ compile( immutable string expr )
     case "CLOP.Statement":
       return value( p.children[0] ) ~ ";";
     case "CLOP.StatementList":
-      string s = "{\n";
+      string s = "\n";
       foreach ( c; p.children ) s ~= "  " ~ value( c ) ~ "\n";
       return s ~ "}";
     case "CLOP.RangeSpec":
@@ -127,31 +150,47 @@ compile( immutable string expr )
       foreach (c ; p.matches) s ~= " " ~ c;
       return s ~ " )\n";
       +/
-      return "";
+      return "  int " ~ p.matches[0] ~ " = 0;\n";
     case "CLOP.RangeList":
       string s = value( p.children[0] );
       for ( auto c = 1; c < p.children.length; ++c )
         s ~= value( p.children[c] );
       return s;
     case "CLOP.RangeDecl":
-      return value( p.children[0] );
+      return "{\n" ~ value( p.children[0] );
     case "CLOP.TranslationUnit":
       return value( p.children[0] ) ~ value( p.children[1] );
     default: return p.name;
     }
   }
 
-  string code = "char[] code = q{\n__kernel void kernel()\n" ~ value( p );
-  code ~= "\n}.dup;\n" ~ q{
-      size_t size = code.length;
-      char*[] strs = [code.ptr];
-      auto program = clCreateProgramWithSource( context, 1, strs.ptr, &size, &status );
-      assert( status == CL_SUCCESS );
-      status = clBuildProgram( program, 1, &device, "", null, null );
-      assert( status == CL_SUCCESS );
-      cl_kernel kernel = clCreateKernel( program, "kernel", &status );
-      assert( status == CL_SUCCESS );
-
+  string kernel = value( p );
+  string params = c.set_params();
+  string max3 = q{
+  int max3( int a, int b, int c );
+  int max3( int a, int b, int c )
+  {
+    int k = a > b ? a : b;
+    return k > c ? k : c;
+  }
+  };
+  string code = params ~ "char[] code = (q{\n" ~ max3 ~ "} ~ \"__kernel void kernel1(\" ~ kernel_params ~ \")\" ~\n";
+  code ~= "q{\n" ~ kernel ~ "\n}).dup;" ~ q{
+  writeln( code );
+  size_t size = code.length;
+  char*[] strs = [code.ptr];
+  auto program = clCreateProgramWithSource( context, 1, strs.ptr, &size, &status );
+  assert( status == CL_SUCCESS, "clCreateProgramWithSource" );
+  status = clBuildProgram( program, 1, &device, "", null, null );
+  if ( status != CL_SUCCESS )
+  {
+    char[1024] log;
+    clGetProgramBuildInfo( program, device, CL_PROGRAM_BUILD_LOG, 1024, log.ptr, null );
+    writeln( log );
+  }
+  assert( status == CL_SUCCESS, "clBuildProgram" );
+  cl_kernel kernel = clCreateKernel( program, "kernel1", &status );
+  assert( status == CL_SUCCESS, "clCreateKernel" );
   } ~ c.set_args( "kernel" );
   return "writefln( \"Generated code:\\n%s\\n\", q{" ~ code ~ "} );\n" ~ code;
 }
@@ -165,26 +204,43 @@ set_kernel_arg( T )( string kernel, string arg, string name )
   static if ( false )
   {
   static      if ( is ( typeof( expr ) == bool ) )
-    code = "clSetKernelArg(" ~ kernel ~ "," ~ arg  ~ ",cl_char.sizeof,&" ~ name ~ ");";
+    code = "clSetKernelArg(" ~ kernel ~ "," ~ arg  ~ "++,cl_char.sizeof,&" ~ name ~ ");";
   else static if ( is ( typeof( expr ) == int ) )
-    code = "clSetKernelArg(" ~ kernel ~ "," ~ arg  ~ ",cl_int.sizeof,&" ~ name ~ ");";
+    code = "clSetKernelArg(" ~ kernel ~ "," ~ arg  ~ "++,cl_int.sizeof,&" ~ name ~ ");";
   else static if ( is ( typeof( expr ) == uint ) )
-    code = "clSetKernelArg(" ~ kernel ~ "," ~ arg  ~ ",cl_uint.sizeof,&" ~ name ~ ");";
+    code = "clSetKernelArg(" ~ kernel ~ "," ~ arg  ~ "++,cl_uint.sizeof,&" ~ name ~ ");";
   else
     code = "";
   } else {
   static      if ( is ( T == bool ) )
-    code ="clSetKernelArg(" ~ kernel ~ "," ~ arg  ~ ",cl_char.sizeof,&" ~ name ~ ");";
+    code = "clSetKernelArg(" ~ kernel ~ "," ~ arg  ~ "++,cl_char.sizeof,&" ~ name ~ ");";
   else static if ( is ( T == int ) )
-    code = "clSetKernelArg(" ~ kernel ~ "," ~ arg  ~ ",cl_int.sizeof,&" ~ name ~ ");";
+    code = "clSetKernelArg(" ~ kernel ~ "," ~ arg  ~ "++,cl_int.sizeof,&" ~ name ~ ");";
   else static if ( is ( T == uint ) )
-    code = "clSetKernelArg(" ~ kernel ~ "," ~ arg  ~ ",cl_uint.sizeof,&" ~ name ~ ");";
+    code = "clSetKernelArg(" ~ kernel ~ "," ~ arg  ~ "++,cl_uint.sizeof,&" ~ name ~ ");";
   else static if ( isDynamicArray!T )
     code = "cl_mem b" ~ name ~ " = clCreateBuffer( context, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, typeid( *"
            ~ name ~ ".ptr ).tsize * " ~ name ~ ".length, " ~ name ~ ".ptr, &status );\nclSetKernelArg( "
-           ~ kernel ~ ", " ~ arg ~ ", cl_mem.sizeof, &b" ~ name ~ " );";
+           ~ kernel ~ ", " ~ arg ~ "++, cl_mem.sizeof, &b" ~ name ~ " );";
   else
     code = "";
   }
   return "writefln( \"%s\\n\", q{" ~ code ~ "} );\n" ~ code;
+}
+
+immutable string
+set_kernel_param( T )( string name )
+{
+  string code;
+  static      if ( is ( T == bool ) )
+    code = "int " ~ name;
+  else static if ( is ( T == int ) )
+    code = "int " ~ name;
+  else static if ( is ( T == uint ) )
+    code = "uint " ~ name;
+  else static if ( isDynamicArray!T )
+    code = "__global int* " ~ name;
+  else
+    code = "";
+  return code;
 }

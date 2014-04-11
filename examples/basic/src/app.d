@@ -1,4 +1,4 @@
-module clop.app;
+module app;
 
 import std.conv;
 import std.random;

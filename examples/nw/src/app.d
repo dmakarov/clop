@@ -885,28 +885,28 @@ class Application {
       foreach ( r; 1 .. rows ) F[r * cols] = -penalty * r;
       foreach ( c; 0 .. cols ) F[c       ] = -penalty * c;
       char[] code = q{
-          int max3( int a, int b, int c );
-          int max3( int a, int b, int c )
+        int max3( int a, int b, int c );
+        int max3( int a, int b, int c )
+        {
+          int k = a > b ? a : b;
+          return k > c ? k : c;
+        }
+        __kernel void nw( __global const int* S, __global int* F, int cols, int penalty, int diagonal )
+        {
+          int tx = get_global_id( 0 );
+          int c =            tx + 1;
+          int r = diagonal - tx - 1;
+          if ( diagonal >= cols )
           {
-            int k = a > b ? a : b;
-            return k > c ? k : c;
+            c = diagonal - cols + tx + 1;
+            r =            cols - tx - 1;
           }
-          __kernel void nw( __global const int* S, __global int* F, int cols, int penalty, int diagonal )
-          {
-            int tx = get_global_id( 0 );
-            int x =            tx + 1;
-            int y = diagonal - tx - 1;
-            if ( diagonal >= cols )
-            {
-              x = diagonal - cols + tx + 1;
-              y =            cols - tx - 1;
-            }
-            int m = F[(y-1) * cols + x-1] + S[y * cols + x];
-            int r = F[(y-1) * cols + x  ] - penalty;
-            int i = F[(y  ) * cols + x-1] - penalty;
-            F[y * cols + x] = max3( m, r, i );
-          }
-        }.dup;
+          int m = F[(r - 1) * cols + c - 1] + S[r * cols + c];
+          int d = F[(r - 1) * cols + c    ] - penalty;
+          int i = F[(r    ) * cols + c - 1] - penalty;
+          F[r * cols + c] = max3( m, d, i );
+        }
+      }.dup;
       cl_int status;
       size_t size = code.length;
       char*[] strs = [code.ptr];
