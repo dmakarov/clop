@@ -76,14 +76,14 @@ struct Compiler
     {
       if ( localtab.get( sym, 0 ) == 0 )
       {
-        result ~= "param = set_kernel_param!(typeof(" ~ sym ~ "))(\"" ~ sym ~ "\");\n";
+        result ~= "param = mixin( set_kernel_param!(typeof(" ~ sym ~ "))(\"" ~ sym ~ "\") );\n";
         if ( i == 0 )
         {
           result ~= "string kernel_params = param;\n";
         }
         else
         {
-          result ~= "if ( param != \"\" ) kernel_params ~= \",\" ~ param;\n";
+          result ~= "if ( param != \"\" ) kernel_params ~= \", \" ~ param;\n";
         }
         ++i;
       }
@@ -176,7 +176,7 @@ compile( immutable string expr )
   };
   string code = params ~ "char[] code = (q{\n" ~ max3 ~ "} ~ \"__kernel void kernel1(\" ~ kernel_params ~ \")\" ~\n";
   code ~= "q{\n" ~ kernel ~ "\n}).dup;" ~ q{
-  writeln( code );
+  writeln( "OpenCL program\n", code, "EOF" );
   size_t size = code.length;
   char*[] strs = [code.ptr];
   auto program = clCreateProgramWithSource( context, 1, strs.ptr, &size, &status );
@@ -233,14 +233,14 @@ set_kernel_param( T )( string name )
 {
   string code;
   static      if ( is ( T == bool ) )
-    code = "int " ~ name;
+    code = "\"int " ~ name ~ "\"";
   else static if ( is ( T == int ) )
-    code = "int " ~ name;
+    code = "\"int " ~ name ~ "\"";
   else static if ( is ( T == uint ) )
-    code = "uint " ~ name;
+    code = "\"uint " ~ name ~ "\"";
   else static if ( isDynamicArray!T )
-    code = "__global int* " ~ name;
+    code = "\"__global \" ~ typeid( *" ~ name ~ ".ptr ).toString() ~ \"* " ~ name ~ "\"";
   else
-    code = "";
+    code = "\"\"";
   return code;
 }
