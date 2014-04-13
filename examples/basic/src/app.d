@@ -104,28 +104,15 @@ class Application
 
   void run()
   {
-    DerelictCL.load();
-    cl_uint num_platforms, num_devices;
-    auto status = clGetPlatformIDs( 0, null, &num_platforms );
-    assert( status == CL_SUCCESS && num_platforms > 0 );
-    auto platforms = new cl_platform_id[num_platforms];
-    assert( platforms != null );
-    status = clGetPlatformIDs( num_platforms, platforms.ptr, null );
-    assert( status == CL_SUCCESS );
-    auto platform = platforms[0];
-    status = clGetDeviceIDs( platform, CL_DEVICE_TYPE_ALL, 0, null, &num_devices );
-    assert( status == CL_SUCCESS && num_devices > 0 );
-    auto devices = new cl_device_id[num_devices];
-    status = clGetDeviceIDs( platform, CL_DEVICE_TYPE_ALL, num_devices, devices.ptr, null );
-    assert( status == CL_SUCCESS );
-    auto device = devices[1];
-    auto context = clCreateContext( null, 1, &device, null, null, &status );
-    assert( status == CL_SUCCESS );
-    auto queue = clCreateCommandQueue( context, device, 0, &status );
-    assert( status == CL_SUCCESS );
+    runtime.init();
     // use CLOP DSL to generate the loops around the computation
     mixin( compile(
     q{
+       int max3( int a, int b, int c )
+       {
+         int k = a > b ? a : b;
+         return k > c ? k : c;
+       }
        NDRange( r ; 1 .. rows, c ; 1 .. cols );
        F[r * cols + c] = max3( F[(r - 1) * cols + c - 1] + S[r * cols + c],
                                F[(r - 1) * cols + c    ] - penalty,
@@ -161,7 +148,6 @@ main( string[] args )
   {
     auto app = new Application( args );
     app.run();
-    //print_parser();
   }
   catch ( Exception msg )
   {

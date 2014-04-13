@@ -5,11 +5,14 @@ import std.traits;
 import pegged.grammar;
 
 public import clop.grammar;
+public import clop.runtime;
 
 struct Compiler
 {
   uint[string] symtable;
   uint[string] localtab;
+  string declarations;
+  string range;
 
   void add_symbol( string symbol )
   {
@@ -50,24 +53,6 @@ struct Compiler
     return s;
   }
 
-  string set_args( string kernel )
-  {
-    uint i = 0;
-    string result = "uint arg = 0;\n";
-    foreach( sym; symtable.keys )
-    {
-      if ( localtab.get( sym, 0 ) == 0 )
-      {
-        static if ( false )
-        result ~= "mixin( set_kernel_arg!(" ~ sym ~ ")(\"" ~ kernel ~ "\",\"" ~ ct_itoa!(typeof(i))(i) ~ "\",\"" ~ sym ~ "\") );\n";
-        else
-        result ~= "mixin( set_kernel_arg!(typeof(" ~ sym ~ "))(\"" ~ kernel ~ "\",\"arg\",\"" ~ sym ~ "\") );\n";
-        ++i;
-      }
-    }
-    return result;
-  }
-
   string set_params()
   {
     string result = "string param;\n";
@@ -88,7 +73,46 @@ struct Compiler
         ++i;
       }
     }
+    result ~= "kernel_params ~= \", int diagonal\";\n";
     return result;
+  }
+
+  string set_args( string kernel )
+  {
+    string result = "uint clop_opencl_kernel_arg = 0;\n";
+    foreach( sym; symtable.keys )
+    {
+      if ( localtab.get( sym, 0 ) == 0 )
+      {
+        result ~= "mixin( set_kernel_arg!(typeof(" ~ sym ~ "))(\"" ~
+        kernel ~ "\",\"clop_opencl_kernel_arg\",\"" ~ sym ~ "\") );\n";
+      }
+    }
+    return result;
+  }
+
+  string code_to_read_data_from_device()
+  {
+    string result = "";
+    foreach( sym; symtable.keys )
+    {
+      if ( localtab.get( sym, 0 ) == 0 )
+      {
+        result ~= "mixin( read_device_buffer!(typeof(" ~ sym ~ "))(\"" ~ sym ~ "\") );\n";
+      }
+    }
+    return result;
+  }
+
+  string code_to_invoke_kernel()
+  {
+    return "foreach ( clop_diagonal; 2 .. 2 * (" ~ range ~ ") - 1 )
+    {
+      size_t global = (clop_diagonal < (" ~ range ~ ")) ? clop_diagonal - 1 : 2 * (" ~ range ~ ") - clop_diagonal - 1;
+      clSetKernelArg( clop_opencl_kernel, clop_opencl_kernel_arg, cl_int.sizeof, &clop_diagonal );
+      runtime.status = clEnqueueNDRangeKernel( runtime.queue, clop_opencl_kernel, 1, null, &global, null, 0, null, null );
+      assert( runtime.status == CL_SUCCESS, \"clEnqueueNDRangeKernel failed.\" );
+    }\n";
   }
 }
 
@@ -97,6 +121,7 @@ compile( immutable string expr )
 {
   auto c = Compiler();
   auto p = CLOP( expr );
+  bool internal = false;
 
   string value( ParseTree p )
   {
@@ -136,96 +161,119 @@ compile( immutable string expr )
     case "CLOP.AddExpr":
       return p.matches[0] ~ value( p.children[0] );
     case "CLOP.AssignExpr":
-      return value( p.children[0] ) ~ "=" ~ value( p.children[1] );
+      if ( p.children.length == 2 )
+        return value( p.children[0] ) ~ "=" ~ value( p.children[1] );
+      else
+        return value( p.children[0] );
+    case "CLOP.RelationalExpression":
+      string s = value( p.children[0] );
+      foreach ( i; 1 .. p.children.length )
+        s ~= "<=" ~ value( p.children[i] );
+      return s;
+    case "CLOP.EqualityExpression":
+      string s = value( p.children[0] );
+      foreach ( i; 1 .. p.children.length )
+        s ~= "==" ~ value( p.children[i] );
+      return s;
+    case "CLOP.ANDExpression":
+      string s = value( p.children[0] );
+      foreach ( i; 1 .. p.children.length )
+        s ~= "&" ~ value( p.children[i] );
+      return s;
+    case "CLOP.ExclusiveORExpression":
+      string s = value( p.children[0] );
+      foreach ( i; 1 .. p.children.length )
+        s ~= "^" ~ value( p.children[i] );
+      return s;
+    case "CLOP.InclusiveORExpression":
+      string s = value( p.children[0] );
+      foreach ( i; 1 .. p.children.length )
+        s ~= "|" ~ value( p.children[i] );
+      return s;
+    case "CLOP.LogicalANDExpression":
+      string s = value( p.children[0] );
+      foreach ( i; 1 .. p.children.length )
+        s ~= "&&" ~ value( p.children[i] );
+      return s;
+    case "CLOP.LogicalORExpression":
+      string s = value( p.children[0] );
+      foreach ( i; 1 .. p.children.length )
+        s ~= "||" ~ value( p.children[i] );
+      return s;
+    case "CLOP.ConditionalExpression":
+      if ( p.children.length == 3 )
+        return value( p.children[0] ) ~ "?" ~ value( p.children[1] ) ~ ":" ~ value( p.children[2] );
+      else
+        return value( p.children[0] );
+    case "CLOP.ExpressionStatement":
+      string s = ( p.children.length > 0 ) ? value( p.children[0] ) ~ ";" : ";";
+      return s;
+    case "CLOP.ReturnStatement":
+      return "return " ~ value( p.children[0] ) ~ ";";
     case "CLOP.Statement":
-      return value( p.children[0] ) ~ ";";
+      return value( p.children[0] );
     case "CLOP.StatementList":
       string s = "\n";
       foreach ( c; p.children ) s ~= "  " ~ value( c ) ~ "\n";
       return s ~ "}";
     case "CLOP.RangeSpec":
       c.add_local( p.matches[0] );
+      c.range = p.matches[4].dup;
       /+
       string s = "foreach (";
       foreach (c ; p.matches) s ~= " " ~ c;
       return s ~ " )\n";
       +/
-      return "  int " ~ p.matches[0] ~ " = 0;\n";
+      string result;
+      if ( internal )
+        result = "  int " ~ p.matches[0] ~ " = (diagonal >= cols) ? diagonal - cols + tx + 1 : tx + 1;\n";
+      else
+        result = "  int " ~ p.matches[0] ~ " = (diagonal >= cols) ? cols - tx - 1 : diagonal - tx - 1;\n";
+      internal = true;
+      return result;
     case "CLOP.RangeList":
       string s = value( p.children[0] );
       for ( auto c = 1; c < p.children.length; ++c )
         s ~= value( p.children[c] );
       return s;
     case "CLOP.RangeDecl":
-      return "{\n" ~ value( p.children[0] );
+      return "{\n  int tx = get_global_id( 0 );\n" ~ value( p.children[0] );
     case "CLOP.TranslationUnit":
-      return value( p.children[0] ) ~ value( p.children[1] );
+      if ( p.children.length == 2 )
+        return value( p.children[0] ) ~ value( p.children[1] );
+      else
+      {
+        foreach ( m; p.children[0].matches ) c.declarations ~= " " ~ m;
+        c.declarations ~= "\n";
+        return value( p.children[1] ) ~ value( p.children[2] );
+      }
     default: return p.name;
     }
   }
 
   string kernel = value( p );
   string params = c.set_params();
-  string max3 = q{
-  int max3( int a, int b, int c );
-  int max3( int a, int b, int c )
-  {
-    int k = a > b ? a : b;
-    return k > c ? k : c;
-  }
-  };
-  string code = params ~ "char[] code = (q{\n" ~ max3 ~ "} ~ \"__kernel void kernel1(\" ~ kernel_params ~ \")\" ~\n";
+  string code = params ~ "char[] clop_opencl_program_source = (q{\n" ~ c.declarations ~
+  "} ~ \"__kernel void clop_opencl_kernel_main( \" ~ kernel_params ~ \" )\" ~\n";
   code ~= "q{\n" ~ kernel ~ "\n}).dup;" ~ q{
-  writeln( "OpenCL program\n", code, "EOF" );
-  size_t size = code.length;
-  char*[] strs = [code.ptr];
-  auto program = clCreateProgramWithSource( context, 1, strs.ptr, &size, &status );
-  assert( status == CL_SUCCESS, "clCreateProgramWithSource" );
-  status = clBuildProgram( program, 1, &device, "", null, null );
-  if ( status != CL_SUCCESS )
+  writeln( "OpenCL program:\n", clop_opencl_program_source, "EOF" );
+  size_t clop_opencl_program_source_size = clop_opencl_program_source.length;
+  char* clop_opencl_program_source_pointer = clop_opencl_program_source.ptr;
+  auto program = clCreateProgramWithSource( runtime.context, 1, &clop_opencl_program_source_pointer,
+                                            &clop_opencl_program_source_size, &runtime.status );
+  assert( runtime.status == CL_SUCCESS, "clCreateProgramWithSource failed." );
+  runtime.status = clBuildProgram( program, 1, &runtime.device, "", null, null );
+  if ( runtime.status != CL_SUCCESS )
   {
     char[1024] log;
-    clGetProgramBuildInfo( program, device, CL_PROGRAM_BUILD_LOG, 1024, log.ptr, null );
+    clGetProgramBuildInfo( program, runtime.device, CL_PROGRAM_BUILD_LOG, 1024, log.ptr, null );
     writeln( log );
   }
-  assert( status == CL_SUCCESS, "clBuildProgram" );
-  cl_kernel kernel = clCreateKernel( program, "kernel1", &status );
-  assert( status == CL_SUCCESS, "clCreateKernel" );
-  } ~ c.set_args( "kernel" );
-  return "writefln( \"Generated code:\\n%s\\n\", q{" ~ code ~ "} );\n" ~ code;
-}
-
-// clSetKernelArg( kernel, 2, cl_int.sizeof, &cols );
-// set_kernel_arg(alias expr)( string kernel, string arg, string name )
-immutable string
-set_kernel_arg( T )( string kernel, string arg, string name )
-{
-  string code;
-  static if ( false )
-  {
-  static      if ( is ( typeof( expr ) == bool ) )
-    code = "clSetKernelArg(" ~ kernel ~ "," ~ arg  ~ "++,cl_char.sizeof,&" ~ name ~ ");";
-  else static if ( is ( typeof( expr ) == int ) )
-    code = "clSetKernelArg(" ~ kernel ~ "," ~ arg  ~ "++,cl_int.sizeof,&" ~ name ~ ");";
-  else static if ( is ( typeof( expr ) == uint ) )
-    code = "clSetKernelArg(" ~ kernel ~ "," ~ arg  ~ "++,cl_uint.sizeof,&" ~ name ~ ");";
-  else
-    code = "";
-  } else {
-  static      if ( is ( T == bool ) )
-    code = "clSetKernelArg(" ~ kernel ~ "," ~ arg  ~ "++,cl_char.sizeof,&" ~ name ~ ");";
-  else static if ( is ( T == int ) )
-    code = "clSetKernelArg(" ~ kernel ~ "," ~ arg  ~ "++,cl_int.sizeof,&" ~ name ~ ");";
-  else static if ( is ( T == uint ) )
-    code = "clSetKernelArg(" ~ kernel ~ "," ~ arg  ~ "++,cl_uint.sizeof,&" ~ name ~ ");";
-  else static if ( isDynamicArray!T )
-    code = "cl_mem b" ~ name ~ " = clCreateBuffer( context, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, typeid( *"
-           ~ name ~ ".ptr ).tsize * " ~ name ~ ".length, " ~ name ~ ".ptr, &status );\nclSetKernelArg( "
-           ~ kernel ~ ", " ~ arg ~ "++, cl_mem.sizeof, &b" ~ name ~ " );";
-  else
-    code = "";
-  }
-  return "writefln( \"%s\\n\", q{" ~ code ~ "} );\n" ~ code;
+  assert( runtime.status == CL_SUCCESS, "clBuildProgram failed." );
+  auto clop_opencl_kernel = clCreateKernel( program, "clop_opencl_kernel_main", &runtime.status );
+  assert( runtime.status == CL_SUCCESS, "clCreateKernel failed." );
+  } ~ c.set_args( "clop_opencl_kernel" ) ~ c.code_to_invoke_kernel() ~ c.code_to_read_data_from_device();
+  return "writefln( \"DSL MIXIN:\\n%sEOD\", q{" ~ code ~ "} );\n" ~ code;
 }
 
 immutable string
@@ -243,4 +291,38 @@ set_kernel_param( T )( string name )
   else
     code = "\"\"";
   return code;
+}
+
+immutable string
+set_kernel_arg( T )( string kernel, string arg, string name )
+{
+  string code;
+  static      if ( is ( T == bool ) )
+    code = "clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ "++, cl_char.sizeof, &" ~ name ~ " );";
+  else static if ( is ( T == int ) )
+    code = "clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ "++, cl_int.sizeof, &" ~ name ~ " );";
+  else static if ( is ( T == uint ) )
+    code = "clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ "++, cl_uint.sizeof, &" ~ name ~ " );";
+  else static if ( isDynamicArray!T )
+    code = "cl_mem clop_opencl_device_buffer_" ~ name ~
+           " = clCreateBuffer( runtime.context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, typeid( *"
+           ~ name ~ ".ptr ).tsize * " ~ name ~ ".length, "
+           ~ name ~ ".ptr, &runtime.status );\nclSetKernelArg( "
+           ~ kernel ~ ", " ~ arg ~ "++, cl_mem.sizeof, &clop_opencl_device_buffer_" ~ name ~ " );";
+  else
+    code = "";
+  return "writefln( \"%s\\n\", q{" ~ code ~ "} );\n" ~ code;
+}
+
+immutable string
+read_device_buffer( T )( string name )
+{
+  string code;
+  static if ( isDynamicArray!T )
+    code = "runtime.status = clEnqueueReadBuffer( runtime.queue, clop_opencl_device_buffer_"
+           ~ name ~ ", CL_TRUE, 0, typeid( *" ~ name ~ ".ptr ).tsize * " ~ name ~ ".length, " ~ name ~
+           ".ptr, 0, null, null );\nassert( runtime.status == CL_SUCCESS, \"clEnqueueReadBuffer failed.\" );";
+  else
+    code = "";
+  return "writefln( \"%s\\n\", q{" ~ code ~ "} );\n" ~ code;
 }
