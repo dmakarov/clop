@@ -10,7 +10,7 @@ CLOP:
 TranslationUnit        <  ExternalDeclarations? RangeDecl :Spacing StatementList
 ExternalDeclarations   <  ExternalDeclaration (:Spacing ExternalDeclaration)*
 ExternalDeclaration    <  FunctionDefinition / Declaration
-FunctionDefinition     <  TypeSpecifier Declarator DeclarationList? CompoundStatement
+FunctionDefinition     <  TypeSpecifier Declarator CompoundStatement
 
 DeclarationList        <- Declaration (:Spacing Declaration)*
 Declaration            <  TypeSpecifier InitDeclaratorList? ';'
@@ -53,8 +53,10 @@ AddExpr                <  [-+] Factor
 Expression             <  Factor AddExpr*
 AssignExpr             <  UnaryExpr '=' AssignExpr
                        /  ConditionalExpression
-RelationalExpression   <  Expression (("<=" / ">=" / "<" / ">") RelationalExpression)*
-EqualityExpression     <  RelationalExpression (("==" / "!=") EqualityExpression)*
+RelationalExpression   <  Expression (RelationalOperator RelationalExpression)*
+RelationalOperator     <  "<=" / ">=" / "<" / ">"
+EqualityExpression     <  RelationalExpression (EqualityOperator EqualityExpression)*
+EqualityOperator       <  "==" / "!="
 ANDExpression          <  EqualityExpression ('&' ANDExpression)*
 ExclusiveORExpression  <  ANDExpression ('^' ExclusiveORExpression)*
 InclusiveORExpression  <  ExclusiveORExpression ('|' InclusiveORExpression)*
@@ -63,15 +65,22 @@ LogicalORExpression    <  LogicalANDExpression ("||" LogicalORExpression)*
 ConditionalExpression  <  LogicalORExpression ('?' Expression ':' ConditionalExpression)?
 ConstantExpression     <- ConditionalExpression
 
-ExpressionStatement    <  AssignExpr? ';'
-ReturnStatement        <  "return" ConditionalExpression ';'
-Statement              <  ExpressionStatement
-                       /  ReturnStatement
-StatementList          <- Statement ( :Spacing Statement )*
 CompoundStatement      <  '{' '}'
                        /  '{' DeclarationList '}'
                        /  '{' StatementList '}'
                        /  '{' DeclarationList StatementList '}'
+ExpressionStatement    <  AssignExpr? ';'
+IfStatement            <  "if" '(' EqualityExpression ')' Statement ("else" Statement)?
+WhileStatement         <  "while" '(' EqualityExpression ')' Statement
+ForStatement           <  "for" '(' AssignExpr? ';' EqualityExpression? ';' AssignExpr? ')' Statement
+IterationStatement     <  WhileStatement / ForStatement
+ReturnStatement        <  "return" ConditionalExpression ';'
+Statement              <  CompoundStatement
+                       /  ExpressionStatement
+                       /  IfStatement
+                       /  IterationStatement
+                       /  ReturnStatement
+StatementList          <- Statement ( :Spacing Statement )*
 
 Identifier             <~ !Keyword [a-zA-Z_] [a-zA-Z0-9_]*
 Keyword                <- "NDRange"
