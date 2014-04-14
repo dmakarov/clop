@@ -41,6 +41,11 @@ struct Compiler
 
   string ct_itoa(T)(T x)
   {
+    static assert( is ( T == byte  ) || is ( T == ubyte  ) ||
+                   is ( T == short ) || is ( T == ushort ) ||
+                   is ( T == int   ) || is ( T == uint   ) ||
+                   is ( T == long  ) || is ( T == ulong  ),
+                   "not an integer value" );
     string s = "";
     static if ( is ( T == byte ) || is ( T == short ) || is ( T == int ) || is ( T == long ) )
     {
@@ -114,7 +119,8 @@ struct Compiler
     return "foreach ( clop_diagonal; 2 .. 2 * (" ~ range ~ ") - 1 )
     {
       size_t global = (clop_diagonal < (" ~ range ~ ")) ? clop_diagonal - 1 : 2 * (" ~ range ~ ") - clop_diagonal - 1;
-      clSetKernelArg( clop_opencl_kernel, clop_opencl_kernel_arg, cl_int.sizeof, &clop_diagonal );
+      runtime.status = clSetKernelArg( clop_opencl_kernel, clop_opencl_kernel_arg, cl_int.sizeof, &clop_diagonal );
+      assert( runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\" );
       runtime.status = clEnqueueNDRangeKernel( runtime.queue, clop_opencl_kernel, 1, null, &global, null, 0, null, null );
       assert( runtime.status == CL_SUCCESS, \"clEnqueueNDRangeKernel failed.\" );
     }\n";
@@ -339,13 +345,19 @@ immutable string
 set_kernel_param( T )( string name )
 {
   string code;
-  static      if ( is ( T == bool ) )
-    code = "\"int " ~ name ~ "\"";
-  else static if ( is ( T == int ) )
-    code = "\"int " ~ name ~ "\"";
-  else static if ( is ( T == uint ) )
-    code = "\"uint " ~ name ~ "\"";
-  else static if ( isDynamicArray!T )
+  static      if ( is ( T == bool   ) ) code = "\"uchar "  ~ name ~ "\"";
+  else static if ( is ( T == char   ) ) code = "\"char "   ~ name ~ "\"";
+  else static if ( is ( T == byte   ) ) code = "\"char "   ~ name ~ "\"";
+  else static if ( is ( T == ubyte  ) ) code = "\"uchar "  ~ name ~ "\"";
+  else static if ( is ( T == short  ) ) code = "\"short "  ~ name ~ "\"";
+  else static if ( is ( T == ushort ) ) code = "\"ushort " ~ name ~ "\"";
+  else static if ( is ( T == int    ) ) code = "\"int "    ~ name ~ "\"";
+  else static if ( is ( T == uint   ) ) code = "\"uint "   ~ name ~ "\"";
+  else static if ( is ( T == long   ) ) code = "\"long "   ~ name ~ "\"";
+  else static if ( is ( T == ulong  ) ) code = "\"ulong "  ~ name ~ "\"";
+  else static if ( is ( T == float  ) ) code = "\"float "  ~ name ~ "\"";
+  else static if ( is ( T == double ) ) code = "\"double " ~ name ~ "\"";
+  else static if ( isDynamicArray!T || isStaticArray!T )
     code = "\"__global \" ~ typeid( *" ~ name ~ ".ptr ).toString() ~ \"* " ~ name ~ "\"";
   else
     code = "\"\"";
@@ -357,31 +369,62 @@ set_kernel_arg( T )( string kernel, string arg, string name )
 {
   string code;
   static      if ( is ( T == bool ) )
-    code = "clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ "++, cl_char.sizeof, &" ~ name ~ " );";
+    code = "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ "++, cl_char.sizeof, &" ~ name ~ " );\n"
+         ~ "assert( runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\" );";
+  else static if ( is ( T == char ) )
+    code = "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ "++, cl_char.sizeof, &" ~ name ~ " );\n"
+         ~ "assert( runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\" );";
+  else static if ( is ( T == byte ) )
+    code = "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ "++, cl_char.sizeof, &" ~ name ~ " );\n"
+         ~ "assert( runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\" );";
+  else static if ( is ( T == ubyte ) )
+    code = "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ "++, cl_uchar.sizeof, &" ~ name ~ " );\n"
+         ~ "assert( runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\" );";
+  else static if ( is ( T == short ) )
+    code = "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ "++, cl_short.sizeof, &" ~ name ~ " );\n"
+         ~ "assert( runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\" );";
+  else static if ( is ( T == ushort ) )
+    code = "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ "++, cl_ushort.sizeof, &" ~ name ~ " );\n"
+         ~ "assert( runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\" );";
   else static if ( is ( T == int ) )
-    code = "clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ "++, cl_int.sizeof, &" ~ name ~ " );";
+    code = "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ "++, cl_int.sizeof, &" ~ name ~ " );\n"
+         ~ "assert( runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\" );";
   else static if ( is ( T == uint ) )
-    code = "clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ "++, cl_uint.sizeof, &" ~ name ~ " );";
-  else static if ( isDynamicArray!T )
+    code = "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ "++, cl_uint.sizeof, &" ~ name ~ " );\n"
+         ~ "assert( runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\" );";
+  else static if ( is ( T == long ) )
+    code = "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ "++, cl_long.sizeof, &" ~ name ~ " );\n"
+         ~ "assert( runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\" );";
+  else static if ( is ( T == ulong ) )
+    code = "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ "++, cl_ulong.sizeof, &" ~ name ~ " );\n"
+         ~ "assert( runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\" );";
+  else static if ( is ( T == float ) )
+    code = "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ "++, cl_float.sizeof, &" ~ name ~ " );\n"
+         ~ "assert( runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\" );";
+  else static if ( is ( T == double ) )
+    code = "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ "++, cl_double.sizeof, &" ~ name ~ " );\n"
+         ~ "assert( runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\" );";
+  else static if ( isDynamicArray!T || isStaticArray!T )
     code = "cl_mem clop_opencl_device_buffer_" ~ name ~
            " = clCreateBuffer( runtime.context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, typeid( *"
-           ~ name ~ ".ptr ).tsize * " ~ name ~ ".length, "
-           ~ name ~ ".ptr, &runtime.status );\nclSetKernelArg( "
-           ~ kernel ~ ", " ~ arg ~ "++, cl_mem.sizeof, &clop_opencl_device_buffer_" ~ name ~ " );";
+           ~ name ~ ".ptr ).tsize * " ~ name ~ ".length, " ~ name ~ ".ptr, &runtime.status );\n"
+           ~ "assert( runtime.status == CL_SUCCESS, \"clCreateBuffer failed.\" );\n"
+           ~ "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg ~ "++, cl_mem.sizeof, &clop_opencl_device_buffer_"
+           ~ name ~ " );\nassert( runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\" );";
   else
     code = "";
-  return "writefln( \"%s\\n\", q{" ~ code ~ "} );\n" ~ code;
+  return "writefln( \"%s\", q{" ~ code ~ "} );\n" ~ code;
 }
 
 immutable string
 read_device_buffer( T )( string name )
 {
   string code;
-  static if ( isDynamicArray!T )
+  static if ( isDynamicArray!T || isStaticArray!T )
     code = "runtime.status = clEnqueueReadBuffer( runtime.queue, clop_opencl_device_buffer_"
            ~ name ~ ", CL_TRUE, 0, typeid( *" ~ name ~ ".ptr ).tsize * " ~ name ~ ".length, " ~ name ~
            ".ptr, 0, null, null );\nassert( runtime.status == CL_SUCCESS, \"clEnqueueReadBuffer failed.\" );";
   else
     code = "";
-  return "writefln( \"%s\\n\", q{" ~ code ~ "} );\n" ~ code;
+  return "writefln( \"%s\", q{" ~ code ~ "} );\n" ~ code;
 }
