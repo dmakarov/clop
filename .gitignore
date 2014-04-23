@@ -1,7 +1,6 @@
 .dub
 .settings
 bin
-clop
 lib
 *.o
 dub.selections.json
