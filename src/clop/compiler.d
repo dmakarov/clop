@@ -9,10 +9,208 @@ public import clop.runtime;
 
 struct Compiler
 {
+  immutable string source;
+  ParseTree AST;
   uint[string] symtable;
   uint[string] localtab;
   string declarations;
   string range;
+  bool global_scope;
+  bool internal;
+
+  this( immutable string expr )
+  {
+    source = expr;
+    internal = false;
+    global_scope = false;
+    AST = CLOP( source );
+  }
+
+  string generate()
+  {
+    return evaluate( AST );
+  }
+
+  string evaluate( ParseTree t )
+  {
+    switch ( t.name )
+    {
+    case "CLOP":
+      return evaluate( t.children[0] );
+    case "CLOP.Identifier":
+      if ( global_scope && !is_local( t.matches[0] ) )
+        add_symbol( t.matches[0] );
+      else
+        add_local( t.matches[0] );
+      return t.matches[0];
+    case "CLOP.FloatLiteral":
+    case "CLOP.IntegerLiteral":
+      return t.matches[0];
+    case "CLOP.ArrayIndex":
+      return "[" ~ evaluate( t.children[0] ) ~ "]";
+    case "CLOP.FunctionCall":
+      if ( t.children.length > 0 )
+        return "(" ~ evaluate( t.children[0] ) ~ ")";
+      return "()";
+    case "CLOP.PrimaryExpr":
+      string s = evaluate( t.children[0] );
+      if ( t.matches[0] == "(" ) return "(" ~ s ~ ")";
+      return s;
+    case "CLOP.Factor":
+    case "CLOP.UnaryExpr":
+    case "CLOP.Expression":
+      string s = evaluate( t.children[0] );
+      for ( auto c = 1; c < t.children.length; ++c )
+        s ~= evaluate( t.children[c] );
+      return s;
+    case "CLOP.ArgumentList":
+      string s = evaluate( t.children[0] );
+      for ( auto c = 1; c < t.children.length; ++c )
+        s ~= "," ~ evaluate( t.children[c] );
+      return s;
+    case "CLOP.MulExpr":
+    case "CLOP.AddExpr":
+      return t.matches[0] ~ evaluate( t.children[0] );
+    case "CLOP.AssignExpr":
+      if ( t.children.length == 2 )
+        return evaluate( t.children[0] ) ~ " = " ~ evaluate( t.children[1] );
+      else
+        return evaluate( t.children[0] );
+    case "CLOP.EqualityExpression":
+    case "CLOP.RelationalExpression":
+      string s = evaluate( t.children[0] );
+      for ( auto i = 1; i < t.children.length; i += 2 )
+        s ~= " " ~ t.children[i].matches[0] ~ " " ~ evaluate( t.children[i + 1] );
+      return s;
+    case "CLOP.ANDExpression":
+      string s = evaluate( t.children[0] );
+      foreach ( i; 1 .. t.children.length )
+        s ~= "&" ~ evaluate( t.children[i] );
+      return s;
+    case "CLOP.ExclusiveORExpression":
+      string s = evaluate( t.children[0] );
+      foreach ( i; 1 .. t.children.length )
+        s ~= "^" ~ evaluate( t.children[i] );
+      return s;
+    case "CLOP.InclusiveORExpression":
+      string s = evaluate( t.children[0] );
+      foreach ( i; 1 .. t.children.length )
+        s ~= "|" ~ evaluate( t.children[i] );
+      return s;
+    case "CLOP.LogicalANDExpression":
+      string s = evaluate( t.children[0] );
+      foreach ( i; 1 .. t.children.length )
+        s ~= "&&" ~ evaluate( t.children[i] );
+      return s;
+    case "CLOP.LogicalORExpression":
+      string s = evaluate( t.children[0] );
+      foreach ( i; 1 .. t.children.length )
+        s ~= "||" ~ evaluate( t.children[i] );
+      return s;
+    case "CLOP.ConditionalExpression":
+      if ( t.children.length == 3 )
+        return "(" ~ evaluate( t.children[0] ) ~ " ? " ~ evaluate( t.children[1] ) ~
+                                              " : " ~ evaluate( t.children[2] ) ~ ")";
+      else
+        return evaluate( t.children[0] );
+    case "CLOP.ExpressionStatement":
+      string s = ( t.children.length > 0 ) ? evaluate( t.children[0] ) ~ ";" : ";";
+      return s;
+    case "CLOP.ReturnStatement":
+      return "return " ~ evaluate( t.children[0] ) ~ ";";
+    case "CLOP.Statement":
+      return evaluate( t.children[0] );
+    case "CLOP.StatementList":
+      string s = "";
+      foreach ( c; t.children ) s ~= "  " ~ evaluate( c ) ~ "\n";
+      return s;
+    case "CLOP.CompoundStatement":
+      string s = "{\n";
+      foreach ( c; t.children ) s ~= evaluate( c );
+      return s ~ "}\n";
+    case "CLOP.RangeSpec":
+      add_local( t.matches[0] );
+      range = t.matches[4].dup;
+      /+
+      string s = "foreach (";
+      foreach (c ; t.matches) s ~= " " ~ c;
+      return s ~ " )\n";
+      +/
+      string result;
+      if ( internal )
+        result = "  int " ~ t.matches[0] ~ " = (diagonal >= cols) ? diagonal - cols + tx + 1 : tx + 1;\n";
+      else
+        result = "  int " ~ t.matches[0] ~ " = (diagonal >= cols) ? cols - tx - 1 : diagonal - tx - 1;\n";
+      internal = true;
+      return result;
+    case "CLOP.RangeList":
+      string s = evaluate( t.children[0] );
+      for ( auto c = 1; c < t.children.length; ++c )
+        s ~= evaluate( t.children[c] );
+      return s;
+    case "CLOP.RangeDecl":
+      return "{\n  int tx = get_global_id( 0 );\n" ~ evaluate( t.children[0] );
+    case "CLOP.TypeSpecifier":
+      return t.matches[0];
+    case "CLOP.ParameterDeclaration":
+      return evaluate( t.children[0] ) ~ " " ~ evaluate( t.children[1] );
+    case "CLOP.ParameterList":
+      string s = evaluate( t.children[0] );
+      foreach ( i; 1 .. t.children.length )
+        s ~= ", " ~ evaluate( t.children[i] );
+      return s;
+    case "CLOP.Initializer":
+      return evaluate( t.children[0] );
+    case "CLOP.InitDeclarator":
+      string s = evaluate( t.children[0] );
+      if ( t.children.length > 1 )
+        s ~= " = " ~ evaluate( t.children[1] );
+      return s;
+    case "CLOP.InitDeclaratorList":
+      string s = evaluate( t.children[0] );
+      foreach ( i; 1 .. t.children.length )
+        s ~= ", " ~ evaluate( t.children[i] );
+      return s;
+    case "CLOP.Declarator":
+      string s = evaluate( t.children[0] );
+      if ( t.children.length > 1 )
+        s ~= "( " ~ evaluate( t.children[1] ) ~ " )";
+      return s;
+    case "CLOP.Declaration":
+      string s = evaluate( t.children[0] );
+      if ( t.children.length > 1 )
+        s ~= " " ~ evaluate( t.children[1] );
+      return s ~ ";";
+    case "CLOP.DeclarationList":
+      string s = "";
+      foreach ( c; t.children )
+        s ~= "  " ~ evaluate( c ) ~ "\n";
+      return s;
+    case "CLOP.FunctionDefinition":
+      return evaluate( t.children[0] ) ~ " " ~ evaluate( t.children[1] ) ~ " " ~ evaluate( t.children[2] );
+    case "CLOP.ExternalDeclaration":
+      return evaluate( t.children[0] );
+    case "CLOP.ExternalDeclarations":
+      string s = "";
+      foreach ( c; t.children )
+        s ~= evaluate( c );
+      return s;
+    case "CLOP.TranslationUnit":
+      if ( t.children.length == 2 )
+      {
+        global_scope = true;
+        return evaluate( t.children[0] ) ~ evaluate( t.children[1] ) ~ "}";
+      }
+      else
+      {
+        //foreach ( m; t.children[0].matches ) c.declarations ~= " " ~ m;
+        declarations = evaluate( t.children[0] );
+        global_scope = true;
+        return evaluate( t.children[1] ) ~ evaluate( t.children[2] ) ~ "}";
+      }
+    default: return t.name;
+    }
+  }
 
   void add_symbol( string symbol )
   {
@@ -130,202 +328,16 @@ struct Compiler
 immutable string
 compile( immutable string expr )
 {
-  auto c = Compiler();
-  auto p = CLOP( expr );
-  bool internal = false;
-  bool global_scope = false;
-
-  string value( ParseTree p )
-  {
-    switch ( p.name )
-    {
-    case "CLOP":
-      return value( p.children[0] );
-    case "CLOP.Identifier":
-      if ( global_scope && !c.is_local( p.matches[0] ) )
-        c.add_symbol( p.matches[0] );
-      else
-        c.add_local( p.matches[0] );
-      return p.matches[0];
-    case "CLOP.FloatLiteral":
-    case "CLOP.IntegerLiteral":
-      return p.matches[0];
-    case "CLOP.ArrayIndex":
-      return "[" ~ value( p.children[0] ) ~ "]";
-    case "CLOP.FunctionCall":
-      if ( p.children.length > 0 )
-        return "(" ~ value( p.children[0] ) ~ ")";
-      return "()";
-    case "CLOP.PrimaryExpr":
-      string s = value( p.children[0] );
-      if ( p.matches[0] == "(" ) return "(" ~ s ~ ")";
-      return s;
-    case "CLOP.Factor":
-    case "CLOP.UnaryExpr":
-    case "CLOP.Expression":
-      string s = value( p.children[0] );
-      for ( auto c = 1; c < p.children.length; ++c )
-        s ~= value( p.children[c] );
-      return s;
-    case "CLOP.ArgumentList":
-      string s = value( p.children[0] );
-      for ( auto c = 1; c < p.children.length; ++c )
-        s ~= "," ~ value( p.children[c] );
-      return s;
-    case "CLOP.MulExpr":
-    case "CLOP.AddExpr":
-      return p.matches[0] ~ value( p.children[0] );
-    case "CLOP.AssignExpr":
-      if ( p.children.length == 2 )
-        return value( p.children[0] ) ~ " = " ~ value( p.children[1] );
-      else
-        return value( p.children[0] );
-    case "CLOP.EqualityExpression":
-    case "CLOP.RelationalExpression":
-      string s = value( p.children[0] );
-      for ( auto i = 1; i < p.children.length; i += 2 )
-        s ~= " " ~ p.children[i].matches[0] ~ " " ~ value( p.children[i + 1] );
-      return s;
-    case "CLOP.ANDExpression":
-      string s = value( p.children[0] );
-      foreach ( i; 1 .. p.children.length )
-        s ~= "&" ~ value( p.children[i] );
-      return s;
-    case "CLOP.ExclusiveORExpression":
-      string s = value( p.children[0] );
-      foreach ( i; 1 .. p.children.length )
-        s ~= "^" ~ value( p.children[i] );
-      return s;
-    case "CLOP.InclusiveORExpression":
-      string s = value( p.children[0] );
-      foreach ( i; 1 .. p.children.length )
-        s ~= "|" ~ value( p.children[i] );
-      return s;
-    case "CLOP.LogicalANDExpression":
-      string s = value( p.children[0] );
-      foreach ( i; 1 .. p.children.length )
-        s ~= "&&" ~ value( p.children[i] );
-      return s;
-    case "CLOP.LogicalORExpression":
-      string s = value( p.children[0] );
-      foreach ( i; 1 .. p.children.length )
-        s ~= "||" ~ value( p.children[i] );
-      return s;
-    case "CLOP.ConditionalExpression":
-      if ( p.children.length == 3 )
-        return "(" ~ value( p.children[0] ) ~ " ? " ~ value( p.children[1] ) ~
-                                              " : " ~ value( p.children[2] ) ~ ")";
-      else
-        return value( p.children[0] );
-    case "CLOP.ExpressionStatement":
-      string s = ( p.children.length > 0 ) ? value( p.children[0] ) ~ ";" : ";";
-      return s;
-    case "CLOP.ReturnStatement":
-      return "return " ~ value( p.children[0] ) ~ ";";
-    case "CLOP.Statement":
-      return value( p.children[0] );
-    case "CLOP.StatementList":
-      string s = "";
-      foreach ( c; p.children ) s ~= "  " ~ value( c ) ~ "\n";
-      return s;
-    case "CLOP.CompoundStatement":
-      string s = "{\n";
-      foreach ( c; p.children ) s ~= value( c );
-      return s ~ "}\n";
-    case "CLOP.RangeSpec":
-      c.add_local( p.matches[0] );
-      c.range = p.matches[4].dup;
-      /+
-      string s = "foreach (";
-      foreach (c ; p.matches) s ~= " " ~ c;
-      return s ~ " )\n";
-      +/
-      string result;
-      if ( internal )
-        result = "  int " ~ p.matches[0] ~ " = (diagonal >= cols) ? diagonal - cols + tx + 1 : tx + 1;\n";
-      else
-        result = "  int " ~ p.matches[0] ~ " = (diagonal >= cols) ? cols - tx - 1 : diagonal - tx - 1;\n";
-      internal = true;
-      return result;
-    case "CLOP.RangeList":
-      string s = value( p.children[0] );
-      for ( auto c = 1; c < p.children.length; ++c )
-        s ~= value( p.children[c] );
-      return s;
-    case "CLOP.RangeDecl":
-      return "{\n  int tx = get_global_id( 0 );\n" ~ value( p.children[0] );
-    case "CLOP.TypeSpecifier":
-      return p.matches[0];
-    case "CLOP.ParameterDeclaration":
-      return value( p.children[0] ) ~ " " ~ value( p.children[1] );
-    case "CLOP.ParameterList":
-      string s = value( p.children[0] );
-      foreach ( i; 1 .. p.children.length )
-        s ~= ", " ~ value( p.children[i] );
-      return s;
-    case "CLOP.Initializer":
-      return value( p.children[0] );
-    case "CLOP.InitDeclarator":
-      string s = value( p.children[0] );
-      if ( p.children.length > 1 )
-        s ~= " = " ~ value( p.children[1] );
-      return s;
-    case "CLOP.InitDeclaratorList":
-      string s = value( p.children[0] );
-      foreach ( i; 1 .. p.children.length )
-        s ~= ", " ~ value( p.children[i] );
-      return s;
-    case "CLOP.Declarator":
-      string s = value( p.children[0] );
-      if ( p.children.length > 1 )
-        s ~= "( " ~ value( p.children[1] ) ~ " )";
-      return s;
-    case "CLOP.Declaration":
-      string s = value( p.children[0] );
-      if ( p.children.length > 1 )
-        s ~= " " ~ value( p.children[1] );
-      return s ~ ";";
-    case "CLOP.DeclarationList":
-      string s = "";
-      foreach ( c; p.children )
-        s ~= "  " ~ value( c ) ~ "\n";
-      return s;
-    case "CLOP.FunctionDefinition":
-      return value( p.children[0] ) ~ " " ~ value( p.children[1] ) ~ " " ~ value( p.children[2] );
-    case "CLOP.ExternalDeclaration":
-      return value( p.children[0] );
-    case "CLOP.ExternalDeclarations":
-      string s = "";
-      foreach ( c; p.children )
-        s ~= value( c );
-      return s;
-    case "CLOP.TranslationUnit":
-      if ( p.children.length == 2 )
-      {
-        global_scope = true;
-        return value( p.children[0] ) ~ value( p.children[1] ) ~ "}";
-      }
-      else
-      {
-        //foreach ( m; p.children[0].matches ) c.declarations ~= " " ~ m;
-        c.declarations = value( p.children[0] );
-        global_scope = true;
-        return value( p.children[1] ) ~ value( p.children[2] ) ~ "}";
-      }
-    default: return p.name;
-    }
-  }
-
-  string kernel = value( p );
-  string params = c.set_params();
+  auto c = Compiler( expr );
+  auto kernel = c.generate();
+  auto params = c.set_params();
   string code = params ~ "char[] clop_opencl_program_source = (q{\n" ~ c.declarations ~
   "} ~ \"__kernel void clop_opencl_kernel_main( \" ~ kernel_params ~ \" )\" ~\n";
   code ~= "q{\n" ~ kernel ~ "\n}).dup;" ~ q{
   writeln( "OpenCL program:\n", clop_opencl_program_source, "EOF" );
   size_t clop_opencl_program_source_size = clop_opencl_program_source.length;
   char* clop_opencl_program_source_pointer = clop_opencl_program_source.ptr;
-  auto program = clCreateProgramWithSource( runtime.context, 1, &clop_opencl_program_source_pointer,
-                                            &clop_opencl_program_source_size, &runtime.status );
+  auto program = clCreateProgramWithSource( runtime.context, 1, &clop_opencl_program_source_pointer, &clop_opencl_program_source_size, &runtime.status );
   assert( runtime.status == CL_SUCCESS, "clCreateProgramWithSource failed." );
   runtime.status = clBuildProgram( program, 1, &runtime.device, "", null, null );
   if ( runtime.status != CL_SUCCESS )
