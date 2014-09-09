@@ -1,7 +1,8 @@
-.dub
-.settings
-bin
-lib
 *.o
+.dub/
+bin/
+lib/
+examples/*/bin/
+
+.settings
 dub.selections.json
-examples/*/bin

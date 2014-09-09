@@ -1,0 +1,7 @@
+{
+    "name"         : "simple",
+    "authors"      : ["Dmitri Makarov"],
+    "description"  : "Simple test.",
+    "targetType"   : "executable",
+    "targetPath"   : "./bin"
+}
