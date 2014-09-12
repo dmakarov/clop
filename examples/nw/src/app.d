@@ -42,8 +42,6 @@ class Application {
   -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4,  1];
   static immutable int BLOCK_SIZE = 16;
 
-  int Z[BLOCK_SIZE + 1][BLOCK_SIZE + 2];
-
   int[] A;
   int[] B;
   int[] M;
@@ -53,6 +51,7 @@ class Application {
   int[] S;
   int[] I;
   int[] O;
+  int[] Z;
   int rows;
   int cols;
   int penalty;
@@ -88,24 +87,26 @@ class Application {
     G = new int[rows * cols]; assert( null != G, "Can't allocate array G" );
     M = new int[rows];        assert( null != M, "Can't allocate array M" );
     N = new int[cols];        assert( null != N, "Can't allocate array N" );
+    A = new int[rows];        assert( null != A, "Can't allocate array A" );
+    B = new int[cols];        assert( null != B, "Can't allocate array B" );
 
-    I.length = rows * cols;   assert( I !is null );
-    O.length = rows * cols;   assert( O !is null );
-    A.length = rows;          assert( A !is null );
-    B.length = cols;          assert( B !is null );
+    debug ( DEBUG )
+    {
+      I = new int[rows * cols]; assert( null != I, "Can't allocate array I" );
+      O = new int[rows * cols]; assert( null != O, "Can't allocate array O" );
+      Z = new int[(BLOCK_SIZE + 1) * (BLOCK_SIZE + 2)]; assert( null != Z, "Can't allocate array Z" );
+    }
 
     Mt19937 gen;
     gen.seed( SEED );
     foreach ( r; 1 .. rows )
     {
       F[r * cols] = -penalty * r;
-      G[r * cols] = -penalty * r;
       M[r] = uniform( 1, CHARS, gen );
     }
     foreach ( c; 1 .. cols )
     {
       F[c] = -penalty * c;
-      G[c] = -penalty * c;
       N[c] = uniform( 1, CHARS, gen );
     }
     foreach ( r; 1 .. rows )
@@ -141,8 +142,10 @@ class Application {
         int d = F[I(r - 1, c    )] - penalty;
         int i = F[I(r    , c - 1)] - penalty;
         F[I(r, c)] = max3( m, d, i );
-      }
+      } /* nw_noblocks */
 
+      /**
+       */
       __kernel void nw_noblocks_indirectS( __global const int* S, __global const int* M, __global const int* N, __global int* F, int cols, int penalty, int diagonal )
       {
         int tx = get_global_id( 0 );
@@ -157,8 +160,10 @@ class Application {
         int d = F[I(r - 1, c    )] - penalty;
         int i = F[I(r    , c - 1)] - penalty;
         F[I(r, c)] = max3( m, d, i );
-      }
+      } /* nw_noblocks_indirectS */
 
+      /**
+       */
       __kernel void nw_rectangles( __global const int* S, __global int* F, int cols, int penalty, int i, int is_upper, __local int* s, __local int* t )
       {
         int bx = get_group_id( 0 );
@@ -208,8 +213,10 @@ class Application {
         // 4.
         for ( int ty = 0; ty < BLOCK_SIZE; ++ty )
           F[ty * cols + index] = t[(ty + 1) * (BLOCK_SIZE + 1) + tx + 1];
-      }
+      } /* nw_rectangles */
 
+      /**
+       */
       __kernel void nw_rectangles_indirectS( __global const int* S, __global const int* M, __global const int* N, __global int* F, int cols, int penalty, int br, int bc, __local int* s, __local int* t )
       {
         int bx = get_group_id( 0 );
@@ -267,141 +274,35 @@ class Application {
         // 4.
         for ( int ty = 0; ty < BLOCK_SIZE; ++ty )
           F[index + ty * cols] = t[(ty + 1) * (BLOCK_SIZE + 1) + tx + 1];
-      }
+      } /* nw_rectangles_indirectS */
 
-      __kernel void nw_diamonds( __global const int* S, __global int* F, int Y, int X, int cols, int penalty, __local int* s, __local int* t )
-      {
-        int bx = get_group_id( 0 );
-        int tx = get_local_id( 0 );
-        int xx = X + 2 * bx;
-        int yy = Y -     bx;
-
-        if ( xx == 0 )
-        {
-          // 1.
-          int index    = cols * BLOCK_SIZE * yy + tx * cols + cols + 1;
-          int index_w  = cols * BLOCK_SIZE * yy + tx * cols + cols;
-          int index_nw = cols * BLOCK_SIZE * yy + tx * cols;
-          int index_n0 = cols * BLOCK_SIZE * yy + 1;
-
-          if ( tx == 0 ) t[0] = F[index_nw];
-          for ( int ty = 0; ty < BLOCK_SIZE; ++ty ) s[tx * BLOCK_SIZE + ty] = S[index + ty];
-
-          t[tx + 1] = F[index_n0 + tx];
-          t[(tx + 1) * (BLOCK_SIZE + 2)] = F[index_w];
-          barrier( CLK_LOCAL_MEM_FENCE );
-          // 2.
-          for ( int k = 0; k < BLOCK_SIZE; ++k )
-          {
-            if ( tx <= k )
-            {
-              int x = tx + 1;
-              int y = k - tx + 1;
-              int m = t[(y-1) * (BLOCK_SIZE + 2) + x-1] + s[(y-1) * BLOCK_SIZE + x-1];
-              int d = t[(y-1) * (BLOCK_SIZE + 2) + x  ] - penalty;
-              int i = t[(y  ) * (BLOCK_SIZE + 2) + x-1] - penalty;
-              t[y * (BLOCK_SIZE + 2) + x] = max3( m, d, i );
-            }
-            barrier( CLK_LOCAL_MEM_FENCE );
-          }
-          // 3.
-          for ( int ty = 0; ty < BLOCK_SIZE - tx; ++ty )
-            F[index + ty] = t[(tx+1) * (BLOCK_SIZE + 2) + ty+1];
-        }
-        else if ( xx < cols / BLOCK_SIZE )
-        {
-          // 1.
-          int index    = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + tx * (cols - 1) + cols + 1;
-          int index_w  = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + tx * (cols - 1) + cols;
-          int index_nw = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + tx * (cols - 1);
-          int index_n0 = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + 1;
-
-          if ( tx == 0 ) t[0] = F[index_nw];
-
-          for ( int ty = 0; ty < BLOCK_SIZE; ++ty ) s[tx * BLOCK_SIZE + ty] = S[index + ty];
-          t[tx + 1] = F[index_n0 + tx];
-          t[(tx + 1) * (BLOCK_SIZE + 2)] = F[index_w - 1];
-          t[(tx + 1) * (BLOCK_SIZE + 2) + 1] = F[index_w];
-          barrier( CLK_LOCAL_MEM_FENCE );
-          // 2.
-          for ( int k = 0; k < BLOCK_SIZE; ++k )
-          {
-            int x =  k + 2;
-            int y =  tx + 1;
-            int m = t[(y-1) * (BLOCK_SIZE + 2) + x-2] + s[(y-1) * BLOCK_SIZE + x-2];
-            int d = t[(y-1) * (BLOCK_SIZE + 2) + x-1] - penalty;
-            int i = t[(y  ) * (BLOCK_SIZE + 2) + x-1] - penalty;
-            t[y * (BLOCK_SIZE + 2) + x] = max3( m, d, i );
-            barrier( CLK_LOCAL_MEM_FENCE );
-          }
-          // 3.
-          for ( int ty = 0; ty < BLOCK_SIZE; ++ty )
-            F[index + ty] = t[(tx+1) * (BLOCK_SIZE + 2) + ty+2];
-        }
-        else if ( xx == cols / BLOCK_SIZE )
-        {
-          // 1.
-          int index    = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + tx * (cols - 1) + cols + 1;
-          int index_w  = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + tx * (cols - 1) + cols;
-
-          for ( int ty = 0; ty < tx; ++ty ) s[tx * BLOCK_SIZE + ty] = S[index + ty];
-          t[(tx + 1) * (BLOCK_SIZE + 2)] = F[index_w - 1];
-          t[(tx + 1) * (BLOCK_SIZE + 2) + 1] = F[index_w];
-          barrier( CLK_LOCAL_MEM_FENCE );
-          // 2.
-          for ( int k = 0; k < BLOCK_SIZE; ++k )
-          {
-            if ( k < tx )
-            {
-              int x =  k + 2;
-              int y =  tx + 1;
-              int m = t[(y-1) * (BLOCK_SIZE + 2) + x-2] + s[(y-1) * BLOCK_SIZE + x-2];
-              int d = t[(y-1) * (BLOCK_SIZE + 2) + x-1] - penalty;
-              int i = t[(y  ) * (BLOCK_SIZE + 2) + x-1] - penalty;
-              t[y * (BLOCK_SIZE + 2) + x] = max3( m, d, i );
-            }
-            barrier( CLK_LOCAL_MEM_FENCE );
-          }
-          // 3.
-          for ( int ty = 0; ty < tx; ++ty )
-            F[index + ty] = t[(tx+1) * (BLOCK_SIZE + 2) + ty+2];
-        }
-      }
-
-      __kernel void nw_diamonds_indirectS( __global const int* S, __global const int* M, __global const int* N, __global int* F, int cols, int penalty, int br, int bc, __local int* s, __local int* t )
+      /**
+       */
+      __kernel void nw_diamonds( __global const int* S, __global int* F, int cols, int penalty, int br, int bc, __local int* s, __local int* t )
       {
         int bx = get_group_id( 0 );
         int tx = get_local_id( 0 );
         int rr = ( br -     bx ) * BLOCK_SIZE + 1;
         int cc = ( bc + 2 * bx ) * BLOCK_SIZE + 1;
-        int ii = 0;
 
-        while ( ii + tx < CHARS )
-        {
-          for ( int ty = 0; ty < CHARS; ++ty )
-            s[ty * CHARS + ii + tx] = S[ty * CHARS + ii + tx];
-          ii += BLOCK_SIZE;
-        }
-        barrier( CLK_LOCAL_MEM_FENCE );
-        if ( bc == 1 && bx == 0 )
-        {
-          for ( int m = 0; m < BLOCK_SIZE; ++m )
-          {
-            int cc = m - tx + 1;
-            if ( cc > 0 )
-            {
-              F[(rr + tx ) * cols + cc] = max3( F[(rr + tx - 1) * cols + cc - 1] + s[M[rr + tx] * CHARS + N[cc]],
-                                                F[(rr + tx - 1) * cols + cc    ] - penalty,
-                                                F[(rr + tx    ) * cols + cc - 1] - penalty );
-            }
-            barrier( CLK_GLOBAL_MEM_FENCE );
-          }
-        }
-        // 1.
         int index   = cols * ( rr + tx ) + cc - tx;
         int index_n = cols * ( rr - 1 ) + cc + tx;
         int index_w = index - 1;
 
+        if ( bc == 1 && bx == 0 )
+          for ( int m = 0; m < BLOCK_SIZE; ++m )
+          {
+            int x = m - tx + 1;
+            if ( x > 0 )
+              F[(rr + tx) * cols + x] = max3( F[(rr + tx - 1) * cols + x - 1] + S[(rr + tx) * cols + x],
+                                              F[(rr + tx - 1) * cols + x    ] - penalty,
+                                              F[(rr + tx    ) * cols + x - 1] - penalty );
+            barrier( CLK_GLOBAL_MEM_FENCE );
+          }
+
+        // 1.
+        for ( int k = 0; k < BLOCK_SIZE; ++k )
+          s[tx * BLOCK_SIZE + k] = S[index + k];
         if ( tx == 0 ) t[0] = F[index_n - 1];
         t[ tx + 1                        ] = F[index_n];
         t[(tx + 1) * (BLOCK_SIZE + 2)    ] = F[index_w - 1];
@@ -412,33 +313,94 @@ class Application {
         {
           int x =  k + 2;
           int y =  tx + 1;
-          int m = t[(y-1) * (BLOCK_SIZE + 2) + x-2] + s[M[rr + tx] * CHARS + N[cc - tx + k]];
+          int m = t[(y-1) * (BLOCK_SIZE + 2) + x-2] + s[tx * BLOCK_SIZE + k];
           int d = t[(y-1) * (BLOCK_SIZE + 2) + x-1] - penalty;
           int i = t[(y  ) * (BLOCK_SIZE + 2) + x-1] - penalty;
           t[y * (BLOCK_SIZE + 2) + x] = max3( m, d, i );
           barrier( CLK_LOCAL_MEM_FENCE );
         }
         // 3.
-        for ( int m = 0; m < BLOCK_SIZE; ++m )
-          F[index + m] = t[( tx + 1 ) * ( BLOCK_SIZE + 2 ) + m + 2];
-
+        for ( int k = 0; k < BLOCK_SIZE; ++k )
+          F[index + k] = t[(tx + 1) * (BLOCK_SIZE + 2) + k + 2];
         barrier( CLK_GLOBAL_MEM_FENCE );
 
         if ( cc + BLOCK_SIZE == cols )
-        {
           for ( int m = 0; m < BLOCK_SIZE; ++m )
           {
             int x = cc + BLOCK_SIZE + m - tx;
             if ( x < cols )
-            {
-              F[(rr + tx ) * cols + x] = max3( F[(rr + tx - 1) * cols + x - 1] + s[M[rr + tx] * CHARS + N[x]],
-                                               F[(rr + tx - 1) * cols + x    ] - penalty,
-                                               F[(rr + tx    ) * cols + x - 1] - penalty );
-            }
+              F[(rr + tx) * cols + x] = max3( F[(rr + tx - 1) * cols + x - 1] + S[(rr + tx) * cols + x],
+                                              F[(rr + tx - 1) * cols + x    ] - penalty,
+                                              F[(rr + tx    ) * cols + x - 1] - penalty );
             barrier( CLK_GLOBAL_MEM_FENCE );
           }
+      } /* nw_diamonds */
+
+      /**
+       */
+      __kernel void nw_diamonds_indirectS( __global const int* S, __global const int* M, __global const int* N, __global int* F, int cols, int penalty, int br, int bc, __local int* s, __local int* t )
+      {
+        int bx = get_group_id( 0 );
+        int tx = get_local_id( 0 );
+        int rr = ( br -     bx ) * BLOCK_SIZE + 1;
+        int cc = ( bc + 2 * bx ) * BLOCK_SIZE + 1;
+
+        int index   = cols * ( rr + tx ) + cc - tx;
+        int index_n = cols * ( rr - 1 ) + cc + tx;
+        int index_w = index - 1;
+        int ii = 0;
+
+        while ( ii + tx < CHARS )
+        {
+          for ( int ty = 0; ty < CHARS; ++ty )
+            s[ty * CHARS + ii + tx] = S[ty * CHARS + ii + tx];
+          ii += BLOCK_SIZE;
         }
-      }
+        barrier( CLK_LOCAL_MEM_FENCE );
+
+        if ( bc == 1 && bx == 0 )
+          for ( int m = 0; m < BLOCK_SIZE; ++m )
+          {
+            int x = m - tx + 1;
+            if ( x > 0 )
+              F[(rr + tx) * cols + x] = max3( F[(rr + tx - 1) * cols + x - 1] + s[M[rr + tx] * CHARS + N[x]],
+                                              F[(rr + tx - 1) * cols + x    ] - penalty,
+                                              F[(rr + tx    ) * cols + x - 1] - penalty );
+            barrier( CLK_GLOBAL_MEM_FENCE );
+          }
+
+        if ( tx == 0 ) t[0] = F[index_n - 1];
+        t[ tx + 1                        ] = F[index_n];
+        t[(tx + 1) * (BLOCK_SIZE + 2)    ] = F[index_w - 1];
+        t[(tx + 1) * (BLOCK_SIZE + 2) + 1] = F[index_w];
+        barrier( CLK_LOCAL_MEM_FENCE );
+
+        for ( int k = 0; k < BLOCK_SIZE; ++k )
+        {
+          int x =  k + 2;
+          int y =  tx + 1;
+          int m = t[(y-1) * (BLOCK_SIZE + 2) + x-2] + s[M[rr + tx] * CHARS + N[cc - tx + k]];
+          int d = t[(y-1) * (BLOCK_SIZE + 2) + x-1] - penalty;
+          int i = t[(y  ) * (BLOCK_SIZE + 2) + x-1] - penalty;
+          t[y * (BLOCK_SIZE + 2) + x] = max3( m, d, i );
+          barrier( CLK_LOCAL_MEM_FENCE );
+        }
+
+        for ( int k = 0; k < BLOCK_SIZE; ++k )
+          F[index + k] = t[(tx + 1) * (BLOCK_SIZE + 2) + k + 2];
+        barrier( CLK_GLOBAL_MEM_FENCE );
+
+        if ( cc + BLOCK_SIZE == cols )
+          for ( int m = 0; m < BLOCK_SIZE; ++m )
+          {
+            int x = cc + BLOCK_SIZE + m - tx;
+            if ( x < cols )
+              F[(rr + tx) * cols + x] = max3( F[(rr + tx - 1) * cols + x - 1] + s[M[rr + tx] * CHARS + N[x]],
+                                              F[(rr + tx - 1) * cols + x    ] - penalty,
+                                              F[(rr + tx    ) * cols + x - 1] - penalty );
+            barrier( CLK_GLOBAL_MEM_FENCE );
+          }
+      } /* nw_diamonds_indirectS */
     }.dup;
     cl_int status;
     size_t size = code.length;
@@ -513,7 +475,7 @@ class Application {
 
   /**
    */
-  void dump()
+  void visualize()
   {
     // dumps.
     foreach ( int r; 0 .. rows )
@@ -527,8 +489,8 @@ class Application {
     foreach ( r; 0 .. BLOCK_SIZE + 1 )
     {
       foreach ( c; 0 .. BLOCK_SIZE + 2 )
-        if ( Z[r][c] == 0 ) write( " ." );
-        else                write( " ", Z[r][c] );
+        if ( Z[r * (BLOCK_SIZE + 2) + c] == 0 ) write( " ." );
+        else                                    write( " ", Z[r * (BLOCK_SIZE + 2) + c] );
       writeln();
     }
     foreach ( int j; 0 .. cols ) write( "~~" ); writeln();
@@ -576,62 +538,19 @@ class Application {
 
   /**
    */
-  void rectangular_blocks( int i, bool is_upper )
+  void rectangular_blocks( int br, int bc )
   {
-    immutable int block_width = ( cols - 1 ) / BLOCK_SIZE;
-    int t[BLOCK_SIZE + 1][BLOCK_SIZE + 1];
-    int s[BLOCK_SIZE][BLOCK_SIZE];
-    foreach ( int bx; 0 .. i )
+    while ( br >= 0 && bc < (cols - 1) / BLOCK_SIZE )
     {
-      int index[BLOCK_SIZE];
-      int index_n[BLOCK_SIZE];
-      int index_w[BLOCK_SIZE];
-      int index_nw[BLOCK_SIZE];
-      // 1.
-      foreach ( int tx; 0 .. BLOCK_SIZE )
-      {
-        int xx = ( is_upper ) ?         bx : block_width + bx - i;
-        int yy = ( is_upper ) ? i - 1 - bx : block_width - bx - 1;
-        index[tx]    = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + tx + cols + 1;
-        index_n[tx]  = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + tx + 1;
-        index_w[tx]  = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + cols;
-        index_nw[tx] = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx;
-
-        if ( tx == 0 ) t[tx][0] = F[index_nw[tx]];
-
-        for ( int ty = 0 ; ty < BLOCK_SIZE ; ty++) s[ty][tx] = S[index[tx] + cols * ty];
-      }
-      // 2.
-      foreach ( int tx; 0 .. BLOCK_SIZE ) t[tx + 1][0] = F[index_w[tx] + cols * tx];
-      foreach ( int tx; 0 .. BLOCK_SIZE ) t[0][tx + 1] = F[index_n[tx]];
-      // 3.
-      for ( int m = 0; m < BLOCK_SIZE; ++m )
-        foreach ( int tx; 0 .. BLOCK_SIZE )
-        {
-          if ( tx <= m )
-          {
-            int x =  tx + 1;
-            int y =  m - tx + 1;
-
-            t[y][x] = max3( t[y-1][x-1] + s[y-1][x-1], t[y][x-1] - penalty, t[y-1][x] - penalty );
-          }
-        }
-      // 4.
-      for ( int m = BLOCK_SIZE - 2; m >=0; --m )
-        foreach ( int tx; 0 .. BLOCK_SIZE )
-        {
-          if ( tx <= m )
-          {
-            int x =  tx + BLOCK_SIZE - m;
-            int y =  BLOCK_SIZE - tx;
-
-            t[y][x] = max3( t[y-1][x-1] + s[y-1][x-1], t[y][x-1] - penalty, t[y-1][x] - penalty );
-          }
-        }
-      // 5.
-      foreach ( int tx; 0 .. BLOCK_SIZE )
-        foreach ( int ty; 0 .. BLOCK_SIZE )
-          F[index[tx] + ty * cols] = t[ty+1][tx+1];
+      auto rr = br * BLOCK_SIZE + 1;
+      auto cc = bc * BLOCK_SIZE + 1;
+      foreach ( r; rr .. rr + BLOCK_SIZE )
+        foreach ( c; cc .. cc + BLOCK_SIZE )
+          F[r * cols + c] = max3( F[(r - 1) * cols + c - 1] + BLOSUM62[M[r] * CHARS + N[c]],
+                                  F[(r - 1) * cols + c    ] - penalty,
+                                  F[ r      * cols + c - 1] - penalty );
+      br--;
+      bc++;
     }
   }
 
@@ -639,391 +558,54 @@ class Application {
    */
   void rectangles()
   {
-    immutable int block_width = ( cols - 1 ) / BLOCK_SIZE;
-    for ( int i = 1; i <= block_width; ++i )     rectangular_blocks( i, true );
-    for ( int i = block_width - 1; i >= 1; --i ) rectangular_blocks( i, false );
-  }
-
-  /**
-   */
-  void diamond_blocks_debug( int Y, int X  )
-  {
-    int t[BLOCK_SIZE + 1][BLOCK_SIZE + 2];
-    int s[BLOCK_SIZE][BLOCK_SIZE];
-
-    debug ( DEBUG )
-    foreach ( i; 0 .. BLOCK_SIZE + 1 )
-      foreach ( j; 0 .. BLOCK_SIZE + 2 )
-        Z[i][j] = 0;
-
-    foreach ( int bx; 0 .. Y + 1 )
+    auto max_blocks = (cols - 1) / BLOCK_SIZE;
+    for ( int i = 0; i < 2 * max_blocks - 1; ++i )
     {
-      int xx = 2 * bx + X;
-      int yy = Y - bx;
-
-      debug ( DEBUG ) writeln( "block #", bx, " [", yy, ",", xx, "]" );
-
-      int index[BLOCK_SIZE];
-      int index_n[BLOCK_SIZE];
-      int index_w[BLOCK_SIZE];
-      int index_nw[BLOCK_SIZE];
-
-      if ( xx == 0 )
-      {
-        debug ( DEBUG ) writeln( "case 1" );
-        // 1.
-        foreach ( int tx; 0 .. BLOCK_SIZE )
-        {
-          index[tx]    = cols * BLOCK_SIZE * yy + tx * cols + cols + 1;
-          index_w[tx]  = cols * BLOCK_SIZE * yy + tx * cols + cols;
-          index_n[tx]  = cols * BLOCK_SIZE * yy + tx * cols + 1;
-          index_nw[tx] = cols * BLOCK_SIZE * yy + tx * cols;
-
-          debug ( DEBUG ) writeln( "thread ", tx, " index ", index[tx], " [", index[tx] / cols, ",", index[tx] % cols, "]" );
-
-          if ( tx == 0 )
-          {
-            debug ( DEBUG )
-            {
-              writeln( "t[", tx, "][", 0, "] <- F[", index_nw[tx] / cols, "][", index_nw[tx] % cols, "]" );
-              I[index_nw[tx]] += 1;
-              Z[tx][0] += 1;
-            }
-            t[tx][0] = F[index_nw[tx]];
-          }
-
-          for ( int ty = 0; ty < BLOCK_SIZE; ++ty )
-            s[tx][ty] = S[index[tx] + ty];
-        }
-        // 2.
-        foreach ( int tx; 0 .. BLOCK_SIZE )
-        {
-          debug ( DEBUG )
-          {
-            writeln( "t[", 0, "][", tx + 1, "] <- F[", (index_n[0] + tx) / cols, "][", (index_n[0] + tx) % cols, "]" );
-            I[index_n[0] + tx] += 1;
-            Z[0][tx + 1] += 1;
-          }
-
-          t[0][tx + 1] = F[index_n[0] + tx];
-
-          debug ( DEBUG )
-          {
-            writeln( "t[", tx + 1, "][", 0, "] <- F[", (index_w[tx]) / cols, "][", (index_w[tx]) % cols, "]" );
-            I[index_w[tx]] += 1;
-            Z[tx + 1][0] += 1;
-          }
-
-          t[tx + 1][0] = F[index_w[tx]];
-
-          debug ( DEBUG )
-          {
-            foreach ( r; 0 .. BLOCK_SIZE + 1 )
-            {
-              foreach ( c; 0 .. BLOCK_SIZE + 2 ) if ( Z[r][c] == 0 ) write( " ." ); else write( " ", Z[r][c] );
-              writeln();
-            }
-            foreach ( int j; 0 .. cols ) write( "~~" ); writeln();
-          }
-        }
-        // 3.
-        for ( int m = 0; m < BLOCK_SIZE; ++m )
-          foreach ( int tx; 0 .. BLOCK_SIZE )
-          {
-            if ( m < BLOCK_SIZE - tx )
-            {
-              int x = m + 1;
-              int y = tx + 1;
-
-              t[y][x] = max3( t[y-1][x-1] + s[y-1][x-1], t[y-1][x] - penalty, t[y][x-1] - penalty );
-
-              debug ( DEBUG )
-              {
-                writeln( "t[", y, "][", x, "] <- t[", y-1, "][", x-1, "], t[", y, "][", x-1, "], t[", y-1, "][", x, "]" );
-                Z[y][x] += 1;
-              }
-            }
-          }
-        // 4.
-        foreach ( int tx; 0 .. BLOCK_SIZE )
-          foreach ( int ty; 0 .. BLOCK_SIZE - tx )
-          {
-            F[index[tx] + ty] = t[tx+1][ty+1];
-            debug ( DEBUG ) O[index[tx] + ty] += 1;
-          }
-      }
-      else if ( xx < cols / BLOCK_SIZE )
-      {
-        debug ( DEBUG ) writeln( "case 2" );
-        // 1.
-        foreach ( int tx; 0 .. BLOCK_SIZE )
-        {
-          index[tx]    = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + tx * (cols - 1) + cols + 1;
-          index_w[tx]  = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + tx * (cols - 1) + cols;
-          index_n[tx]  = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + tx * (cols - 1) + 1;
-          index_nw[tx] = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + tx * (cols - 1);
-
-          //writeln( "thread ", tx, " index ", index[tx], " [", index[tx] / cols, ",", index[tx] % cols, "]" );
-
-          if ( tx == 0 )
-          {
-            debug ( DEBUG )
-            {
-              writeln( "t[", tx, "][", 0, "] <- F[", index_nw[tx] / cols, "][", index_nw[tx] % cols, "]" );
-              I[index_nw[tx]] += 1;
-              Z[tx][0] += 1;
-            }
-
-            t[tx][0] = F[index_nw[tx]];
-          }
-
-          for ( int ty = 0; ty < BLOCK_SIZE; ++ty )
-            s[tx][ty] = S[index[tx] + ty];
-        }
-        // 2.
-        foreach ( int tx; 0 .. BLOCK_SIZE )
-        {
-          debug ( DEBUG )
-          {
-            writeln( "t[", 0, "][", tx + 1, "] <- F[", (index_n[0] + tx) / cols, "][", (index_n[0] + tx) % cols, "]" );
-            I[index_n[0] + tx] += 1;
-            Z[0][tx + 1] += 1;
-          }
-
-          t[0][tx + 1] = F[index_n[0] + tx];
-
-          debug ( DEBUG )
-          {
-            writeln( "t[", tx + 1, "][", 0, "] <- F[", (index_w[tx] - 1) / cols, "][", (index_w[tx] - 1) % cols, "]" );
-            I[index_w[tx] - 1] += 1;
-            Z[tx + 1][0] += 1;
-          }
-
-          t[tx + 1][0] = F[index_w[tx] - 1];
-
-          debug ( DEBUG )
-          {
-            writeln( "t[", tx + 1, "][", 1, "] <- F[", (index_w[tx]) / cols, "][", (index_w[tx]) % cols, "]" );
-            I[index_w[tx]] += 1;
-            Z[tx + 1][1] += 1;
-          }
-
-          t[tx + 1][1] = F[index_w[tx]];
-        }
-        // 3.
-        for ( int m = 0; m < BLOCK_SIZE; ++m )
-          foreach ( int tx; 0 .. BLOCK_SIZE )
-          {
-            int x =  m + 2;
-            int y =  tx + 1;
-
-            debug ( DEBUG )
-            {
-              writeln( "t[", y, "][", x, "] <- t[", y-1, "][", x-2, "], t[", y-1, "][", x-1, "], t[", y, "][", x-1, "]" );
-              Z[y][x] += 1;
-            }
-
-            t[y][x] = max3( t[y-1][x-2] + s[y-1][x-2], t[y-1][x-1] - penalty, t[y][x-1] - penalty );
-          }
-        // 4.
-        foreach ( int tx; 0 .. BLOCK_SIZE )
-          foreach ( int ty; 0 .. BLOCK_SIZE )
-          {
-            F[index[tx] + ty] = t[tx+1][ty+2];
-            debug ( DEBUG ) O[index[tx] + ty] += 1;
-          }
-      }
-      else if ( xx == cols / BLOCK_SIZE )
-      {
-        debug ( DEBUG ) writeln( "case 3" );
-        // 1.
-        foreach ( int tx; 0 .. BLOCK_SIZE )
-        {
-          index[tx]    = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + tx * (cols - 1) + cols + 1;
-          index_w[tx]  = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + tx * (cols - 1) + cols;
-          index_n[tx]  = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + tx * (cols - 1) + 1;
-          index_nw[tx] = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + tx * (cols - 1);
-
-          //writeln( "thread ", tx, " index ", index[tx], " [", index[tx] / cols, ",", index[tx] % cols, "]" );
-
-          for ( int ty = 0; ty < tx; ++ty )
-            s[tx][ty] = S[index[tx] + ty];
-        }
-        // 2.
-        foreach ( int tx; 0 .. BLOCK_SIZE )
-        {
-          debug ( DEBUG )
-          {
-            writeln( "thread ", tx, " read F[", (index_w[tx] - 1) / cols, ",", (index_w[tx] - 1) % cols, "]" );
-            I[index_w[tx] - 1] += 1;
-            Z[tx + 1][0] += 1;
-          }
-
-          t[tx + 1][0] = F[index_w[tx] - 1];
-
-          debug ( DEBUG )
-          {
-            writeln( "thread ", tx, " read F[", (index_w[tx]) / cols, ",", (index_w[tx] ) % cols, "]" );
-            I[index_w[tx]] += 1;
-            Z[tx + 1][1] += 1;
-          }
-
-          t[tx + 1][1] = F[index_w[tx]];
-        }
-        // 3.
-        for ( int m = 0; m < BLOCK_SIZE; ++m )
-          foreach ( int tx; 0 .. BLOCK_SIZE )
-          {
-            if ( m < tx )
-            {
-              int x =  m + 2;
-              int y =  tx + 1;
-
-              t[y][x] = max3( t[y-1][x-2] + s[y-1][x-2], t[y-1][x-1] - penalty, t[y][x-1] - penalty );
-              debug ( DEBUG )
-              {
-                Z[y][x] += 1;
-              }
-            }
-          }
-        // 4.
-        foreach ( int tx; 0 .. BLOCK_SIZE )
-          foreach ( int ty; 0 .. tx )
-          {
-            //writeln( "thread ", tx, " write F[", (index[tx] + ty) / cols, ",", (index[tx] + ty ) % cols, "]" );
-            F[index[tx] + ty] = t[tx+1][ty+2];
-            debug ( DEBUG ) O[index[tx] + ty] += 1;
-          }
-      }
-      else continue;
-      debug ( DEBUG ) dump();
+      int br = ( i < max_blocks ) ? i :     max_blocks - 1;
+      int bc = ( i < max_blocks ) ? 0 : i - max_blocks + 1;
+      rectangular_blocks( br, bc );
     }
   }
 
   /**
    */
-  void diamond_blocks( int Y, int X  )
+  void diamond_blocks( int br, int bc  )
   {
-    int t[BLOCK_SIZE + 1][BLOCK_SIZE + 2];
-    int s[BLOCK_SIZE][BLOCK_SIZE];
-
-    foreach ( int bx; 0 .. Y + 1 )
+    while ( br >= 0 && bc < (cols - 1) / BLOCK_SIZE )
     {
-      int xx = X + 2 * bx;
-      int yy = Y -     bx;
-
-      int index[BLOCK_SIZE];
-      int index_n[BLOCK_SIZE];
-      int index_w[BLOCK_SIZE];
-      int index_nw[BLOCK_SIZE];
-
-      if ( xx == 0 )
+      int rr = br * BLOCK_SIZE + 1;
+      int cc = bc * BLOCK_SIZE + 1;
+      if ( bc == 1 )
+        foreach ( r; 0 .. BLOCK_SIZE )
+          foreach ( c; 1 .. BLOCK_SIZE + 1 - r )
+            F[(rr + r) * cols + c] = max3( F[(rr + r - 1) * cols + c - 1] + BLOSUM62[M[rr + r] * CHARS + N[c]],
+                                           F[(rr + r - 1) * cols + c    ] - penalty,
+                                           F[(rr + r    ) * cols + c - 1] - penalty );
+      int k = cc;
+      foreach ( r; 0 .. BLOCK_SIZE )
       {
-        // 1.
-        foreach ( int tx; 0 .. BLOCK_SIZE )
+        foreach ( c; 0 .. BLOCK_SIZE )
         {
-          index[tx]    = cols * BLOCK_SIZE * yy + tx * cols + cols + 1;
-          index_w[tx]  = cols * BLOCK_SIZE * yy + tx * cols + cols;
-          index_n[tx]  = cols * BLOCK_SIZE * yy + tx * cols + 1;
-          index_nw[tx] = cols * BLOCK_SIZE * yy + tx * cols;
-
-          if ( tx == 0 ) t[tx][0] = F[index_nw[tx]];
-
-          for ( int ty = 0; ty < BLOCK_SIZE; ++ty ) s[tx][ty] = S[index[tx] + ty];
+          F[(rr + r) * cols + k + c] = max3( F[(rr + r - 1) * cols + k + c - 1] + BLOSUM62[M[rr + r] * CHARS + N[k + c]],
+                                             F[(rr + r - 1) * cols + k + c    ] - penalty,
+                                             F[(rr + r    ) * cols + k + c - 1] - penalty );
         }
-        // 2.
-        foreach ( int tx; 0 .. BLOCK_SIZE )
-        {
-          t[0][tx + 1] = F[index_n[0] + tx];
-          t[tx + 1][0] = F[index_w[tx]];
-        }
-        // 3.
-        for ( int m = 0; m < BLOCK_SIZE; ++m )
-          foreach ( int tx; 0 .. BLOCK_SIZE )
-          {
-            if ( m < BLOCK_SIZE - tx )
-            {
-              int x = m + 1;
-              int y = tx + 1;
-
-              t[y][x] = max3( t[y-1][x-1] + s[y-1][x-1], t[y-1][x] - penalty, t[y][x-1] - penalty );
-            }
-          }
-        // 4.
-        foreach ( int tx; 0 .. BLOCK_SIZE )
-          foreach ( int ty; 0 .. BLOCK_SIZE - tx )
-            F[index[tx] + ty] = t[tx+1][ty+1];
+        k--;
       }
-      else if ( xx < cols / BLOCK_SIZE )
+      if ( cc + BLOCK_SIZE == cols )
       {
-        // 1.
-        foreach ( int tx; 0 .. BLOCK_SIZE )
+        cc += BLOCK_SIZE - 2;
+        foreach ( r; 1 .. BLOCK_SIZE )
         {
-          index[tx]    = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + tx * (cols - 1) + cols + 1;
-          index_w[tx]  = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + tx * (cols - 1) + cols;
-          index_n[tx]  = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + tx * (cols - 1) + 1;
-          index_nw[tx] = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + tx * (cols - 1);
-
-          if ( tx == 0 ) t[tx][0] = F[index_nw[tx]];
-
-          for ( int ty = 0; ty < BLOCK_SIZE; ++ty ) s[tx][ty] = S[index[tx] + ty];
+          foreach ( c; 1 .. r + 1 )
+            F[(rr + r) * cols + cc + c] = max3( F[(rr + r - 1) * cols + cc + c - 1] + BLOSUM62[M[rr + r] * CHARS + N[cc + c]],
+                                                F[(rr + r - 1) * cols + cc + c    ] - penalty,
+                                                F[(rr + r    ) * cols + cc + c - 1] - penalty );
+          cc--;
         }
-        // 2.
-        foreach ( int tx; 0 .. BLOCK_SIZE )
-        {
-          t[0][tx + 1] = F[index_n[0] + tx];
-          t[tx + 1][0] = F[index_w[tx] - 1];
-          t[tx + 1][1] = F[index_w[tx]];
-        }
-        // 3.
-        for ( int m = 0; m < BLOCK_SIZE; ++m )
-          foreach ( int tx; 0 .. BLOCK_SIZE )
-          {
-            int x =  m + 2;
-            int y =  tx + 1;
-
-            t[y][x] = max3( t[y-1][x-2] + s[y-1][x-2], t[y-1][x-1] - penalty, t[y][x-1] - penalty );
-          }
-        // 4.
-        foreach ( int tx; 0 .. BLOCK_SIZE )
-          foreach ( int ty; 0 .. BLOCK_SIZE )
-            F[index[tx] + ty] = t[tx+1][ty+2];
       }
-      else if ( xx == cols / BLOCK_SIZE )
-      {
-        // 1.
-        foreach ( int tx; 0 .. BLOCK_SIZE )
-        {
-          index[tx]    = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + tx * (cols - 1) + cols + 1;
-          index_w[tx]  = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + tx * (cols - 1) + cols;
-          index_n[tx]  = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + tx * (cols - 1) + 1;
-          index_nw[tx] = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + tx * (cols - 1);
-
-          for ( int ty = 0; ty < tx; ++ty ) s[tx][ty] = S[index[tx] + ty];
-        }
-        // 2.
-        foreach ( int tx; 0 .. BLOCK_SIZE )
-        {
-          t[tx + 1][0] = F[index_w[tx] - 1];
-          t[tx + 1][1] = F[index_w[tx]];
-        }
-        // 3.
-        for ( int m = 0; m < BLOCK_SIZE; ++m )
-          foreach ( int tx; 0 .. BLOCK_SIZE )
-          {
-            if ( m < tx )
-            {
-              int x =  m + 2;
-              int y =  tx + 1;
-
-              t[y][x] = max3( t[y-1][x-2] + s[y-1][x-2], t[y-1][x-1] - penalty, t[y][x-1] - penalty );
-            }
-          }
-        // 4.
-        foreach ( int tx; 0 .. BLOCK_SIZE )
-          foreach ( int ty; 0 .. tx )
-            F[index[tx] + ty] = t[tx+1][ty+2];
-      }
+      br--;
+      bc += 2;
     }
   }
 
@@ -1031,14 +613,14 @@ class Application {
    */
   void diamonds()
   {
-    for ( int i = 0; i < rows / BLOCK_SIZE; ++i )
+    for ( int i = 0; i < rows / BLOCK_SIZE - 1; ++i )
     {
-      diamond_blocks( i, 0 );
-      debug ( DEBUG ) { foreach ( int j; 0 .. 2 * cols ) write( "--" ); writeln(); }
       diamond_blocks( i, 1 );
+      debug ( DEBUG ) { foreach ( int j; 0 .. 2 * cols ) write( "--" ); writeln(); }
+      diamond_blocks( i, 2 );
       debug ( DEBUG ) { foreach ( int j; 0 .. 2 * cols ) write( "==" ); writeln(); }
     }
-    for ( int i = 2; i <= cols / BLOCK_SIZE; ++i )
+    for ( int i = 1; i < cols / BLOCK_SIZE; ++i )
     {
       diamond_blocks( rows / BLOCK_SIZE - 1, i );
       debug ( DEBUG ) { foreach ( int j; 0 .. 2 * cols ) write( "==" ); writeln(); }
@@ -1288,28 +870,33 @@ class Application {
       cl_mem dF = clCreateBuffer( runtime.context, flags, cl_int.sizeof * F.length, F.ptr, &status );                            assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
       status = clSetKernelArg( kernel_diamonds, 0, cl_mem.sizeof, &dS      );                                                    assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
       status = clSetKernelArg( kernel_diamonds, 1, cl_mem.sizeof, &dF      );                                                    assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_diamonds, 4, cl_int.sizeof, &cols    );                                                    assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_diamonds, 5, cl_int.sizeof, &penalty );                                                    assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
+      status = clSetKernelArg( kernel_diamonds, 2, cl_int.sizeof, &cols    );                                                    assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
+      status = clSetKernelArg( kernel_diamonds, 3, cl_int.sizeof, &penalty );                                                    assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
       status = clSetKernelArg( kernel_diamonds, 6,  BLOCK_SIZE      *  BLOCK_SIZE      * cl_int.sizeof, null );                  assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
       status = clSetKernelArg( kernel_diamonds, 7, (BLOCK_SIZE + 1) * (BLOCK_SIZE + 2) * cl_int.sizeof, null );                  assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
       size_t wgroup = BLOCK_SIZE;
+      auto groups = ( cols - 1 ) / BLOCK_SIZE;
       for ( int i = 0; i < rows / BLOCK_SIZE; ++i )
       {
-        int Y = 0;
-        size_t global = BLOCK_SIZE * (i + 1);
-        status = clSetKernelArg( kernel_diamonds, 2, cl_int.sizeof, &i );                                                        assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
-        status = clSetKernelArg( kernel_diamonds, 3, cl_int.sizeof, &Y );                                                        assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
+        cl_int br = i;
+        cl_int bc = 1;
+        size_t global = ( ( 2 * i + bc ) * BLOCK_SIZE < cols - 1 ) ? BLOCK_SIZE * ( i + 1 ) : ( cols - 1 ) / 2;
+        status = clSetKernelArg( kernel_diamonds, 4, cl_int.sizeof, &br );                                                       assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
+        status = clSetKernelArg( kernel_diamonds, 5, cl_int.sizeof, &bc );                                                       assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
         status = clEnqueueNDRangeKernel( runtime.queue, kernel_diamonds, 1, null, &global, &wgroup, 0, null, null );             assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
-        Y = 1;
-        status = clSetKernelArg( kernel_diamonds, 3, cl_int.sizeof, &Y );                                                        assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
+        bc = 2;
+        global = ( ( 2 * i + bc ) * BLOCK_SIZE < cols - 1 ) ? BLOCK_SIZE * ( i + 1 ) : ( cols - 1 ) / 2 - BLOCK_SIZE;
+        if ( global == 0 ) continue;
+        status = clSetKernelArg( kernel_diamonds, 5, cl_int.sizeof, &bc );                                                       assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
         status = clEnqueueNDRangeKernel( runtime.queue, kernel_diamonds, 1, null, &global, &wgroup, 0, null, null );             assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
       }
-      for ( int i = 2; i <= cols / BLOCK_SIZE; ++i )
+      for ( int i = 1; i < cols / BLOCK_SIZE; ++i )
       {
-        size_t global = rows - 1;
-        int X = rows / BLOCK_SIZE - 1;
-        status = clSetKernelArg( kernel_diamonds, 2, cl_int.sizeof, &X );                                                        assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
-        status = clSetKernelArg( kernel_diamonds, 3, cl_int.sizeof, &i );                                                        assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
+        cl_int br = rows / BLOCK_SIZE - 1;
+        cl_int bc = i;
+        size_t global = BLOCK_SIZE * ( ( groups - bc + 1 ) / 2 );
+        status = clSetKernelArg( kernel_diamonds, 4, cl_int.sizeof, &br );                                                       assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
+        status = clSetKernelArg( kernel_diamonds, 5, cl_int.sizeof, &bc );                                                       assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
         status = clEnqueueNDRangeKernel( runtime.queue, kernel_diamonds, 1, null, &global, &wgroup, 0, null, null );             assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
       }
       status = clEnqueueReadBuffer( runtime.queue, dF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr, 0, null, null );             assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
@@ -1495,8 +1082,6 @@ class Application {
     ticks = timer.peek();
     writeln( "CL D INDIR ", ticks.usecs / 1E6, " [s]" );
     validate();
-    //    print( "correct   ", G );
-    //    print( "incorrect ", F );
 
     reset();
     timer.reset();
