@@ -42,16 +42,16 @@ class Application {
   -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4,  1];
   static immutable int BLOCK_SIZE = 16;
 
-  int[] A;
-  int[] B;
-  int[] M;
-  int[] N;
-  int[] F;
-  int[] G;
-  int[] S;
-  int[] I;
-  int[] O;
-  int[] Z;
+  int[] A; // reconstructed aligned sequence A
+  int[] B; // reconstructed aligned sequence B
+  int[] M; // characters of sequence A
+  int[] N; // characters of sequence B
+  int[] F; // matrix of computed scores
+  int[] G; // copy of F for validation
+  int[] S; // matrix of matches
+  int[] I; // map of reads
+  int[] O; // map of writes
+  int[] Z; // map of shared memory accesses
   int rows;
   int cols;
   int penalty;
@@ -164,32 +164,32 @@ class Application {
 
       /**
        */
-      __kernel void nw_rectangles( __global const int* S, __global int* F, int cols, int penalty, int i, int is_upper, __local int* s, __local int* t )
+      __kernel void nw_rectangles( __global const int* S, __global int* F, int cols, int penalty, int br, int bc, __local int* s, __local int* t )
       {
         int bx = get_group_id( 0 );
         int tx = get_local_id( 0 );
-        int xx =         bx; if ( is_upper == 1 ) xx = (cols - 1) / BLOCK_SIZE + bx - i;
-        int yy = i - 1 - bx; if ( is_upper == 1 ) yy = (cols - 1) / BLOCK_SIZE - bx - 1;
+        int rr = ( br - bx ) * BLOCK_SIZE + 1; // these are the indexes of
+        int cc = ( bc + bx ) * BLOCK_SIZE + 1; // the block's top-left element
         // 1.
-        int index    = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + tx + cols + 1;
-        int index_n  = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + tx + 1;
-        int index_w  = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + cols;
-        int index_nw = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx;
+        int index   = cols * rr + cc + tx;
+        int index_n = index - cols;
+        int index_w = cols * ( rr + tx ) + cc - 1;
 
-        if ( tx == 0 ) t[0] = F[index_nw];
-        for ( int ty = 0; ty < BLOCK_SIZE; ++ty ) s[ty * BLOCK_SIZE + tx] = S[ty * cols + index];
+        for ( int k = 0; k < BLOCK_SIZE; ++k )
+          s[k * BLOCK_SIZE + tx] = S[k * cols + index];
 
-        t[(tx + 1) * (BLOCK_SIZE + 1)] = F[tx * cols + index_w];
-        t[(tx + 1)                   ] = F[            index_n];
+        if ( tx == 0 ) t[0] = F[index_n - 1];        // copy the NW element into the TL corner of t
+        t[(tx + 1) * (BLOCK_SIZE + 1)] = F[index_w]; // copy the column of W elements into the left column of t
+        t[(tx + 1)                   ] = F[index_n]; // copy the row of N elements into the top row of t
         barrier( CLK_LOCAL_MEM_FENCE );
         // 2.
         for ( int k = 0; k < BLOCK_SIZE; ++k )
         {
           if ( tx <= k )
           {
-            int x = tx + 1;
+            int x =     tx + 1;
             int y = k - tx + 1;
-            int m = t[(y-1) * (BLOCK_SIZE + 1) + x-1] + s[(y-1) * BLOCK_SIZE + x-1];
+            int m = t[(y-1) * (BLOCK_SIZE + 1) + x-1] + s[(y - 1) * BLOCK_SIZE + x - 1];
             int d = t[(y-1) * (BLOCK_SIZE + 1) + x  ] - penalty;
             int i = t[(y  ) * (BLOCK_SIZE + 1) + x-1] - penalty;
             t[y * (BLOCK_SIZE + 1) + x] = max3( m, d, i );
@@ -203,7 +203,7 @@ class Application {
           {
             int x = BLOCK_SIZE + tx - k;
             int y = BLOCK_SIZE - tx;
-            int m = t[(y-1) * (BLOCK_SIZE + 1) + x-1] + s[(y-1) * BLOCK_SIZE + x-1];
+            int m = t[(y-1) * (BLOCK_SIZE + 1) + x-1] + s[(y - 1) * BLOCK_SIZE + x - 1];
             int d = t[(y-1) * (BLOCK_SIZE + 1) + x  ] - penalty;
             int i = t[(y  ) * (BLOCK_SIZE + 1) + x-1] - penalty;
             t[y * (BLOCK_SIZE + 1) + x] = max3( m, d, i );
@@ -212,7 +212,7 @@ class Application {
         }
         // 4.
         for ( int ty = 0; ty < BLOCK_SIZE; ++ty )
-          F[ty * cols + index] = t[(ty + 1) * (BLOCK_SIZE + 1) + tx + 1];
+          F[index + ty * cols] = t[(ty + 1) * (BLOCK_SIZE + 1) + tx + 1];
       } /* nw_rectangles */
 
       /**
@@ -223,7 +223,6 @@ class Application {
         int tx = get_local_id( 0 );
         int rr = ( br - bx ) * BLOCK_SIZE + 1; // these are the indexes of
         int cc = ( bc + bx ) * BLOCK_SIZE + 1; // the block's top-left element
-        int ii = 0;
         // 1.
         int index   = cols * rr + cc + tx;
         int index_n = index - cols;
@@ -233,6 +232,7 @@ class Application {
         // one or more columns.  The next columns are copied when the
         // number of threads in the group is smaller than the number
         // of columns in BLOSUM.
+        int ii = 0;
         while ( ii + tx < CHARS )
         {
           for ( int ty = 0; ty < CHARS; ++ty )
@@ -408,10 +408,10 @@ class Application {
     auto program = clCreateProgramWithSource( runtime.context, 1, strs.ptr, &size, &status );      assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
     status = clBuildProgram( program, 1, &runtime.device, "", null, null );                        assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
     kernel_noblocks             = clCreateKernel( program, "nw_noblocks"             , &status );  assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
-    kernel_noblocks_indirectS   = clCreateKernel( program, "nw_noblocks_indirectS"   , &status );  assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
     kernel_rectangles           = clCreateKernel( program, "nw_rectangles"           , &status );  assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
-    kernel_rectangles_indirectS = clCreateKernel( program, "nw_rectangles_indirectS" , &status );  assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
     kernel_diamonds             = clCreateKernel( program, "nw_diamonds"             , &status );  assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
+    kernel_noblocks_indirectS   = clCreateKernel( program, "nw_noblocks_indirectS"   , &status );  assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
+    kernel_rectangles_indirectS = clCreateKernel( program, "nw_rectangles_indirectS" , &status );  assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
     kernel_diamonds_indirectS   = clCreateKernel( program, "nw_diamonds_indirectS"   , &status );  assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
     status = clReleaseProgram( program );                                                          assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
 
@@ -778,22 +778,20 @@ class Application {
       status = clSetKernelArg( kernel_rectangles, 3, cl_int.sizeof, &penalty );                                                  assert( status == CL_SUCCESS, "opencl_rectangles " ~ cl_strerror( status ) );
       status = clSetKernelArg( kernel_rectangles, 6,  BLOCK_SIZE      *  BLOCK_SIZE      * cl_int.sizeof, null );                assert( status == CL_SUCCESS, "opencl_rectangles " ~ cl_strerror( status ) );
       status = clSetKernelArg( kernel_rectangles, 7, (BLOCK_SIZE + 1) * (BLOCK_SIZE + 1) * cl_int.sizeof, null );                assert( status == CL_SUCCESS, "opencl_rectangles " ~ cl_strerror( status ) );
-      size_t wgroup = BLOCK_SIZE;
-      for ( int i = 1; i <= (cols - 1) / BLOCK_SIZE; ++i )
+      auto max_blocks = (cols - 1) / BLOCK_SIZE;
+      auto cur_blocks = 1;
+      auto inc_blocks = 1;
+      for ( int i = 0; i < 2 * max_blocks - 1; ++i )
       {
-        int u = 0;
-        size_t global = BLOCK_SIZE * i;
-        status = clSetKernelArg( kernel_rectangles, 4, cl_int.sizeof, &i );                                                      assert( status == CL_SUCCESS, "opencl_rectangles " ~ cl_strerror( status ) );
-        status = clSetKernelArg( kernel_rectangles, 5, cl_int.sizeof, &u );                                                      assert( status == CL_SUCCESS, "opencl_rectangles " ~ cl_strerror( status ) );
+        size_t wgroup = BLOCK_SIZE;
+        size_t global = BLOCK_SIZE * cur_blocks;
+        cl_int br = ( i < max_blocks ) ? i :     max_blocks - 1;
+        cl_int bc = ( i < max_blocks ) ? 0 : i - max_blocks + 1;
+        status = clSetKernelArg( kernel_rectangles, 4, cl_int.sizeof, &br );                                                     assert( status == CL_SUCCESS, "opencl_rectangles " ~ cl_strerror( status ) );
+        status = clSetKernelArg( kernel_rectangles, 5, cl_int.sizeof, &bc );                                                     assert( status == CL_SUCCESS, "opencl_rectangles " ~ cl_strerror( status ) );
         status = clEnqueueNDRangeKernel( runtime.queue, kernel_rectangles, 1, null, &global, &wgroup, 0, null, null );           assert( status == CL_SUCCESS, "opencl_rectangles " ~ cl_strerror( status ) );
-      }
-      for ( int i = (cols - 1) / BLOCK_SIZE - 1; i > 0; --i )
-      {
-        int u = 1;
-        size_t global = BLOCK_SIZE * i;
-        status = clSetKernelArg( kernel_rectangles, 4, cl_int.sizeof, &i );                                                      assert( status == CL_SUCCESS, "opencl_rectangles " ~ cl_strerror( status ) );
-        status = clSetKernelArg( kernel_rectangles, 5, cl_int.sizeof, &u );                                                      assert( status == CL_SUCCESS, "opencl_rectangles " ~ cl_strerror( status ) );
-        status = clEnqueueNDRangeKernel( runtime.queue, kernel_rectangles, 1, null, &global, &wgroup, 0, null, null );           assert( status == CL_SUCCESS, "opencl_rectangles " ~ cl_strerror( status ) );
+        if ( i == max_blocks - 1 ) inc_blocks = -1;
+        cur_blocks += inc_blocks;
       }
       status = clEnqueueReadBuffer( runtime.queue, dF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr, 0, null, null );             assert( status == CL_SUCCESS, "opencl_rectangles " ~ cl_strerror( status ) );
       status = clReleaseMemObject( dS );                                                                                         assert( status == CL_SUCCESS, "opencl_rectangles " ~ cl_strerror( status ) );
@@ -999,6 +997,32 @@ class Application {
 
   /**
    */
+
+  void clop_dsl_indirectS()
+  {
+    try
+    {
+      mixin( compile(
+      q{
+        int max3( int a, int b, int c )
+        {
+          int k = a > b ? a : b;
+          return k > c ? k : c;
+        }
+        NDRange( r ; 1 .. rows, c ; 1 .. cols );
+        F[r * cols + c] = max3( F[(r - 1) * cols + c - 1] + BLOSUM62[M[r] * CHARS + N[c]],
+                                F[(r - 1) * cols + c    ] - penalty,
+                                F[ r      * cols + c - 1] - penalty );
+      } ) );
+    }
+    catch( Exception e )
+    {
+      writeln( e );
+    }
+  }
+
+  /**
+   */
   void run()
   {
     StopWatch timer;
@@ -1090,6 +1114,15 @@ class Application {
     timer.stop();
     ticks = timer.peek();
     writeln( "CLOP DSL   ", ticks.usecs / 1E6, " [s]" );
+    validate();
+
+    reset();
+    timer.reset();
+    timer.start();
+    clop_dsl_indirectS();
+    timer.stop();
+    ticks = timer.peek();
+    writeln( "CLOP DSL I ", ticks.usecs / 1E6, " [s]" );
     validate();
 
     save();
