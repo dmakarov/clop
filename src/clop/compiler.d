@@ -20,6 +20,10 @@ struct Compiler
 
   this( immutable string expr )
   {
+    //    symtable.length = 0;
+    //    localtab.length = 0;
+    declarations = null;
+    range = null;
     source = expr;
     internal = false;
     global_scope = false;
@@ -215,7 +219,7 @@ struct Compiler
   void add_symbol( string symbol )
   {
     if ( symtable.length == 0 )
-      symtable = [symbol:1];
+      symtable[symbol] = 1;
     else if ( symtable.get( symbol, 0 ) == 0 )
       symtable[symbol] = 1;
     else
@@ -225,7 +229,7 @@ struct Compiler
   void add_local( string symbol )
   {
     if ( localtab.length == 0 )
-      localtab = [symbol:1];
+      localtab[symbol] = 1;
     else if ( localtab.get( symbol, 0 ) == 0 )
       localtab[symbol] = 1;
     else
@@ -328,7 +332,7 @@ struct Compiler
 immutable string
 compile( immutable string expr )
 {
-  auto c = Compiler( expr );
+  auto c = new Compiler( expr );
   auto kernel = c.generate();
   auto params = c.set_params();
   string code = params ~ "char[] clop_opencl_program_source = (q{\n" ~ c.declarations ~
@@ -363,7 +367,7 @@ set_kernel_param( T )( string name )
   else static if ( is ( T == ubyte  ) ) code = "\"uchar "  ~ name ~ "\"";
   else static if ( is ( T == short  ) ) code = "\"short "  ~ name ~ "\"";
   else static if ( is ( T == ushort ) ) code = "\"ushort " ~ name ~ "\"";
-  else static if ( is ( T == int    ) ) code = "\"int "    ~ name ~ "\"";
+  else static if ( is ( Unqual!(T) == int    ) ) code = "\"int "    ~ name ~ "\"";
   else static if ( is ( T == uint   ) ) code = "\"uint "   ~ name ~ "\"";
   else static if ( is ( T == long   ) ) code = "\"long "   ~ name ~ "\"";
   else static if ( is ( T == ulong  ) ) code = "\"ulong "  ~ name ~ "\"";
@@ -398,7 +402,7 @@ set_kernel_arg( T )( string kernel, string arg, string name )
   else static if ( is ( T == ushort ) )
     code = "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ "++, cl_ushort.sizeof, &" ~ name ~ " );\n"
          ~ "assert( runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\" );";
-  else static if ( is ( T == int ) )
+  else static if ( is ( Unqual!(T) == int ) )
     code = "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ "++, cl_int.sizeof, &" ~ name ~ " );\n"
          ~ "assert( runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\" );";
   else static if ( is ( T == uint ) )
