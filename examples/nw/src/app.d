@@ -114,7 +114,8 @@ class Application {
         S[r * cols + c] = BLOSUM62[M[r] * CHARS + N[c]];
 
     /**
-     */
+     *
+     **/
     char[] code = q{
       #define BLOCK_SIZE 16
       #define CHARS      24
@@ -506,7 +507,7 @@ class Application {
 
   /**
    * Maximum of three numbers.
-   */
+   **/
   int max3( immutable int a, immutable int b, immutable int c ) const
   {
     auto k = a > b ? a : b;
@@ -514,19 +515,21 @@ class Application {
   }
 
   /**
-     The algorithm of filling in F matrix
-
-     for i=0 to length(A) F(i,0) ← d*i
-     for j=0 to length(B) F(0,j) ← d*j
-     for i=1 to length(A)
-     for j=1 to length(B)
-     {
-       Match  ← F( i-1, j-1) + S(Ai, Bj)
-       Delete ← F( i-1, j  ) + d
-       Insert ← F( i  , j-1) + d
-       F(i,j) ← max(Match, Insert, Delete)
-     }
-  */
+   * The algorithm of filling in F matrix
+   * <p>
+   * <code>
+   *    for i=0 to length(A) F(i,0) ← d*i
+   *    for j=0 to length(B) F(0,j) ← d*j
+   *    for i=1 to length(A)
+   *    for j=1 to length(B)
+   *    {
+   *      Match  ← F( i-1, j-1) + S(Ai, Bj)
+   *      Delete ← F( i-1, j  ) + d
+   *      Insert ← F( i  , j-1) + d
+   *      F(i,j) ← max(Match, Insert, Delete)
+   *    }
+   * </code>
+   **/
   void baseline_sequential()
   {
     foreach ( r; 1 .. rows )
@@ -628,32 +631,34 @@ class Application {
   }
 
   /**
-     AlignmentA ← ""
-     AlignmentB ← ""
-     i ← length(A)
-     j ← length(B)
-     while (i > 0 or j > 0)
-     {
-       if (i > 0 and j > 0 and F(i,j) == F(i-1,j-1) + S(Ai, Bj))
-       {
-         AlignmentA ← Ai + AlignmentA
-         AlignmentB ← Bj + AlignmentB
-         i ← i - 1
-         j ← j - 1
-       }
-       else if (i > 0 and F(i,j) == F(i-1,j) + d)
-       {
-         AlignmentA ← Ai + AlignmentA
-         AlignmentB ← "-" + AlignmentB
-         i ← i - 1
-       }
-       else (j > 0 and F(i,j) == F(i,j-1) + d)
-       {
-         AlignmentA ← "-" + AlignmentA
-         AlignmentB ← Bj + AlignmentB
-         j ← j - 1
-       }
-     }
+   * <code>
+   *    AlignmentA ← ""
+   *    AlignmentB ← ""
+   *    i ← length(A)
+   *    j ← length(B)
+   *    while (i > 0 or j > 0)
+   *    {
+   *      if (i > 0 and j > 0 and F(i,j) == F(i-1,j-1) + S(Ai, Bj))
+   *      {
+   *        AlignmentA ← Ai + AlignmentA
+   *        AlignmentB ← Bj + AlignmentB
+   *        i ← i - 1
+   *        j ← j - 1
+   *      }
+   *      else if (i > 0 and F(i,j) == F(i-1,j) + d)
+   *      {
+   *        AlignmentA ← Ai + AlignmentA
+   *        AlignmentB ← "-" + AlignmentB
+   *        i ← i - 1
+   *      }
+   *      else (j > 0 and F(i,j) == F(i,j-1) + d)
+   *      {
+   *        AlignmentA ← "-" + AlignmentA
+   *        AlignmentB ← Bj + AlignmentB
+   *        j ← j - 1
+   *      }
+   *    }
+   * </code>
    */
   void compute_alignments()
   {
