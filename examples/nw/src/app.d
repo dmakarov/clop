@@ -515,7 +515,10 @@ class Application {
   }
 
   /**
-   * The algorithm of filling in F matrix
+   * baseline_sequential:
+   * implements sequential computation of the alignment scores matrix.
+   *
+   * The algorithm of filling in the matrix F
    * <p>
    * <code>
    *    for i=0 to length(A) F(i,0) ← d*i
@@ -529,7 +532,7 @@ class Application {
    *      F(i,j) ← max(Match, Insert, Delete)
    *    }
    * </code>
-   **/
+   */
   void baseline_sequential()
   {
     foreach ( r; 1 .. rows )
@@ -540,8 +543,15 @@ class Application {
   }
 
   /**
+   * rectangular_block:
+   * implements sequential computation of the alignment scores matrix
+   * for a single rectangular block of fixed size #BLOCK_SIZE.
+   * @br: block row, the vertical location of the block from the top of the
+   *      matrix, starting with 0 block.
+   * @bc: block column, the horizontal location of the block from the
+   *      left side of the matrix, starting with 0 block.
    */
-  void rectangular_blocks( int br, int bc )
+  void rectangular_block( int br, int bc )
   {
     while ( br >= 0 && bc < (cols - 1) / BLOCK_SIZE )
     {
@@ -566,7 +576,7 @@ class Application {
     {
       int br = ( i < max_blocks ) ? i :     max_blocks - 1;
       int bc = ( i < max_blocks ) ? 0 : i - max_blocks + 1;
-      rectangular_blocks( br, bc );
+      rectangular_block( br, bc );
     }
   }
 
@@ -1138,7 +1148,7 @@ main( string[] args )
 {
   try
   {
-    runtime.init( 0, 2 );
+    runtime.init( 0, 1 );
     auto app = new Application( args );
     app.run();
     runtime.shutdown();
