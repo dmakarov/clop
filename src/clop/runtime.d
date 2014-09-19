@@ -33,7 +33,7 @@ struct Runtime
       status = clGetDeviceInfo( device, CL_DEVICE_NAME, 0, null, &value_size );              assert( value_size > 0, "Can't get the device name: " ~ cl_strerror( status ) );
       char[] buffer = new char[value_size];                                                  assert( buffer != null, "Can't allocate buffer to hold the device name." );
       status = clGetDeviceInfo( device, CL_DEVICE_NAME, value_size, buffer.ptr, null );      assert( status == CL_SUCCESS, "Can't get the device name: " ~ cl_strerror( status ) );
-      if ( buffer[$] == '\0' ) buffer.length -= 1;
+      if ( buffer[$ - 1] == '\0' ) buffer.length -= 1;
       writefln( "OpenCL device: \"%s\"", buffer );
     }
   }
