@@ -67,7 +67,6 @@ class Application {
      * 
      */
     char[] code = q{
-      #define IN_RANGE(x, min, max) ( (min) <= (x) && (x) <= (max) )
       #define MOV3( w, s, e ) ( ((w) < (s)) ? ((w) < (e) ?  1  : -1 ) : ((s) < (e) ?  0  :  -1) )
       #define MIN3( a, b, c ) ( ((a) < (b)) ? ((a) < (c) ? (a) : (c)) : ((b) < (c) ? (b) : (c)) )
 
@@ -223,19 +222,19 @@ class Application {
     int[][2] results;
     results[0] = new int[cols];
     results[1] = new int[cols];
-    foreach ( index; 0 .. cols )
-      results[0][index] = data[index];
+    foreach ( c; 0 .. cols )
+      results[0][c] = data[c];
     int src = 0;
-    foreach ( step; 1 .. rows )
+    foreach ( r; 1 .. rows )
     {
       auto dst = 1 - src;
-      foreach ( index; 0 .. cols )
+      foreach ( c; 0 .. cols )
       {
-        auto s = results[src][index];
-        auto w = ( index > 0        ) ? results[src][index - 1] : int.max;
-        auto e = ( index < cols - 1 ) ? results[src][index + 1] : int.max;
-        results[dst][index] = data[step * cols + index] + min3( w, s, e );
-        move[step * cols + index] = mov3( w, s, e );
+        auto s = results[src][c];
+        auto w = ( c > 0        ) ? results[src][c - 1] : int.max;
+        auto e = ( c < cols - 1 ) ? results[src][c + 1] : int.max;
+        results[dst][c] = data[r * cols + c] + min3( w, s, e );
+        move[r * cols + c] = mov3( w, s, e );
       }
       src = dst;
     }
@@ -248,8 +247,8 @@ class Application {
     results[0] = new int[BLOCK_SIZE + 2 * height];
     results[1] = new int[BLOCK_SIZE + 2 * height];
     int[] temp = new int[cols];
-    foreach ( index; 0 .. cols )
-      sums[index] = data[index];
+    foreach ( c; 0 .. cols )
+      sums[c] = data[c];
     for ( int r = 1; r < rows; r += height )
     {
       for ( int block = 0; block < cols; block += BLOCK_SIZE )
@@ -265,12 +264,12 @@ class Application {
           foreach ( k; -border .. BLOCK_SIZE + border )
             if ( -1 < block + k && block + k < cols )
             {
-              auto index = block + k;
+              auto c = block + k;
               auto s = results[src][height + k];
-              auto w = ( index > 0        ) ? results[src][height + k - 1] : int.max;
-              auto e = ( index < cols - 1 ) ? results[src][height + k + 1] : int.max;
-              results[dst][height + k] = data[step * cols + index] + min3( w, s, e );
-              move[step * cols + index] = mov3( w, s, e );
+              auto w = ( c > 0        ) ? results[src][height + k - 1] : int.max;
+              auto e = ( c < cols - 1 ) ? results[src][height + k + 1] : int.max;
+              results[dst][height + k] = data[step * cols + c] + min3( w, s, e );
+              move[step * cols + c] = mov3( w, s, e );
             }
           border -= 1;
           src = dst;
@@ -284,8 +283,8 @@ class Application {
 
   void opencl_noblocks()
   {
-    foreach ( index; 0 .. cols )
-      sums[index] = data[index];
+    foreach ( c; 0 .. cols )
+      sums[c] = data[c];
     cl_int status;
     cl_mem_flags flags = CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR;
     cl_mem ddata = clCreateBuffer( runtime.context, flags, cl_int.sizeof * data.length, data.ptr, &status );                assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
@@ -327,8 +326,8 @@ class Application {
 
   void opencl_ghost_zone()
   {
-    foreach ( index; 0 .. cols )
-      sums[index] = data[index];
+    foreach ( c; 0 .. cols )
+      sums[c] = data[c];
     cl_int status;
     cl_mem_flags flags = CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR;
     cl_mem ddata = clCreateBuffer( runtime.context, flags, cl_int.sizeof * data.length, data.ptr, &status );                assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
@@ -422,7 +421,7 @@ main( string[] args )
 {
   try
   {
-    runtime.init( 0, 1 );
+    runtime.init( 0, 2 );
     auto app = new Application( args );
     app.run();
     runtime.shutdown();
