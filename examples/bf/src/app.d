@@ -11,18 +11,36 @@ import derelict.opencl.cl;
 import clop.compiler;
 
 /**
- * This application implements the Floyd-Warshall algorithm for
- * finding the shortest path between any two nodes in a graph.
+ * This application implements the Bellman-Ford algorithm for
+ * finding the shortest paths from a single source vertex to
+ * all other vertices in a weighted directed graph.
  *
- * Floyd-Warshall-All-Pairs-Shortest(G,w)
- *   Initialize d[i,j] ← w(i,j), ∞ if no such link
- *   Initialize path[i,j] ← ∞
- *   for k ← 1 to |V|
- *     for i ← 1 to |V|
- *       for j ← 1 to |V|
- *         if d[i,k] + d[k,j] < d[i,j] then ; update min
- *            d[i,j] ← d[i,k] + d[k,j]
- *            path[i,j] ← k                 ; store to get path
+ * function BellmanFord(list vertices, list edges, vertex source)
+ *  ::weight[],predecessor[]
+ *
+ *  // This implementation takes in a graph, represented as
+ *  // lists of vertices and edges, and fills two arrays
+ *  // (weight and predecessor) with shortest-path
+ *  // (less cost/weight/metric) information
+ *
+ *  // Step 1: initialize graph
+ *  for each vertex v in vertices:
+ *      if v is source then weight[v] := 0
+ *      else weight[v] := infinity
+ *      predecessor[v] := null
+ *
+ *  // Step 2: relax edges repeatedly
+ *  for i from 1 to size(vertices)-1:
+ *      for each edge (u, v) with weight w in edges:
+ *          if weight[u] + w < weight[v]:
+ *              weight[v] := weight[u] + w
+ *              predecessor[v] := u
+ *
+ *  // Step 3: check for negative-weight cycles
+ *  for each edge (u, v) with weight w in edges:
+ *      if weight[u] + w < weight[v]:
+ *          error "Graph contains a negative-weight cycle"
+ *  return weight[], predecessor[]
  *
  * Here we use one matrix and overwrite it for each iteration of k.
  **/
