@@ -1,7 +1,7 @@
 {
-    "name"         : "nw",
+    "name"         : "stencil",
     "authors"      : ["Dmitri Makarov"],
-    "description"  : "Needleman-Wunsch algorithm implementation.",
+    "description"  : "Sample stencil computations.",
     "targetType"   : "executable",
     "targetPath"   : "./bin",
     "dependencies" : {

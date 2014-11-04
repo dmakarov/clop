@@ -329,7 +329,7 @@ struct Compiler
   }
 }
 
-immutable string
+string
 compile( immutable string expr )
 {
   auto c = new Compiler( expr );
