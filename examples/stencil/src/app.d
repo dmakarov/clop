@@ -93,9 +93,6 @@ class Application {
                        + coef[C(tz,ty,tx,4)] * v[V(tz    ,ty + 1,tx    )]
                        + coef[C(tz,ty,tx,5)] * v[V(tz - 1,ty    ,tx    )]
                        + coef[C(tz,ty,tx,6)] * v[V(tz + 1,ty    ,tx    )];
-        /*
-        u[V(tz,ty,tx)] = C(tz,ty,tx,6);
-        */
       } /* stencil_7pt_noblocks */
 
       #define LC( k, j, i, d ) ((d) * gz * gy * gx + (k) * gy * gx + (j) * gx + (i))
@@ -104,8 +101,8 @@ class Application {
       __kernel void stencil_7pt_shared( __global       FLOAT_PRECISION * u,
                                         __global const FLOAT_PRECISION * v,
                                         __global const FLOAT_PRECISION * coef,
-                                        __local        FLOAT_PRECISION * lv,
-                                        __local        FLOAT_PRECISION * lc )
+                                        __local        FLOAT_PRECISION * lv/*,
+                                        __local        FLOAT_PRECISION * lc*/ )
       {
         size_t iz = get_local_id( 0 ) + 1;
         size_t iy = get_local_id( 1 ) + 1;
@@ -121,57 +118,61 @@ class Application {
         size_t xdim = get_global_size( 2 );
 
         lv[LV(iz,iy,ix)] = v[V(tz,ty,tx)];
-        for ( int ii = 0; ii < 7; ++ii )
-          lc[LC(iz,iy,ix,ii)] = coef[C(tz,ty,tx,ii)];
+        /*for ( int ii = 0; ii < 7; ++ii )
+          lc[LC(iz,iy,ix,ii)] = coef[C(tz,ty,tx,ii)];*/
         if ( 1 == iz && 0 < tz )
         {
           lv[LV(iz - 1,iy,ix)] = v[V(tz - 1,ty,tx)];
-          for ( int ii = 0; ii < 7; ++ii )
-            lc[LC(iz - 1,iy,ix,ii)] = coef[C(tz - 1,ty,tx,ii)];
+          /*for ( int ii = 0; ii < 7; ++ii )
+            lc[LC(iz - 1,iy,ix,ii)] = coef[C(tz - 1,ty,tx,ii)];*/
         }
         if ( iz == gz - 2 && tz + 1 < zdim )
         {
           lv[LV(iz + 1,iy,ix)] = v[V(tz + 1,ty,tx)];
-          for ( int ii = 0; ii < 7; ++ii )
-            lc[LC(iz + 1,iy,ix,ii)] = coef[C(tz + 1,ty,tx,ii)];
+          /*for ( int ii = 0; ii < 7; ++ii )
+            lc[LC(iz + 1,iy,ix,ii)] = coef[C(tz + 1,ty,tx,ii)];*/
         }
         if ( 1 == iy && 0 < ty )
         {
           lv[LV(iz,iy - 1,ix)] = v[V(tz,ty - 1,tx)];
-          for ( int ii = 0; ii < 7; ++ii )
-            lc[LC(iz,iy - 1,ix,ii)] = coef[C(tz,ty - 1,tx,ii)];
+          /*for ( int ii = 0; ii < 7; ++ii )
+            lc[LC(iz,iy - 1,ix,ii)] = coef[C(tz,ty - 1,tx,ii)];*/
         }
         if ( iy == gy - 2 && ty + 1 < ydim )
         {
           lv[LV(iz,iy + 1,ix)] = v[V(tz,ty + 1,tx)];
-          for ( int ii = 0; ii < 7; ++ii )
-            lc[LC(iz,iy + 1,ix,ii)] = coef[C(tz,ty + 1,tx,ii)];
+          /*for ( int ii = 0; ii < 7; ++ii )
+            lc[LC(iz,iy + 1,ix,ii)] = coef[C(tz,ty + 1,tx,ii)];*/
         }
         if ( 1 == ix && 0 < tx )
         {
           lv[LV(iz,iy,ix - 1)] = v[V(tz,ty,tx - 1)];
-          for ( int ii = 0; ii < 7; ++ii )
-            lc[LC(iz,iy,ix - 1,ii)] = coef[C(tz,ty,tx - 1,ii)];
+          /*for ( int ii = 0; ii < 7; ++ii )
+            lc[LC(iz,iy,ix - 1,ii)] = coef[C(tz,ty,tx - 1,ii)];*/
         }
         if ( ix == gx - 2 && tx + 1 < xdim )
         {
           lv[LV(iz,iy,ix + 1)] = v[V(tz,ty,tx + 1)];
-          for ( int ii = 0; ii < 7; ++ii )
-            lc[LC(iz,iy,ix + 1,ii)] = coef[C(tz,ty,tx + 1,ii)];
+          /*for ( int ii = 0; ii < 7; ++ii )
+            lc[LC(iz,iy,ix + 1,ii)] = coef[C(tz,ty,tx + 1,ii)];*/
         }
         barrier( CLK_LOCAL_MEM_FENCE );
 
         if ( 0 < tz && tz < zdim - 1 && 0 < ty && ty < ydim - 1 && 0 < tx && tx < xdim - 1 )
-          u[V(tz,ty,tx)] = lc[LC(iz,iy,ix,0)] * lv[LV(iz    ,iy    ,ix    )]
+          u[V(tz,ty,tx)] = coef[C(tz,ty,tx,0)] * lv[LV(iz    ,iy    ,ix    )]
+                         + coef[C(tz,ty,tx,1)] * lv[LV(iz    ,iy    ,ix - 1)]
+                         + coef[C(tz,ty,tx,2)] * lv[LV(iz    ,iy    ,ix + 1)]
+                         + coef[C(tz,ty,tx,3)] * lv[LV(iz    ,iy - 1,ix    )]
+                         + coef[C(tz,ty,tx,4)] * lv[LV(iz    ,iy + 1,ix    )]
+                         + coef[C(tz,ty,tx,5)] * lv[LV(iz - 1,iy    ,ix    )]
+                         + coef[C(tz,ty,tx,6)] * lv[LV(iz + 1,iy    ,ix    )];
+          /*u[V(tz,ty,tx)] = lc[LC(iz,iy,ix,0)] * lv[LV(iz    ,iy    ,ix    )]
                          + lc[LC(iz,iy,ix,1)] * lv[LV(iz    ,iy    ,ix - 1)]
                          + lc[LC(iz,iy,ix,2)] * lv[LV(iz    ,iy    ,ix + 1)]
                          + lc[LC(iz,iy,ix,3)] * lv[LV(iz    ,iy - 1,ix    )]
                          + lc[LC(iz,iy,ix,4)] * lv[LV(iz    ,iy + 1,ix    )]
                          + lc[LC(iz,iy,ix,5)] * lv[LV(iz - 1,iy    ,ix    )]
-                         + lc[LC(iz,iy,ix,6)] * lv[LV(iz + 1,iy    ,ix    )];
-        /*
-        u[V(tz,ty,tx)] = LC(iz,iy,ix,0);
-        */
+                         + lc[LC(iz,iy,ix,6)] * lv[LV(iz + 1,iy    ,ix    )];*/
       } /* stencil_7pt_shared_3d */
     }.dup;
     cl_int status;
@@ -197,13 +198,6 @@ class Application {
     assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
     status = clReleaseProgram( program );
     assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
-
-    static if ( false )
-    { // an example of getting the correct maximum work group
-      // size. device info on OS X reports an incorrect value.
-      size_t max_group_size;
-      clGetKernelWorkGroupInfo( kernel_stencil_7pt_noblocks, runtime.device, CL_KERNEL_WORK_GROUP_SIZE, max_group_size.sizeof, &max_group_size, null );
-    }
   } // this()
 
   /**
@@ -305,15 +299,15 @@ class Application {
       assert( status == CL_SUCCESS, "opencl_stencil_7pt_noblocks " ~ cl_strerror( status ) );
 
       size_t[3] global = [zdim - 2, ydim - 2, xdim - 2];
-      status = clEnqueueNDRangeKernel( runtime.queue              , //
-                                       kernel_stencil_7pt_noblocks, //
-                                       3                          , //
-                                       null                       , //
-                                       global.ptr                 , //
-                                       null                       , //
-                                       0                          , //
-                                       null                       , //
-                                       null                      ); //
+      status = clEnqueueNDRangeKernel( runtime.queue              ,    //
+                                       kernel_stencil_7pt_noblocks,    //
+                                       3                          ,    //
+                                       null                       ,    //
+                                       global.ptr                 ,    //
+                                       null                       ,    //
+                                       0                          ,    //
+                                       null                       ,    //
+                                       null                      );    //
       assert( status == CL_SUCCESS, "opencl_stencil_7pt_noblocks " ~ cl_strerror( status ) );
 
       status = clEnqueueReadBuffer( runtime.queue                    , //
@@ -362,8 +356,19 @@ class Application {
       assert( status == CL_SUCCESS, "opencl_stencil_7pt_shared " ~ cl_strerror( status ) );
       status = clSetKernelArg( kernel_stencil_7pt_shared, 3, (BLOCK_SIZE + 2) * (BLOCK_SIZE + 2) * (BLOCK_SIZE + 2) * FLOAT_PRECISION.sizeof, null );
       assert( status == CL_SUCCESS, "opencl_stencil_7pt_shared " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_stencil_7pt_shared, 4, (BLOCK_SIZE + 2) * (BLOCK_SIZE + 2) * (BLOCK_SIZE + 2) * NUM_DOMAINS * FLOAT_PRECISION.sizeof, null );
-      assert( status == CL_SUCCESS, "opencl_stencil_7pt_shared " ~ cl_strerror( status ) );
+      /*status = clSetKernelArg( kernel_stencil_7pt_shared, 4, (BLOCK_SIZE + 2) * (BLOCK_SIZE + 2) * (BLOCK_SIZE + 2) * NUM_DOMAINS * FLOAT_PRECISION.sizeof, null );
+      assert( status == CL_SUCCESS, "opencl_stencil_7pt_shared " ~ cl_strerror( status ) );*/
+
+      static if ( false )
+      { // an example of getting the correct maximum work group
+        // size. device info on OS X reports an incorrect value.
+        size_t size;
+        clGetKernelWorkGroupInfo( kernel_stencil_7pt_shared, runtime.device, CL_KERNEL_WORK_GROUP_SIZE, size.sizeof, &size, null );
+        writefln( "max work group size for kernel_stencil_7pt_shared %d, actual work group size %d", size, BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE );
+        clGetKernelWorkGroupInfo( kernel_stencil_7pt_shared, runtime.device, CL_KERNEL_LOCAL_MEM_SIZE, size.sizeof, &size, null );
+        writefln( "local mem size for kernel_stencil_7pt_shared %d, allocated local mem size %d",
+                  size, (BLOCK_SIZE + 2) * (BLOCK_SIZE + 2) * (BLOCK_SIZE + 2) * FLOAT_PRECISION.sizeof );
+      }
 
       size_t[3] global = [zdim, ydim, xdim];
       size_t[3] local  = [BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE];
@@ -422,9 +427,6 @@ class Application {
     timer.stop();
     ticks = timer.peek();
     writeln( "NO BLOCKS  ", ticks.usecs / 1E6, " [s]" );
-    debug( DEBUG )
-      foreach (ii; 0 .. u.length)
-        writefln( "u[%5d] : %f : %f", ii, u[ii], U[ii] );
     validate();
 
     timer.reset();
@@ -440,20 +442,21 @@ class Application {
 int
 main( string[] args )
 {
-  try
+  foreach ( d; 1 .. 3 )
   {
-    foreach ( d; 1 .. 3 )
+    try
     {
       runtime.init( 0, d );
       auto app = new Application( args );
       app.run();
       runtime.shutdown();
     }
-  }
-  catch ( Exception msg )
-  {
-    writeln( "STENCIL: ", msg );
-    return -1;
+    catch ( Exception msg )
+    {
+      writeln( "STENCIL: ", msg );
+      runtime.shutdown();
+      return -1;
+    }
   }
   return 0;
 }
