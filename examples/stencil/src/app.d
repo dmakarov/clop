@@ -123,52 +123,55 @@ class Application {
         lv[LV(iz,iy,ix)] = v[V(tz,ty,tx)];
         for ( int ii = 0; ii < 7; ++ii )
           lc[LC(iz,iy,ix,ii)] = coef[C(tz,ty,tx,ii)];
-        if ( 0 < tx && 0 == ix )
+        if ( 1 == iz && 0 < tz )
         {
-          lv[LV(iz,iy,0)] = v[V(tz,ty,tx - 1)];
+          lv[LV(iz - 1,iy,ix)] = v[V(tz - 1,ty,tx)];
           for ( int ii = 0; ii < 7; ++ii )
-            lc[LC(iz,iy,0,ii)] = coef[C(tz,ty,tx - 1,ii)];
+            lc[LC(iz - 1,iy,ix,ii)] = coef[C(tz - 1,ty,tx,ii)];
         }
-        if ( 0 < ty && 0 == iy )
+        if ( iz == gz - 2 && tz + 1 < zdim )
         {
-          lv[LV(iz,0,ix)] = v[V(tz,ty - 1,tx)];
+          lv[LV(iz + 1,iy,ix)] = v[V(tz + 1,ty,tx)];
           for ( int ii = 0; ii < 7; ++ii )
-            lc[LC(iz,0,ix,ii)] = coef[C(tz,ty - 1,tx,ii)];
+            lc[LC(iz + 1,iy,ix,ii)] = coef[C(tz + 1,ty,tx,ii)];
         }
-        if ( 0 < tz && 0 == iz )
+        if ( 1 == iy && 0 < ty )
         {
-          lv[LV(0,iy,ix)] = v[V(tz - 1,ty,tx)];
+          lv[LV(iz,iy - 1,ix)] = v[V(tz,ty - 1,tx)];
           for ( int ii = 0; ii < 7; ++ii )
-            lc[LC(0,iy,ix,ii)] = coef[C(tz - 1,ty,tx,ii)];
+            lc[LC(iz,iy - 1,ix,ii)] = coef[C(tz,ty - 1,tx,ii)];
         }
-        if ( tx < xdim - 1 && ix + 1 == gx )
+        if ( iy == gy - 2 && ty + 1 < ydim )
         {
-          lv[LV(iz,iy,ix)] = v[V(tz,ty,tx + 1)];
+          lv[LV(iz,iy + 1,ix)] = v[V(tz,ty + 1,tx)];
           for ( int ii = 0; ii < 7; ++ii )
-            lc[LC(iz,iy,ix,ii)] = coef[C(tz,ty,tx + 1,ii)];
+            lc[LC(iz,iy + 1,ix,ii)] = coef[C(tz,ty + 1,tx,ii)];
         }
-        if ( ty < ydim - 1 && iy + 1 == gy )
+        if ( 1 == ix && 0 < tx )
         {
-          lv[LV(iz,iy,ix)] = v[V(tz,ty + 1,tx)];
+          lv[LV(iz,iy,ix - 1)] = v[V(tz,ty,tx - 1)];
           for ( int ii = 0; ii < 7; ++ii )
-            lc[LC(iz,iy,ix,ii)] = coef[C(tz,ty + 1,tx,ii)];
+            lc[LC(iz,iy,ix - 1,ii)] = coef[C(tz,ty,tx - 1,ii)];
         }
-        if ( tz < zdim - 1 && iz + 1 == gz )
+        if ( ix == gx - 2 && tx + 1 < xdim )
         {
-          lv[LV(iz,iy,ix)] = v[V(tz + 1,ty,tx)];
+          lv[LV(iz,iy,ix + 1)] = v[V(tz,ty,tx + 1)];
           for ( int ii = 0; ii < 7; ++ii )
-            lc[LC(iz,iy,ix,ii)] = coef[C(tz + 1,ty,tx,ii)];
+            lc[LC(iz,iy,ix + 1,ii)] = coef[C(tz,ty,tx + 1,ii)];
         }
         barrier( CLK_LOCAL_MEM_FENCE );
 
         if ( 0 < tz && tz < zdim - 1 && 0 < ty && ty < ydim - 1 && 0 < tx && tx < xdim - 1 )
-        u[V(tz,ty,tx)] = lc[LC(iz,iy,ix,0)] * lv[LV(iz    ,iy    ,ix    )]
-                       + lc[LC(iz,iy,ix,1)] * lv[LV(iz    ,iy    ,ix - 1)]
-                       + lc[LC(iz,iy,ix,2)] * lv[LV(iz    ,iy    ,ix + 1)]
-                       + lc[LC(iz,iy,ix,3)] * lv[LV(iz    ,iy - 1,ix    )]
-                       + lc[LC(iz,iy,ix,4)] * lv[LV(iz    ,iy + 1,ix    )]
-                       + lc[LC(iz,iy,ix,5)] * lv[LV(iz - 1,iy    ,ix    )]
-                       + lc[LC(iz,iy,ix,6)] * lv[LV(iz + 1,iy    ,ix    )];
+          u[V(tz,ty,tx)] = lc[LC(iz,iy,ix,0)] * lv[LV(iz    ,iy    ,ix    )]
+                         + lc[LC(iz,iy,ix,1)] * lv[LV(iz    ,iy    ,ix - 1)]
+                         + lc[LC(iz,iy,ix,2)] * lv[LV(iz    ,iy    ,ix + 1)]
+                         + lc[LC(iz,iy,ix,3)] * lv[LV(iz    ,iy - 1,ix    )]
+                         + lc[LC(iz,iy,ix,4)] * lv[LV(iz    ,iy + 1,ix    )]
+                         + lc[LC(iz,iy,ix,5)] * lv[LV(iz - 1,iy    ,ix    )]
+                         + lc[LC(iz,iy,ix,6)] * lv[LV(iz + 1,iy    ,ix    )];
+        /*
+        u[V(tz,ty,tx)] = LC(iz,iy,ix,0);
+        */
       } /* stencil_7pt_shared_3d */
     }.dup;
     cl_int status;
@@ -364,26 +367,26 @@ class Application {
 
       size_t[3] global = [zdim, ydim, xdim];
       size_t[3] local  = [BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE];
-      status = clEnqueueNDRangeKernel( runtime.queue            , // cl_command_queue command_queue
-                                       kernel_stencil_7pt_shared, // cl_kernel        kernel
-                                       3                        , // cl_uint          work_dim
-                                       null                     , // const size_t*    global_work_offset
-                                       global.ptr               , // const size_t*    global_work_size
-                                       local.ptr                , // const size_t*    local_work_size
-                                       0                        , // cl_uint          num_events_in_wait_list
-                                       null                     , // const cl_event*  event_wait_list
-                                       null                    ); // cl_event*        event
+      status = clEnqueueNDRangeKernel( runtime.queue            ,      // cl_command_queue command_queue
+                                       kernel_stencil_7pt_shared,      // cl_kernel        kernel
+                                       3                        ,      // cl_uint          work_dim
+                                       null                     ,      // const size_t*    global_work_offset
+                                       global.ptr               ,      // const size_t*    global_work_size
+                                       local.ptr                ,      // const size_t*    local_work_size
+                                       0                        ,      // cl_uint          num_events_in_wait_list
+                                       null                     ,      // const cl_event*  event_wait_list
+                                       null                    );      // cl_event*        event
       assert( status == CL_SUCCESS, "opencl_stencil_7pt_shared " ~ cl_strerror( status ) );
 
-      status = clEnqueueReadBuffer( runtime.queue                    , //
-                                    du                               , //
-                                    CL_TRUE                          , //
-                                    0                                , //
-                                    FLOAT_PRECISION.sizeof * u.length, //
-                                    u.ptr                            , //
-                                    0                                , //
-                                    null                             , //
-                                    null                            ); //
+      status = clEnqueueReadBuffer( runtime.queue                    , // cl_command_queue command_queue
+                                    du                               , // cl_mem           buffer
+                                    CL_TRUE                          , // cl_bool          blocking_read
+                                    0                                , // size_t           offset
+                                    FLOAT_PRECISION.sizeof * u.length, // size_t           size
+                                    u.ptr                            , // void*            ptr
+                                    0                                , // cl_uint          num_events_in_wait_list
+                                    null                             , // const cl_event*  event_wait_list
+                                    null                            ); // cl_event*        event
       assert( status == CL_SUCCESS, "opencl_stencil_7pt_shared " ~ cl_strerror( status ) );
       status = clReleaseMemObject( du );
       assert( status == CL_SUCCESS, "opencl_stencil_7pt_shared " ~ cl_strerror( status ) );
@@ -439,7 +442,7 @@ main( string[] args )
 {
   try
   {
-    foreach ( d; 1 .. 2 )
+    foreach ( d; 1 .. 3 )
     {
       runtime.init( 0, d );
       auto app = new Application( args );
