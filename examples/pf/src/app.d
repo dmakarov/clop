@@ -378,6 +378,7 @@ class Application {
 
   /**
    */
+/*
   void clop_dsl()
   {
     try
@@ -414,9 +415,10 @@ class Application {
       writeln( e );
     }
   }
-
+*/
   void run()
   {
+    size_t size;
     StopWatch timer;
     TickDuration ticks;
 
@@ -424,14 +426,14 @@ class Application {
     baseline();
     timer.stop();
     ticks = timer.peek();
-    writeln( "SEQUENTIAL ", ticks.usecs / 1E6, " [s]" );
+    writefln( "SEQUENTIAL %8.6f [s]", ticks.usecs / 1E6 );
 
     timer.reset();
     timer.start();
     ghost_zone_blocks();
     timer.stop();
     ticks = timer.peek();
-    writeln( "GHOST ZONE ", ticks.usecs / 1E6, " [s]" );
+    writefln( "GHOST ZONE %8.6f [s]", ticks.usecs / 1E6 );
     validate();
 
     reset();
@@ -440,35 +442,48 @@ class Application {
     opencl_noblocks();
     timer.stop();
     ticks = timer.peek();
-    writeln( "CL NOBLOCK ", ticks.usecs / 1E6, " [s]" );
+    writefln( "CL NOBLOCK %8.6f [s]", ticks.usecs / 1E6 );
     validate();
 
-    reset();
-    timer.reset();
-    timer.start();
-    opencl_ghost_zone();
-    timer.stop();
-    ticks = timer.peek();
-    writeln( "CL GHOST Z ", ticks.usecs / 1E6, " [s]" );
-    validate();
+    clGetKernelWorkGroupInfo( kernel_ghost_zone,
+                              runtime.device,
+                              CL_KERNEL_WORK_GROUP_SIZE,
+                              size.sizeof,
+                              &size,
+                              null );
+    if ( size >= BLOCK_SIZE + 2 * ( height - 1 ) )
+    {
+      reset();
+      timer.reset();
+      timer.start();
+      opencl_ghost_zone();
+      timer.stop();
+      ticks = timer.peek();
+      writefln( "CL GHOST Z %8.6f [s]", ticks.usecs / 1E6 );
+      validate();
+    }
   }
-
 }
 
 int
 main( string[] args )
 {
-  try
-  {
-    runtime.init( 0, 2 );
-    auto app = new Application( args );
-    app.run();
-    runtime.shutdown();
-  }
-  catch ( Exception msg )
-  {
-    writeln( "PF: ", msg );
-    return -1;
-  }
+  uint[] platforms = runtime.get_platforms();
+  for ( uint p = 0; p < platforms.length; ++p )
+    foreach ( d; 0 .. platforms[p] )
+    {
+      try
+      {
+        runtime.init( p, d );
+        auto app = new Application( args );
+        app.run();
+        runtime.shutdown();
+      }
+      catch ( Exception msg )
+      {
+        writeln( "PF: ", msg );
+        return -1;
+      }
+    }
   return 0;
 }
