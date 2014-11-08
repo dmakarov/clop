@@ -1039,6 +1039,7 @@ class Application {
    */
   void run()
   {
+    size_t size;
     StopWatch timer;
     TickDuration ticks;
 
@@ -1046,7 +1047,7 @@ class Application {
     baseline_sequential();
     timer.stop();
     ticks = timer.peek();
-    writeln( "SEQUENTIAL ", ticks.usecs / 1E6, " [s]" );
+    writefln( "SEQUENTIAL %8.6f [s]", ticks.usecs / 1E6 );
     G[] = F[];
 
     reset();
@@ -1055,7 +1056,7 @@ class Application {
     rectangles();
     timer.stop();
     ticks = timer.peek();
-    writeln( "RECTANGLES ", ticks.usecs / 1E6, " [s]" );
+    writefln( "RECTANGLES %8.6f [s]", ticks.usecs / 1E6 );
     validate();
 
     reset();
@@ -1064,7 +1065,7 @@ class Application {
     diamonds();
     timer.stop();
     ticks = timer.peek();
-    writeln( "DIAMONDS   ", ticks.usecs / 1E6, " [s]" );
+    writefln( "DIAMONDS   %8.6f [s]", ticks.usecs / 1E6 );
     validate();
 
     reset();
@@ -1073,7 +1074,7 @@ class Application {
     opencl_noblocks();
     timer.stop();
     ticks = timer.peek();
-    writeln( "CL NOBLOCK ", ticks.usecs / 1E6, " [s]" );
+    writefln( "CL NOBLOCK %8.6f [s]", ticks.usecs / 1E6 );
     validate();
 
     reset();
@@ -1082,44 +1083,53 @@ class Application {
     opencl_noblocks_indirectS();
     timer.stop();
     ticks = timer.peek();
-    writeln( "CL NB INDI ", ticks.usecs / 1E6, " [s]" );
+    writefln( "CL NB INDI %8.6f [s]", ticks.usecs / 1E6 );
     validate();
 
-    reset();
-    timer.reset();
-    timer.start();
-    opencl_rectangles();
-    timer.stop();
-    ticks = timer.peek();
-    writeln( "CL BLOCKS  ", ticks.usecs / 1E6, " [s]" );
-    validate();
+    clGetKernelWorkGroupInfo( kernel_rectangles,
+                              runtime.device,
+                              CL_KERNEL_WORK_GROUP_SIZE,
+                              size.sizeof,
+                              &size,
+                              null );
+    if ( size >= BLOCK_SIZE )
+    {
+      reset();
+      timer.reset();
+      timer.start();
+      opencl_rectangles();
+      timer.stop();
+      ticks = timer.peek();
+      writefln( "CL BLOCKS  %8.6f [s]", ticks.usecs / 1E6 );
+      validate();
 
-    reset();
-    timer.reset();
-    timer.start();
-    opencl_rectangles_indirectS();
-    timer.stop();
-    ticks = timer.peek();
-    writeln( "CL BL INDI ", ticks.usecs / 1E6, " [s]" );
-    validate();
+      reset();
+      timer.reset();
+      timer.start();
+      opencl_rectangles_indirectS();
+      timer.stop();
+      ticks = timer.peek();
+      writefln( "CL BL INDI %8.6f [s]", ticks.usecs / 1E6 );
+      validate();
 
-    reset();
-    timer.reset();
-    timer.start();
-    opencl_diamonds();
-    timer.stop();
-    ticks = timer.peek();
-    writeln( "CL DIAMOND ", ticks.usecs / 1E6, " [s]" );
-    validate();
+      reset();
+      timer.reset();
+      timer.start();
+      opencl_diamonds();
+      timer.stop();
+      ticks = timer.peek();
+      writefln( "CL DIAMOND %8.6f [s]", ticks.usecs / 1E6 );
+      validate();
 
-    reset();
-    timer.reset();
-    timer.start();
-    opencl_diamonds_indirectS();
-    timer.stop();
-    ticks = timer.peek();
-    writeln( "CL D INDIR ", ticks.usecs / 1E6, " [s]" );
-    validate();
+      reset();
+      timer.reset();
+      timer.start();
+      opencl_diamonds_indirectS();
+      timer.stop();
+      ticks = timer.peek();
+      writefln( "CL D INDIR %8.6f [s]", ticks.usecs / 1E6 );
+      validate();
+    }
 
     reset();
     timer.reset();
@@ -1127,7 +1137,7 @@ class Application {
     clop_dsl();
     timer.stop();
     ticks = timer.peek();
-    writeln( "CLOP DSL   ", ticks.usecs / 1E6, " [s]" );
+    writefln( "CLOP DSL   %8.6f [s]", ticks.usecs / 1E6 );
     validate();
 
     reset();
@@ -1136,7 +1146,7 @@ class Application {
     clop_dsl_indirectS();
     timer.stop();
     ticks = timer.peek();
-    writeln( "CLOP DSL I ", ticks.usecs / 1E6, " [s]" );
+    writefln( "CLOP DSL I %8.6f [s]", ticks.usecs / 1E6 );
     validate();
 
     save();
@@ -1146,17 +1156,23 @@ class Application {
 int
 main( string[] args )
 {
-  try
-  {
-    runtime.init( 0, 1 );
-    auto app = new Application( args );
-    app.run();
-    runtime.shutdown();
-  }
-  catch ( Exception msg )
-  {
-    writeln( "NW: ", msg );
-    return -1;
-  }
+  uint[] platforms = runtime.get_platforms();
+  for ( uint p = 0; p < platforms.length; ++p )
+    foreach ( d; 0 .. platforms[p] )
+    {
+      try
+      {
+        runtime.init( p, d );
+        auto app = new Application( args );
+        app.run();
+        runtime.shutdown();
+      }
+      catch ( Exception msg )
+      {
+        writeln( "NW: ", msg );
+        runtime.shutdown();
+        return -1;
+      }
+    }
   return 0;
 }

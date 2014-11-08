@@ -338,26 +338,26 @@ compile( immutable string expr )
   string code = params ~ "char[] clop_opencl_program_source = (q{\n" ~ c.declarations ~
   "} ~ \"__kernel void clop_opencl_kernel_main( \" ~ kernel_params ~ \" )\" ~\n";
   code ~= "q{\n" ~ kernel ~ "\n}).dup;" ~ q{
-  writeln( "OpenCL program:\n", clop_opencl_program_source, "EOF" );
-  size_t clop_opencl_program_source_size = clop_opencl_program_source.length;
-  char* clop_opencl_program_source_pointer = clop_opencl_program_source.ptr;
-  auto program = clCreateProgramWithSource( runtime.context, 1, &clop_opencl_program_source_pointer, &clop_opencl_program_source_size, &runtime.status );
-  assert( runtime.status == CL_SUCCESS, "clCreateProgramWithSource failed." );
-  runtime.status = clBuildProgram( program, 1, &runtime.device, "", null, null );
-  if ( runtime.status != CL_SUCCESS )
-  {
-    char[1024] log;
-    clGetProgramBuildInfo( program, runtime.device, CL_PROGRAM_BUILD_LOG, 1024, log.ptr, null );
-    writeln( log );
-  }
-  assert( runtime.status == CL_SUCCESS, "clBuildProgram failed." );
-  auto clop_opencl_kernel = clCreateKernel( program, "clop_opencl_kernel_main", &runtime.status );
-  assert( runtime.status == CL_SUCCESS, "clCreateKernel failed." );
+    debug ( DEBUG ) writeln( "OpenCL program:\n", clop_opencl_program_source, "EOF" );
+    size_t clop_opencl_program_source_size = clop_opencl_program_source.length;
+    char* clop_opencl_program_source_pointer = clop_opencl_program_source.ptr;
+    auto program = clCreateProgramWithSource( runtime.context, 1, &clop_opencl_program_source_pointer, &clop_opencl_program_source_size, &runtime.status );
+    assert( runtime.status == CL_SUCCESS, "clCreateProgramWithSource failed." );
+    runtime.status = clBuildProgram( program, 1, &runtime.device, "", null, null );
+    if ( runtime.status != CL_SUCCESS )
+    {
+      char[1024] log;
+      clGetProgramBuildInfo( program, runtime.device, CL_PROGRAM_BUILD_LOG, 1024, log.ptr, null );
+      writeln( log );
+    }
+    assert( runtime.status == CL_SUCCESS, "clBuildProgram failed." );
+    auto clop_opencl_kernel = clCreateKernel( program, "clop_opencl_kernel_main", &runtime.status );
+    assert( runtime.status == CL_SUCCESS, "clCreateKernel failed." );
   } ~ c.set_args( "clop_opencl_kernel" ) ~ c.code_to_invoke_kernel() ~ c.code_to_read_data_from_device();
-  return "writefln( \"DSL MIXIN:\\n%sEOD\", q{" ~ code ~ "} );\n" ~ code;
+  return "debug ( DEBUG ) writefln( \"DSL MIXIN:\\n%sEOD\", q{" ~ code ~ "} );\n" ~ code;
 }
 
-immutable string
+string
 set_kernel_param( T )( string name )
 {
   string code;
@@ -380,7 +380,7 @@ set_kernel_param( T )( string name )
   return code;
 }
 
-immutable string
+string
 set_kernel_arg( T )( string kernel, string arg, string name )
 {
   string code;
@@ -429,10 +429,10 @@ set_kernel_arg( T )( string kernel, string arg, string name )
            ~ name ~ " );\nassert( runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\" );";
   else
     code = "";
-  return "writefln( \"%s\", q{" ~ code ~ "} );\n" ~ code;
+  return "debug ( DEBUG ) writefln( \"%s\", q{" ~ code ~ "} );\n" ~ code;
 }
 
-immutable string
+string
 read_device_buffer( T )( string name )
 {
   string code;
@@ -442,5 +442,5 @@ read_device_buffer( T )( string name )
            ".ptr, 0, null, null );\nassert( runtime.status == CL_SUCCESS, \"clEnqueueReadBuffer failed.\" );";
   else
     code = "";
-  return "writefln( \"%s\", q{" ~ code ~ "} );\n" ~ code;
+  return "debug ( DEBUG ) writefln( \"%s\", q{" ~ code ~ "} );\n" ~ code;
 }
