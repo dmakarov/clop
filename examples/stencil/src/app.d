@@ -761,21 +761,23 @@ class Application {
 int
 main( string[] args )
 {
-  foreach ( d; 0 .. 3 )
-  {
-    try
+  uint[] platforms = runtime.get_platforms();
+  for ( uint p = 0; p < platforms.length; ++p )
+    foreach ( d; 0 .. platforms[p] )
     {
-      runtime.init( 0, d );
-      auto app = new Application( args );
-      app.run();
-      runtime.shutdown();
+      try
+      {
+        runtime.init( p, d );
+        auto app = new Application( args );
+        app.run();
+        runtime.shutdown();
+      }
+      catch ( Exception msg )
+      {
+        writeln( "STENCIL: ", msg );
+        runtime.shutdown();
+        return -1;
+      }
     }
-    catch ( Exception msg )
-    {
-      writeln( "STENCIL: ", msg );
-      runtime.shutdown();
-      return -1;
-    }
-  }
   return 0;
 }

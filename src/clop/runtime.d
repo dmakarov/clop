@@ -6,21 +6,27 @@ import derelict.opencl.cl;
 
 struct Runtime
 {
+  static bool has_platform_ids = false;
+  cl_platform_id[] platform_ids;
   cl_int status;
   cl_device_id device;
   cl_context context;
   cl_command_queue queue;
+  cl_uint num_platforms;
+  cl_uint num_devices;
 
   /**
    */
   void init( uint platform_id = 0, uint device_id = 0, bool verbose = true )
   {
-    DerelictCL.load();
-    cl_uint num_platforms, num_devices;
-    status = clGetPlatformIDs( 0, null, &num_platforms );                                    assert( status == CL_SUCCESS && num_platforms > 0 && platform_id < num_platforms, "No OpenCL platform found: " ~ cl_strerror( status ) );
-    auto platforms = new cl_platform_id[num_platforms];                                      assert( platforms != null, "Can't allocate array of OpenCL platform IDs." );
-    status = clGetPlatformIDs( num_platforms, platforms.ptr, null );                         assert( status == CL_SUCCESS, "Can't get OpenCL platform IDs: " ~ cl_strerror( status ) );
-    auto platform = platforms[platform_id];
+    if ( !has_platform_ids )
+    {
+      DerelictCL.load();
+      status = clGetPlatformIDs( 0, null, &num_platforms );                                  assert( status == CL_SUCCESS && num_platforms > 0 && platform_id < num_platforms, "No OpenCL platform found: " ~ cl_strerror( status ) );
+      platform_ids = new cl_platform_id[num_platforms];                                      assert( platform_ids != null, "Can't allocate array of OpenCL platform IDs." );
+      status = clGetPlatformIDs( num_platforms, platform_ids.ptr, null );                    assert( status == CL_SUCCESS, "Can't get OpenCL platform IDs: " ~ cl_strerror( status ) );
+    }
+    auto platform = platform_ids[platform_id];
     status = clGetDeviceIDs( platform, CL_DEVICE_TYPE_ALL, 0, null, &num_devices );          assert( status == CL_SUCCESS && num_devices > 0 && device_id < num_devices, "No OpenCL device found:" ~ cl_strerror( status ) );
     auto devices = new cl_device_id[num_devices];                                            assert( devices != null, "Can't allocate array of OpenCL device IDs." );
     status = clGetDeviceIDs( platform, CL_DEVICE_TYPE_ALL, num_devices, devices.ptr, null ); assert( status == CL_SUCCESS, "Can't get OpenCL device IDs: " ~ cl_strerror( status ) );
@@ -36,6 +42,22 @@ struct Runtime
       if ( buffer[$ - 1] == '\0' ) buffer.length -= 1;
       writefln( "OpenCL device: \"%s\"", buffer );
     }
+  }
+
+  uint[] get_platforms()
+  {
+    DerelictCL.load();
+    status = clGetPlatformIDs( 0, null, &num_platforms );                                    assert( status == CL_SUCCESS, "No OpenCL platform found: " ~ cl_strerror( status ) );
+    platform_ids = new cl_platform_id[num_platforms];                                        assert( platform_ids != null, "Can't allocate array of OpenCL platform IDs." );
+    status = clGetPlatformIDs( num_platforms, platform_ids.ptr, null );                      assert( status == CL_SUCCESS, "Can't get OpenCL platform IDs: " ~ cl_strerror( status ) );
+    auto platforms = new uint[num_platforms];                                                assert( platforms != null, "Can't allocate array of platforms." );
+    foreach ( p; 0 .. platforms.length )
+    {
+      status = clGetDeviceIDs( platform_ids[p], CL_DEVICE_TYPE_ALL, 0, null, &platforms[p] );
+      assert( status == CL_SUCCESS, "No OpenCL device found:" ~ cl_strerror( status ) );
+    }
+    has_platform_ids = true;
+    return platforms;
   }
 
   /**
