@@ -768,6 +768,7 @@ main( string[] args )
       try
       {
         runtime.init( p, d );
+        runtime.benchmark();
         auto app = new Application( args );
         app.run();
         runtime.shutdown();

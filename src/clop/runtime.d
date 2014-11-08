@@ -1,5 +1,6 @@
 module clop.runtime;
 
+import std.datetime;
 import std.stdio;
 
 import derelict.opencl.cl;
@@ -14,6 +15,8 @@ struct Runtime
   cl_command_queue queue;
   cl_uint num_platforms;
   cl_uint num_devices;
+
+  cl_kernel kernel_copy;
 
   /**
    */
@@ -42,6 +45,25 @@ struct Runtime
       if ( buffer[$ - 1] == '\0' ) buffer.length -= 1;
       writefln( "OpenCL device: \"%s\"", buffer );
     }
+
+    char[] code = q{
+      /**
+       */
+      __kernel void
+      copy( __global float* out, __global const float* in, int w )
+      {
+        int x = get_global_id( 0 );
+        int y = get_global_id( 1 );
+        out[y * w + x] = in[y * w + x];
+      }
+    }.dup;
+    cl_int status;
+    size_t size = code.length;
+    char*[] strs = [code.ptr];
+    auto program = clCreateProgramWithSource( context, 1, strs.ptr, &size, &status );        assert( status == CL_SUCCESS, "Can't create program with source " ~ cl_strerror( status ) );
+    status = clBuildProgram( program, 1, &device, "", null, null );                          assert( status == CL_SUCCESS, "Can't build program " ~ cl_strerror( status ) );
+    kernel_copy = clCreateKernel( program, "copy", &status );                                assert( status == CL_SUCCESS, "Can't create kernel " ~ cl_strerror( status ) );
+    status = clReleaseProgram( program );                                                    assert( status == CL_SUCCESS, "Can't release program " ~ cl_strerror( status ) );
   }
 
   uint[] get_platforms()
@@ -58,6 +80,53 @@ struct Runtime
     }
     has_platform_ids = true;
     return platforms;
+  }
+
+  void benchmark()
+  {
+    cl_int status;
+    cl_event event;
+    StopWatch timer;
+    TickDuration ticks;
+
+    for ( cl_int width = 512; width < 8193; width *= 2 )
+    {
+      cl_float[] image = new cl_float[width * width];
+      cl_mem_flags flags = CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR;
+      cl_mem din  = clCreateBuffer( context, flags, cl_float.sizeof * width * width, image.ptr, &status );
+      assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
+      flags = CL_MEM_WRITE_ONLY;
+      cl_mem dout = clCreateBuffer( context, flags, cl_float.sizeof * width * width, null, &status );
+      assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
+
+      status = clSetKernelArg( kernel_copy, 0, cl_mem.sizeof, &dout );
+      assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
+      status = clSetKernelArg( kernel_copy, 1, cl_mem.sizeof, &din );
+      assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
+      status = clSetKernelArg( kernel_copy, 2, cl_int.sizeof, &width );
+      assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
+
+      size_t[2] gwsize = [width, width];
+      timer.start();
+      status = clEnqueueNDRangeKernel( queue, kernel_copy, 2, null, gwsize.ptr, null, 0, null, &event );
+      assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
+      status = clWaitForEvents( 1, &event );
+      assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
+      timer.stop();
+      ticks = timer.peek();
+      writefln( "Size %8d, time %8.6f [s], bandwidth %4.2f GB/s",
+                width * width,
+                ticks.usecs / 1E6,
+                width * width * cl_float.sizeof * 1E6 / ( 1024 * 1024 * 1024 * ticks.usecs ) );
+      timer.reset();
+
+      status = clReleaseMemObject( din );
+      assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
+      status = clReleaseMemObject( dout );
+      assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
+    }
+    status = clReleaseKernel( kernel_copy );
+    assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
   }
 
   /**
