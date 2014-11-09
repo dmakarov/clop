@@ -1,6 +1,5 @@
 module clop.runtime;
 
-import std.datetime;
 import std.stdio;
 
 import derelict.opencl.cl;
@@ -102,8 +101,6 @@ struct Runtime
   {
     cl_int status;
     cl_event event;
-    StopWatch timer;
-    TickDuration ticks;
 
     for ( cl_int width = 1024; width < 8193; width *= 2 )
     {
@@ -129,13 +126,11 @@ struct Runtime
       status = clWaitForEvents( 1, &event );
       assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
       // now a real run with time measurement.
-      timer.start();
+
       status = clEnqueueNDRangeKernel( queue, kernel_copy, 2, null, gwsize.ptr, null, 0, null, &event );
       assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
       status = clWaitForEvents( 1, &event );
       assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
-      timer.stop();
-      ticks = timer.peek();
 
       cl_ulong start_time;
       status = clGetEventProfilingInfo ( event                     , // cl_event          event
@@ -152,13 +147,10 @@ struct Runtime
                                          null                     ); // size_t*           param_value_size_ret
       assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
 
-      writefln( "Size %8d, time %8.6f (%8.6f) [s], bandwidth %4.2f (%4.2f) GB/s",
-                width * width,
-                ticks.usecs / 1E6,
-                ( end_time - start_time ) / 1E9,
-                width * width * cl_float.sizeof * 1E6 / ( 1024 * 1024 * 1024 * ticks.usecs ),
-                width * width * cl_float.sizeof * 1E9 / ( 1024 * 1024 * 1024 * ( end_time - start_time ) ) );
-      timer.reset();
+      writef( "Size %8d, time %8.6f [s], %5.2f GB/s",
+              width * width,
+              ( end_time - start_time ) / 1E9,
+              width * width * cl_float.sizeof * 1E9 / ( 1024 * 1024 * 1024 * ( end_time - start_time ) ) );
 
       status = clSetKernelArg( kernel_madd, 0, cl_mem.sizeof, &dout );
       assert( status == CL_SUCCESS, "runtime madd benchmark " ~ cl_strerror( status ) );
@@ -171,13 +163,11 @@ struct Runtime
       assert( status == CL_SUCCESS, "runtime madd benchmark " ~ cl_strerror( status ) );
       status = clWaitForEvents( 1, &event );
       assert( status == CL_SUCCESS, "runtime madd benchmark " ~ cl_strerror( status ) );
-      timer.start();
+
       status = clEnqueueNDRangeKernel( queue, kernel_madd, 2, null, gwsize.ptr, null, 0, null, &event );
       assert( status == CL_SUCCESS, "runtime madd benchmark " ~ cl_strerror( status ) );
       status = clWaitForEvents( 1, &event );
       assert( status == CL_SUCCESS, "runtime madd benchmark " ~ cl_strerror( status ) );
-      timer.stop();
-      ticks = timer.peek();
 
       status = clGetEventProfilingInfo ( event                     , // cl_event          event
                                          CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
@@ -192,13 +182,7 @@ struct Runtime
                                          null                     ); // size_t*           param_value_size_ret
       assert( status == CL_SUCCESS, "runtime madd benchmark " ~ cl_strerror( status ) );
 
-      writefln( "Size %8d, time %8.6f (%8.6f) [s], bandwidth %4.2f (%4.2f) GB/s",
-                width * width,
-                ticks.usecs / 1E6,
-                ( end_time - start_time ) / 1E9,
-                width * width * cl_float.sizeof * 1E6 / ( 1024 * 1024 * 1024 * ticks.usecs ),
-                width * width * cl_float.sizeof * 1E9 / ( 1024 * 1024 * 1024 * ( end_time - start_time ) ) );
-      timer.reset();
+      writefln( ", %4.2f GB/s", width * width * cl_float.sizeof * 1E9 / ( 1024 * 1024 * 1024 * ( end_time - start_time ) ) );
 
       status = clReleaseMemObject( din );
       assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
