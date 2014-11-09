@@ -67,7 +67,15 @@ struct Runtime
         int x = get_global_id( 0 );
         int y = get_global_id( 1 );
         float a = in[y * w + x];
-        float b = 3.9f * a * ( 1.0f - a ) - 0.9f * a * ( 2.9f + a ) + 2.3f * a * ( 1.3f - a ) - 1.7f * a * ( 3.1f + a ) + 0.7f * a * ( 0.5f - a ) - 1.9f * a * ( 2.3f + a ) + 1.1f * a * ( 5.3f - a ) - 5.9f * a * ( 0.3f + a );
+        float b = 3.9f * a * ( 1.0f - a )
+                - 0.9f * a * ( 2.9f + a )
+                + 2.3f * a * ( 1.3f - a )
+                - 1.7f * a * ( 3.1f + a )
+                + 0.7f * a * ( 0.5f - a )
+                - 1.9f * a * ( 2.3f + a )
+                + 1.1f * a * ( 5.3f - a )
+                - 5.9f * a * ( 0.3f + a )
+                + 6.1f * a * ( 0.7f - a );
         out[y * w + x] = b;
       }
     }.dup;
@@ -147,10 +155,10 @@ struct Runtime
                                          null                     ); // size_t*           param_value_size_ret
       assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
 
-      writef( "Size %8d, time %8.6f [s], %5.2f GB/s",
-              width * width,
+      writef( "%3d MF, time %5.3f [s], %5.2f GF/s",
+              width * width / ( 1024 * 1024 ),
               ( end_time - start_time ) / 1E9,
-              width * width * cl_float.sizeof * 1E9 / ( 1024 * 1024 * 1024 * ( end_time - start_time ) ) );
+              width * width * 1E9 / ( 1024 * 1024 * 1024 * ( end_time - start_time ) ) );
 
       status = clSetKernelArg( kernel_madd, 0, cl_mem.sizeof, &dout );
       assert( status == CL_SUCCESS, "runtime madd benchmark " ~ cl_strerror( status ) );
@@ -182,7 +190,7 @@ struct Runtime
                                          null                     ); // size_t*           param_value_size_ret
       assert( status == CL_SUCCESS, "runtime madd benchmark " ~ cl_strerror( status ) );
 
-      writefln( ", %4.2f GB/s", width * width * cl_float.sizeof * 1E9 / ( 1024 * 1024 * 1024 * ( end_time - start_time ) ) );
+      writefln( ", %5.2f GF/s", width * width * 1E9 / ( 1024 * 1024 * 1024 * ( end_time - start_time ) ) );
 
       status = clReleaseMemObject( din );
       assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );

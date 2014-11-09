@@ -689,14 +689,20 @@ class Application {
     sequential_stencil_7pt();
     timer.stop();
     ticks = timer.peek();
-    writefln( " 7pt SEQUENTIAL %8.6f [s]", ticks.usecs / 1E6 );
+    writefln( "%2d MP  7pt SEQUENTIAL %5.3f [s], %5.3f GP/s",
+              xdim * ydim * zdim / ( 1024 * 1024 ),
+              ticks.usecs / 1E6,
+              xdim * ydim * zdim * 1E6 / ( 1024 * 1024 * 1024 * ticks.usecs ) );
 
     timer.reset();
     timer.start();
     opencl_stencil_7pt_noblocks();
     timer.stop();
     ticks = timer.peek();
-    writefln( " 7pt NO BLOCKS  %8.6f [s]", ticks.usecs / 1E6 );
+    writefln( "%2d MP  7pt NO BLOCKS  %5.3f [s], %5.3f GP/s",
+              xdim * ydim * zdim / ( 1024 * 1024 ),
+              ticks.usecs / 1E6,
+              xdim * ydim * zdim * 1E6 / ( 1024 * 1024 * 1024 * ticks.usecs ) );
     validate();
 
     clGetKernelWorkGroupInfo( kernel_stencil_7pt_shared,
@@ -712,7 +718,10 @@ class Application {
       opencl_stencil_7pt_shared();
       timer.stop();
       ticks = timer.peek();
-      writefln( " 7pt SHARED     %8.6f [s]", ticks.usecs / 1E6 );
+      writefln( "%2d MP  7pt SHARED     %5.3f [s], %5.3f GP/s",
+                xdim * ydim * zdim / ( 1024 * 1024 ),
+                ticks.usecs / 1E6,
+                xdim * ydim * zdim * 1E6 / ( 1024 * 1024 * 1024 * ticks.usecs ) );
       validate();
     }
     else
@@ -720,19 +729,27 @@ class Application {
       writeln( " 7pt SHARED     N/A" );
     }
 
+    writeln( "--------------------------------------------------" );
+
     cleanup();
     timer.start();
     sequential_stencil_25pt();
     timer.stop();
     ticks = timer.peek();
-    writefln( "25pt SEQUENTIAL %8.6f [s]", ticks.usecs / 1E6 );
+    writefln( "%2d MP 25pt SEQUENTIAL %5.3f [s], %5.3f GP/s",
+              xdim * ydim * zdim / ( 1024 * 1024 ),
+              ticks.usecs / 1E6,
+              xdim * ydim * zdim * 1E6 / ( 1024 * 1024 * 1024 * ticks.usecs ) );
 
     timer.reset();
     timer.start();
     opencl_stencil_25pt_noblocks();
     timer.stop();
     ticks = timer.peek();
-    writefln( "25pt NO BLOCKS  %8.6f [s]", ticks.usecs / 1E6 );
+    writefln( "%2d MP 25pt NO BLOCKS  %5.3f [s], %5.3f GP/s",
+              xdim * ydim * zdim / ( 1024 * 1024 ),
+              ticks.usecs / 1E6,
+              xdim * ydim * zdim * 1E6 / ( 1024 * 1024 * 1024 * ticks.usecs ) );
     validate();
 
     clGetKernelWorkGroupInfo( kernel_stencil_25pt_shared,
@@ -748,7 +765,10 @@ class Application {
       opencl_stencil_25pt_shared();
       timer.stop();
       ticks = timer.peek();
-      writefln( "25pt SHARED     %8.6f [s]", ticks.usecs / 1E6 );
+      writefln( "%2d MP 25pt SHARED     %5.3f [s], %5.3f GP/s",
+                xdim * ydim * zdim / ( 1024 * 1024 ),
+                ticks.usecs / 1E6,
+                xdim * ydim * zdim * 1E6 / ( 1024 * 1024 * 1024 * ticks.usecs ) );
       validate();
     }
     else
@@ -769,8 +789,10 @@ main( string[] args )
       {
         runtime.init( p, d );
         runtime.benchmark();
+        writeln( "==================================================" );
         auto app = new Application( args );
         app.run();
+        writeln( "==================================================" );
         runtime.shutdown();
       }
       catch ( Exception msg )
