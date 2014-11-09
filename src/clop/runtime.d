@@ -35,7 +35,7 @@ struct Runtime
     status = clGetDeviceIDs( platform, CL_DEVICE_TYPE_ALL, num_devices, devices.ptr, null ); assert( status == CL_SUCCESS, "Can't get OpenCL device IDs: " ~ cl_strerror( status ) );
     device = devices[device_id];
     context = clCreateContext( null, 1, &device, null, null, &status );                      assert( status == CL_SUCCESS, "Can't create OpenCL context: " ~ cl_strerror( status ) );
-    queue = clCreateCommandQueue( context, device, 0, &status );                             assert( status == CL_SUCCESS, "Can't create OpenCL command queue:" ~ cl_strerror( status ) );
+    queue = clCreateCommandQueue( context, device, CL_QUEUE_PROFILING_ENABLE, &status );     assert( status == CL_SUCCESS, "Can't create OpenCL command queue:" ~ cl_strerror( status ) );
     if ( verbose )
     {
       size_t value_size;
@@ -114,10 +114,28 @@ struct Runtime
       assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
       timer.stop();
       ticks = timer.peek();
-      writefln( "Size %8d, time %8.6f [s], bandwidth %4.2f GB/s",
+
+      cl_ulong start_time;
+      status = clGetEventProfilingInfo ( event                     , // cl_event          event
+                                         CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
+                                         cl_ulong.sizeof           , // size_t            param_value_size
+                                         &start_time               , // void*             param_value
+                                         null                     ); // size_t*           param_value_size_ret
+      assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
+      cl_ulong end_time;
+      status = clGetEventProfilingInfo ( event                     , // cl_event          event
+                                         CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
+                                         cl_ulong.sizeof           , // size_t            param_value_size
+                                         &end_time                 , // void*             param_value
+                                         null                     ); // size_t*           param_value_size_ret
+      assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
+
+      writefln( "Size %8d, time %8.6f (%8.6f) [s], bandwidth %4.2f (%4.2f) GB/s",
                 width * width,
                 ticks.usecs / 1E6,
-                width * width * cl_float.sizeof * 1E6 / ( 1024 * 1024 * 1024 * ticks.usecs ) );
+                ( end_time - start_time ) / 1E9,
+                width * width * cl_float.sizeof * 1E6 / ( 1024 * 1024 * 1024 * ticks.usecs ),
+                width * width * cl_float.sizeof * 1E9 / ( 1024 * 1024 * 1024 * ( end_time - start_time ) ) );
       timer.reset();
 
       status = clReleaseMemObject( din );
