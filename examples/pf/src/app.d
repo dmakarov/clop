@@ -89,7 +89,17 @@ class Application {
        * @param steps -- the number of rows processed in this run
        */
       __kernel void
-      pf_ghost_zone( __global int* data, __global int* src, __global int* dst, __global int* move, int rows, int cols, int height, int start, int steps, __local int* prev, __local int* sums )
+      pf_ghost_zone( __global int* data  , //
+                     __global int* src   , //
+                     __global int* dst   , //
+                     __global int* move  , //
+                              int  rows  , //
+                              int  cols  , //
+                              int  height, //
+                              int  start , //
+                              int  steps , //
+                     __local  int* prev  , //
+                     __local  int* sums  ) //
       {
         const int BLOCK_SIZE = get_local_size( 0 ) - 2 * ( height - 1 );
         const int tx = get_local_id( 0 );
@@ -309,13 +319,40 @@ class Application {
       status = clSetKernelArg( kernel_noblocks,  4, cl_int.sizeof, &cols );                                                 assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
       status = clSetKernelArg( kernel_noblocks,  5, cl_int.sizeof, &step );                                                 assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
 
-      status = clEnqueueNDRangeKernel( runtime.queue, kernel_noblocks, 1, null, &gwsize, null, 0, null, null );             assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
+      status = clEnqueueNDRangeKernel( runtime.queue                   ,
+                                       kernel_noblocks                 ,
+                                       1                               ,
+                                       null                            ,
+                                       &gwsize                         ,
+                                       null                            ,
+                                       0                               ,
+                                       null                            ,
+                                       null                           );
+      assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
 
       src = dst;
     }
 
-    status = clEnqueueReadBuffer( runtime.queue, dsums[src], CL_TRUE, 0, cl_int.sizeof * cols, sums.ptr, 0, null, null );   assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
-    status = clEnqueueReadBuffer( runtime.queue, dmove, CL_TRUE, 0, cl_int.sizeof * rows * cols, move.ptr, 0, null, null ); assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
+    status = clEnqueueReadBuffer( runtime.queue              ,
+                                  dsums[src]                 ,
+                                  CL_TRUE                    ,
+                                  0                          ,
+                                  cl_int.sizeof * cols       ,
+                                  sums.ptr                   ,
+                                  0                          ,
+                                  null                       ,
+                                  null                      );
+    assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
+    status = clEnqueueReadBuffer( runtime.queue              ,
+                                  dmove                      ,
+                                  CL_TRUE                    ,
+                                  0                          ,
+                                  cl_int.sizeof * rows * cols,
+                                  move.ptr                   ,
+                                  0                          ,
+                                  null                       ,
+                                  null                      );
+    assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
 
     status = clReleaseMemObject( dsums[1] );                                                                                assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
     status = clReleaseMemObject( dsums[0] );                                                                                assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
@@ -361,13 +398,40 @@ class Application {
       status = clSetKernelArg( kernel_ghost_zone,  9, cl_int.sizeof * ( lwsize + 2 ), null );                               assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
       status = clSetKernelArg( kernel_ghost_zone, 10, cl_int.sizeof * ( lwsize + 2 ), null );                               assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
 
-      status = clEnqueueNDRangeKernel( runtime.queue, kernel_ghost_zone, 1, null, &gwsize, &lwsize, 0, null, null );        assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
+      status = clEnqueueNDRangeKernel( runtime.queue,
+                                       kernel_ghost_zone,
+                                       1,
+                                       null,
+                                       &gwsize,
+                                       &lwsize,
+                                       0,
+                                       null,
+                                       null );
+      assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
 
       src = dst;
     }
 
-    status = clEnqueueReadBuffer( runtime.queue, dsums[src], CL_TRUE, 0, cl_int.sizeof * cols, sums.ptr, 0, null, null );   assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
-    status = clEnqueueReadBuffer( runtime.queue, dmove, CL_TRUE, 0, cl_int.sizeof * rows * cols, move.ptr, 0, null, null ); assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
+    status = clEnqueueReadBuffer( runtime.queue,
+                                  dsums[src],
+                                  CL_TRUE,
+                                  0,
+                                  cl_int.sizeof * cols,
+                                  sums.ptr,
+                                  0,
+                                  null,
+                                  null );
+    assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
+    status = clEnqueueReadBuffer( runtime.queue,
+                                  dmove,
+                                  CL_TRUE,
+                                  0,
+                                  cl_int.sizeof * rows * cols,
+                                  move.ptr,
+                                  0,
+                                  null,
+                                  null );
+    assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
 
     status = clReleaseMemObject( dsums[1] );                                                                                assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
     status = clReleaseMemObject( dsums[0] );                                                                                assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
@@ -421,19 +485,27 @@ class Application {
     size_t size;
     StopWatch timer;
     TickDuration ticks;
+    double benchmark = runtime.benchmark( rows * cols );
+    double rate;
 
     timer.start();
     baseline();
     timer.stop();
     ticks = timer.peek();
-    writefln( "SEQUENTIAL %8.6f [s]", ticks.usecs / 1E6 );
+    writefln( "%2d MI SEQUENTIAL %5.3f [s], %7.2f MI/s",
+              rows * cols / ( 1024 * 1024 ),
+              ticks.usecs / 1E6,
+              rows * cols * 1E6 / ( 1024 * 1024 * ticks.usecs ) );
 
     timer.reset();
     timer.start();
     ghost_zone_blocks();
     timer.stop();
     ticks = timer.peek();
-    writefln( "GHOST ZONE %8.6f [s]", ticks.usecs / 1E6 );
+    writefln( "%2d MP GHOST ZONE %5.3f [s], %7.2f MI/s",
+              rows * cols / ( 1024 * 1024 ),
+              ticks.usecs / 1E6,
+              rows * cols * 1E6 / ( 1024 * 1024 * ticks.usecs ) );
     validate();
 
     reset();
@@ -442,7 +514,11 @@ class Application {
     opencl_noblocks();
     timer.stop();
     ticks = timer.peek();
-    writefln( "CL NOBLOCK %8.6f [s]", ticks.usecs / 1E6 );
+    writefln( "%2d MI CL NOBLOCK %5.3f [s], %7.2f MI/s, estimated %7.2f MI/s",
+              rows * cols / ( 1024 * 1024 ),
+              ticks.usecs / 1E6,
+              rows * cols * 1E6 / ( 1024 * 1024 * ticks.usecs ),
+              2 * benchmark / 6 );
     validate();
 
     clGetKernelWorkGroupInfo( kernel_ghost_zone,
@@ -459,7 +535,10 @@ class Application {
       opencl_ghost_zone();
       timer.stop();
       ticks = timer.peek();
-      writefln( "CL GHOST Z %8.6f [s]", ticks.usecs / 1E6 );
+      writefln( "%2d MI CL GHOST Z %5.3f [s], %7.2f MI/s",
+                rows * cols / ( 1024 * 1024 ),
+                ticks.usecs / 1E6,
+                rows * cols * 1E6 / ( 1024 * 1024 * ticks.usecs ) );
       validate();
     }
   }
@@ -475,8 +554,10 @@ main( string[] args )
       try
       {
         runtime.init( p, d );
+        writeln( "==================================================" );
         auto app = new Application( args );
         app.run();
+        writeln( "==================================================" );
         runtime.shutdown();
       }
       catch ( Exception msg )

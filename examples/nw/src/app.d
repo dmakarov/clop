@@ -339,7 +339,16 @@ class Application {
 
       /**
        */
-      __kernel void nw_diamonds_indirectS( __global const int* S, __global const int* M, __global const int* N, __global int* F, int cols, int penalty, int br, int bc, __local int* s, __local int* t )
+      __kernel void nw_diamonds_indirectS( __global const int* S      , //
+                                           __global const int* M      , //
+                                           __global const int* N      , //
+                                           __global       int* F      , //
+                                                          int  cols   , //
+                                                          int  penalty, //
+                                                          int  br     , //
+                                                          int  bc     , //
+                                           __local        int* s      , //
+                                           __local        int* t      ) //
       {
         int bx = get_group_id( 0 );
         int tx = get_local_id( 0 );
@@ -406,15 +415,24 @@ class Application {
     cl_int status;
     size_t size = code.length;
     char*[] strs = [code.ptr];
-    auto program = clCreateProgramWithSource( runtime.context, 1, strs.ptr, &size, &status );      assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
-    status = clBuildProgram( program, 1, &runtime.device, "", null, null );                        assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
-    kernel_noblocks             = clCreateKernel( program, "nw_noblocks"             , &status );  assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
-    kernel_rectangles           = clCreateKernel( program, "nw_rectangles"           , &status );  assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
-    kernel_diamonds             = clCreateKernel( program, "nw_diamonds"             , &status );  assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
-    kernel_noblocks_indirectS   = clCreateKernel( program, "nw_noblocks_indirectS"   , &status );  assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
-    kernel_rectangles_indirectS = clCreateKernel( program, "nw_rectangles_indirectS" , &status );  assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
-    kernel_diamonds_indirectS   = clCreateKernel( program, "nw_diamonds_indirectS"   , &status );  assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
-    status = clReleaseProgram( program );                                                          assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
+    auto program = clCreateProgramWithSource( runtime.context, 1, strs.ptr, &size, &status );
+    assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
+    status = clBuildProgram( program, 1, &runtime.device, "", null, null );
+    assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
+    kernel_noblocks             = clCreateKernel( program, "nw_noblocks"             , &status );
+    assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
+    kernel_rectangles           = clCreateKernel( program, "nw_rectangles"           , &status );
+    assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
+    kernel_diamonds             = clCreateKernel( program, "nw_diamonds"             , &status );
+    assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
+    kernel_noblocks_indirectS   = clCreateKernel( program, "nw_noblocks_indirectS"   , &status );
+    assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
+    kernel_rectangles_indirectS = clCreateKernel( program, "nw_rectangles_indirectS" , &status );
+    assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
+    kernel_diamonds_indirectS   = clCreateKernel( program, "nw_diamonds_indirectS"   , &status );
+    assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
+    status = clReleaseProgram( program );
+    assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
 
     static if ( false )
     { // an example of getting the correct maximum work group
@@ -1163,8 +1181,11 @@ main( string[] args )
       try
       {
         runtime.init( p, d );
+        runtime.benchmark();
+        writeln( "==================================================" );
         auto app = new Application( args );
         app.run();
+        writeln( "==================================================" );
         runtime.shutdown();
       }
       catch ( Exception msg )

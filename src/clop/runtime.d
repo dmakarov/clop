@@ -51,22 +51,20 @@ struct Runtime
        *  benchmark the device global memory bandwidth
        */
       __kernel void
-      copy( __global float* out, __global const float* in, int w )
+      copy( __global float* out, __global const float* in )
       {
         int x = get_global_id( 0 );
-        int y = get_global_id( 1 );
-        out[y * w + x] = in[y * w + x];
+        out[x] = in[x];
       }
 
       /**
        *  benchmark compute bound performance
        */
       __kernel void
-      madd( __global float* out, __global const float* in, int w )
+      madd( __global float* out, __global const float* in )
       {
         int x = get_global_id( 0 );
-        int y = get_global_id( 1 );
-        float a = in[y * w + x];
+        float a = in[x];
         float b = 3.9f * a * ( 1.0f - a )
                 - 0.9f * a * ( 2.9f + a )
                 + 2.3f * a * ( 1.3f - a )
@@ -76,7 +74,7 @@ struct Runtime
                 + 1.1f * a * ( 5.3f - a )
                 - 5.9f * a * ( 0.3f + a )
                 + 6.1f * a * ( 0.7f - a );
-        out[y * w + x] = b;
+        out[x] = b;
       }
     }.dup;
     cl_int status;
@@ -105,102 +103,97 @@ struct Runtime
     return platforms;
   }
 
-  void benchmark()
+  double benchmark( cl_int size )
   {
+    double result;
     cl_int status;
     cl_event event;
 
-    for ( cl_int width = 1024; width < 8193; width *= 2 )
-    {
-      cl_float[] image = new cl_float[width * width];
-      cl_mem_flags flags = CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR;
-      cl_mem din  = clCreateBuffer( context, flags, cl_float.sizeof * width * width, image.ptr, &status );
-      assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
-      flags = CL_MEM_WRITE_ONLY;
-      cl_mem dout = clCreateBuffer( context, flags, cl_float.sizeof * width * width, null, &status );
-      assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
+    cl_float[] image = new cl_float[size];
+    cl_mem_flags flags = CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR;
+    cl_mem din  = clCreateBuffer( context, flags, cl_float.sizeof * size, image.ptr, &status );
+    assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
+    flags = CL_MEM_WRITE_ONLY;
+    cl_mem dout = clCreateBuffer( context, flags, cl_float.sizeof * size, null, &status );
+    assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
 
-      status = clSetKernelArg( kernel_copy, 0, cl_mem.sizeof, &dout );
-      assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_copy, 1, cl_mem.sizeof, &din );
-      assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_copy, 2, cl_int.sizeof, &width );
-      assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
+    status = clSetKernelArg( kernel_copy, 0, cl_mem.sizeof, &dout );
+    assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
+    status = clSetKernelArg( kernel_copy, 1, cl_mem.sizeof, &din );
+    assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
 
-      size_t[2] gwsize = [width, width];
-      // warm up, do not measure time.
-      status = clEnqueueNDRangeKernel( queue, kernel_copy, 2, null, gwsize.ptr, null, 0, null, &event );
-      assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
-      status = clWaitForEvents( 1, &event );
-      assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
-      // now a real run with time measurement.
+    size_t gwsize = size;
+    // warm up, do not measure time.
+    status = clEnqueueNDRangeKernel( queue, kernel_copy, 1, null, &gwsize, null, 0, null, &event );
+    assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
+    status = clWaitForEvents( 1, &event );
+    assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
+    // now a real run with time measurement.
 
-      status = clEnqueueNDRangeKernel( queue, kernel_copy, 2, null, gwsize.ptr, null, 0, null, &event );
-      assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
-      status = clWaitForEvents( 1, &event );
-      assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
+    status = clEnqueueNDRangeKernel( queue, kernel_copy, 1, null, &gwsize, null, 0, null, &event );
+    assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
+    status = clWaitForEvents( 1, &event );
+    assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
 
-      cl_ulong start_time;
-      status = clGetEventProfilingInfo ( event                     , // cl_event          event
-                                         CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
-                                         cl_ulong.sizeof           , // size_t            param_value_size
-                                         &start_time               , // void*             param_value
-                                         null                     ); // size_t*           param_value_size_ret
-      assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
-      cl_ulong end_time;
-      status = clGetEventProfilingInfo ( event                     , // cl_event          event
-                                         CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
-                                         cl_ulong.sizeof           , // size_t            param_value_size
-                                         &end_time                 , // void*             param_value
-                                         null                     ); // size_t*           param_value_size_ret
-      assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
+    cl_ulong start_time;
+    status = clGetEventProfilingInfo ( event                     , // cl_event          event
+                                       CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
+                                       cl_ulong.sizeof           , // size_t            param_value_size
+                                       &start_time               , // void*             param_value
+                                       null                     ); // size_t*           param_value_size_ret
+    assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
+    cl_ulong end_time;
+    status = clGetEventProfilingInfo ( event                     , // cl_event          event
+                                       CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
+                                       cl_ulong.sizeof           , // size_t            param_value_size
+                                       &end_time                 , // void*             param_value
+                                       null                     ); // size_t*           param_value_size_ret
+    assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
 
-      writef( "%3d MF, time %5.3f [s], %5.2f GF/s",
-              width * width / ( 1024 * 1024 ),
-              ( end_time - start_time ) / 1E9,
-              width * width * 1E9 / ( 1024 * 1024 * 1024 * ( end_time - start_time ) ) );
+    result = size * 1E9 / ( 1024 * 1024 * ( end_time - start_time ) );
+    writef( "%2d MI: 2 I/O %7.2f MI/s", size / ( 1024 * 1024 ), result );
 
-      status = clSetKernelArg( kernel_madd, 0, cl_mem.sizeof, &dout );
-      assert( status == CL_SUCCESS, "runtime madd benchmark " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_madd, 1, cl_mem.sizeof, &din );
-      assert( status == CL_SUCCESS, "runtime madd benchmark " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_madd, 2, cl_int.sizeof, &width );
-      assert( status == CL_SUCCESS, "runtime madd benchmark " ~ cl_strerror( status ) );
+    status = clSetKernelArg( kernel_madd, 0, cl_mem.sizeof, &dout );
+    assert( status == CL_SUCCESS, "runtime madd benchmark " ~ cl_strerror( status ) );
+    status = clSetKernelArg( kernel_madd, 1, cl_mem.sizeof, &din );
+    assert( status == CL_SUCCESS, "runtime madd benchmark " ~ cl_strerror( status ) );
 
-      status = clEnqueueNDRangeKernel( queue, kernel_madd, 2, null, gwsize.ptr, null, 0, null, &event );
-      assert( status == CL_SUCCESS, "runtime madd benchmark " ~ cl_strerror( status ) );
-      status = clWaitForEvents( 1, &event );
-      assert( status == CL_SUCCESS, "runtime madd benchmark " ~ cl_strerror( status ) );
+    status = clEnqueueNDRangeKernel( queue, kernel_madd, 1, null, &gwsize, null, 0, null, &event );
+    assert( status == CL_SUCCESS, "runtime madd benchmark " ~ cl_strerror( status ) );
+    status = clWaitForEvents( 1, &event );
+    assert( status == CL_SUCCESS, "runtime madd benchmark " ~ cl_strerror( status ) );
 
-      status = clEnqueueNDRangeKernel( queue, kernel_madd, 2, null, gwsize.ptr, null, 0, null, &event );
-      assert( status == CL_SUCCESS, "runtime madd benchmark " ~ cl_strerror( status ) );
-      status = clWaitForEvents( 1, &event );
-      assert( status == CL_SUCCESS, "runtime madd benchmark " ~ cl_strerror( status ) );
+    status = clEnqueueNDRangeKernel( queue, kernel_madd, 1, null, &gwsize, null, 0, null, &event );
+    assert( status == CL_SUCCESS, "runtime madd benchmark " ~ cl_strerror( status ) );
+    status = clWaitForEvents( 1, &event );
+    assert( status == CL_SUCCESS, "runtime madd benchmark " ~ cl_strerror( status ) );
 
-      status = clGetEventProfilingInfo ( event                     , // cl_event          event
-                                         CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
-                                         cl_ulong.sizeof           , // size_t            param_value_size
-                                         &start_time               , // void*             param_value
-                                         null                     ); // size_t*           param_value_size_ret
-      assert( status == CL_SUCCESS, "runtime madd benchmark " ~ cl_strerror( status ) );
-      status = clGetEventProfilingInfo ( event                     , // cl_event          event
-                                         CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
-                                         cl_ulong.sizeof           , // size_t            param_value_size
-                                         &end_time                 , // void*             param_value
-                                         null                     ); // size_t*           param_value_size_ret
-      assert( status == CL_SUCCESS, "runtime madd benchmark " ~ cl_strerror( status ) );
+    status = clGetEventProfilingInfo ( event                     , // cl_event          event
+                                       CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
+                                       cl_ulong.sizeof           , // size_t            param_value_size
+                                       &start_time               , // void*             param_value
+                                       null                     ); // size_t*           param_value_size_ret
+    assert( status == CL_SUCCESS, "runtime madd benchmark " ~ cl_strerror( status ) );
+    status = clGetEventProfilingInfo ( event                     , // cl_event          event
+                                       CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
+                                       cl_ulong.sizeof           , // size_t            param_value_size
+                                       &end_time                 , // void*             param_value
+                                       null                     ); // size_t*           param_value_size_ret
+    assert( status == CL_SUCCESS, "runtime madd benchmark " ~ cl_strerror( status ) );
 
-      writefln( ", %5.2f GF/s", width * width * 1E9 / ( 1024 * 1024 * 1024 * ( end_time - start_time ) ) );
+    writefln( ", 2 I/O + 27 FP %7.2f MI/s", size * 1E9 / ( 1024 * 1024 * ( end_time - start_time ) ) );
 
-      status = clReleaseMemObject( din );
-      assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
-      status = clReleaseMemObject( dout );
-      assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
-    }
+    status = clReleaseMemObject( din );
+    assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
+    status = clReleaseMemObject( dout );
+    assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
+
     status = clReleaseKernel( kernel_copy );
     assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
     status = clReleaseKernel( kernel_madd );
     assert( status == CL_SUCCESS, "runtime madd benchmark " ~ cl_strerror( status ) );
+
+    return result;
   }
 
   /**

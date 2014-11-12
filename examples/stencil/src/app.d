@@ -406,8 +406,11 @@ class Application {
     }
   }
 
-  void opencl_stencil_7pt_noblocks()
+  double opencl_stencil_7pt_noblocks()
   {
+    double result;
+    cl_event event;
+
     try
     {
       cl_int status;
@@ -435,7 +438,7 @@ class Application {
                                        null                       ,    //
                                        0                          ,    //
                                        null                       ,    //
-                                       null                      );    //
+                                       &event                    );    //
       assert( status == CL_SUCCESS, "opencl_stencil_7pt_noblocks " ~ cl_strerror( status ) );
 
       status = clEnqueueReadBuffer( runtime.queue                    , //
@@ -448,6 +451,23 @@ class Application {
                                     null                             , //
                                     null                            ); //
       assert( status == CL_SUCCESS, "opencl_stencil_7pt_noblocks " ~ cl_strerror( status ) );
+
+      cl_ulong start_time;
+      status = clGetEventProfilingInfo ( event                     , // cl_event          event
+                                         CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
+                                         cl_ulong.sizeof           , // size_t            param_value_size
+                                         &start_time               , // void*             param_value
+                                         null                     ); // size_t*           param_value_size_ret
+      assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
+      cl_ulong end_time;
+      status = clGetEventProfilingInfo ( event                     , // cl_event          event
+                                         CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
+                                         cl_ulong.sizeof           , // size_t            param_value_size
+                                         &end_time                 , // void*             param_value
+                                         null                     ); // size_t*           param_value_size_ret
+      assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
+      result = (xdim - 2) * (ydim - 2) * (zdim - 2) * 1E9 / ( 1024 * 1024 * ( end_time - start_time ) );
+
       status = clReleaseMemObject( du );
       assert( status == CL_SUCCESS, "opencl_stencil_7pt_noblocks " ~ cl_strerror( status ) );
       status = clReleaseMemObject( dv );
@@ -461,6 +481,7 @@ class Application {
     {
       writeln( e );
     }
+    return result;
   }
 
   void opencl_stencil_7pt_shared()
@@ -557,8 +578,11 @@ class Application {
     }
   }
 
-  void opencl_stencil_25pt_noblocks()
+  double opencl_stencil_25pt_noblocks()
   {
+    double result;
+    cl_event event;
+
     try
     {
       cl_int status;
@@ -586,7 +610,7 @@ class Application {
                                        null                       ,    //
                                        0                          ,    //
                                        null                       ,    //
-                                       null                      );    //
+                                       &event                    );    //
       assert( status == CL_SUCCESS, "opencl_stencil_25pt_noblocks " ~ cl_strerror( status ) );
 
       status = clEnqueueReadBuffer( runtime.queue                    , //
@@ -599,6 +623,23 @@ class Application {
                                     null                             , //
                                     null                            ); //
       assert( status == CL_SUCCESS, "opencl_stencil_25pt_noblocks " ~ cl_strerror( status ) );
+
+      cl_ulong start_time;
+      status = clGetEventProfilingInfo ( event                     , // cl_event          event
+                                         CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
+                                         cl_ulong.sizeof           , // size_t            param_value_size
+                                         &start_time               , // void*             param_value
+                                         null                     ); // size_t*           param_value_size_ret
+      assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
+      cl_ulong end_time;
+      status = clGetEventProfilingInfo ( event                     , // cl_event          event
+                                         CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
+                                         cl_ulong.sizeof           , // size_t            param_value_size
+                                         &end_time                 , // void*             param_value
+                                         null                     ); // size_t*           param_value_size_ret
+      assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
+      result = (xdim - 8) * (ydim - 8) * (zdim - 8) * 1E9 / ( 1024 * 1024 * ( end_time - start_time ) );
+
       status = clReleaseMemObject( du );
       assert( status == CL_SUCCESS, "opencl_stencil_25pt_noblocks " ~ cl_strerror( status ) );
       status = clReleaseMemObject( dv );
@@ -612,6 +653,7 @@ class Application {
     {
       writeln( e );
     }
+    return result;
   }
 
   void opencl_stencil_25pt_shared()
@@ -641,15 +683,15 @@ class Application {
 
       size_t[3] global = [zdim, ydim, xdim];
       size_t[3] local  = [BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE];
-      status = clEnqueueNDRangeKernel( runtime.queue             ,     // cl_command_queue command_queue
-                                       kernel_stencil_25pt_shared,     // cl_kernel        kernel
-                                       3                         ,     // cl_uint          work_dim
-                                       null                      ,     // const size_t*    global_work_offset
-                                       global.ptr                ,     // const size_t*    global_work_size
-                                       local.ptr                 ,     // const size_t*    local_work_size
-                                       0                         ,     // cl_uint          num_events_in_wait_list
-                                       null                      ,     // const cl_event*  event_wait_list
-                                       null                     );     // cl_event*        event
+      status = clEnqueueNDRangeKernel( runtime.queue                 , // cl_command_queue command_queue
+                                       kernel_stencil_25pt_shared    , // cl_kernel        kernel
+                                       3                             , // cl_uint          work_dim
+                                       null                          , // const size_t*    global_work_offset
+                                       global.ptr                    , // const size_t*    global_work_size
+                                       local.ptr                     , // const size_t*    local_work_size
+                                       0                             , // cl_uint          num_events_in_wait_list
+                                       null                          , // const cl_event*  event_wait_list
+                                       null                         ); // cl_event*        event
       assert( status == CL_SUCCESS, "opencl_stencil_25pt_shared " ~ cl_strerror( status ) );
 
       status = clEnqueueReadBuffer( runtime.queue                    , // cl_command_queue command_queue
@@ -684,25 +726,28 @@ class Application {
     size_t size;
     StopWatch timer;
     TickDuration ticks;
+    double benchmark = runtime.benchmark( (xdim - 2) * (ydim - 2) * (zdim - 2) );
+    double rate;
 
     timer.start();
     sequential_stencil_7pt();
     timer.stop();
     ticks = timer.peek();
-    writefln( "%2d MP  7pt SEQUENTIAL %5.3f [s], %5.3f GP/s",
+    writefln( "%2d MI  7pt SEQUENTIAL %5.3f [s], %7.2f MI/s",
               xdim * ydim * zdim / ( 1024 * 1024 ),
               ticks.usecs / 1E6,
-              xdim * ydim * zdim * 1E6 / ( 1024 * 1024 * 1024 * ticks.usecs ) );
+              xdim * ydim * zdim * 1E6 / ( 1024 * 1024 * ticks.usecs ) );
 
     timer.reset();
     timer.start();
-    opencl_stencil_7pt_noblocks();
+    rate = opencl_stencil_7pt_noblocks();
     timer.stop();
     ticks = timer.peek();
-    writefln( "%2d MP  7pt NO BLOCKS  %5.3f [s], %5.3f GP/s",
+    writefln( "%2d MI  7pt NO BLOCKS  %5.3f [s], %7.2f MI/s, estimated %7.2f MI/s",
               xdim * ydim * zdim / ( 1024 * 1024 ),
               ticks.usecs / 1E6,
-              xdim * ydim * zdim * 1E6 / ( 1024 * 1024 * 1024 * ticks.usecs ) );
+              rate, // xdim * ydim * zdim * 1E6 / ( 1024 * 1024 * ticks.usecs ),
+              2 * benchmark / 15 );
     validate();
 
     clGetKernelWorkGroupInfo( kernel_stencil_7pt_shared,
@@ -718,10 +763,10 @@ class Application {
       opencl_stencil_7pt_shared();
       timer.stop();
       ticks = timer.peek();
-      writefln( "%2d MP  7pt SHARED     %5.3f [s], %5.3f GP/s",
+      writefln( "%2d MI  7pt SHARED     %5.3f [s], %7.2f MI/s",
                 xdim * ydim * zdim / ( 1024 * 1024 ),
                 ticks.usecs / 1E6,
-                xdim * ydim * zdim * 1E6 / ( 1024 * 1024 * 1024 * ticks.usecs ) );
+                xdim * ydim * zdim * 1E6 / ( 1024 * 1024 * ticks.usecs ) );
       validate();
     }
     else
@@ -736,20 +781,21 @@ class Application {
     sequential_stencil_25pt();
     timer.stop();
     ticks = timer.peek();
-    writefln( "%2d MP 25pt SEQUENTIAL %5.3f [s], %5.3f GP/s",
+    writefln( "%2d MI 25pt SEQUENTIAL %5.3f [s], %7.2f MI/s",
               xdim * ydim * zdim / ( 1024 * 1024 ),
               ticks.usecs / 1E6,
-              xdim * ydim * zdim * 1E6 / ( 1024 * 1024 * 1024 * ticks.usecs ) );
+              xdim * ydim * zdim * 1E6 / ( 1024 * 1024 * ticks.usecs ) );
 
     timer.reset();
     timer.start();
-    opencl_stencil_25pt_noblocks();
+    rate = opencl_stencil_25pt_noblocks();
     timer.stop();
     ticks = timer.peek();
-    writefln( "%2d MP 25pt NO BLOCKS  %5.3f [s], %5.3f GP/s",
+    writefln( "%2d MI 25pt NO BLOCKS  %5.3f [s], %7.2f MI/s, estimated %7.2f MI/s",
               xdim * ydim * zdim / ( 1024 * 1024 ),
               ticks.usecs / 1E6,
-              xdim * ydim * zdim * 1E6 / ( 1024 * 1024 * 1024 * ticks.usecs ) );
+              rate, // xdim * ydim * zdim * 1E6 / ( 1024 * 1024 * ticks.usecs ),
+              2 * benchmark / 39 );
     validate();
 
     clGetKernelWorkGroupInfo( kernel_stencil_25pt_shared,
@@ -765,10 +811,10 @@ class Application {
       opencl_stencil_25pt_shared();
       timer.stop();
       ticks = timer.peek();
-      writefln( "%2d MP 25pt SHARED     %5.3f [s], %5.3f GP/s",
+      writefln( "%2d MI 25pt SHARED     %5.3f [s], %7.2f MI/s",
                 xdim * ydim * zdim / ( 1024 * 1024 ),
                 ticks.usecs / 1E6,
-                xdim * ydim * zdim * 1E6 / ( 1024 * 1024 * 1024 * ticks.usecs ) );
+                xdim * ydim * zdim * 1E6 / ( 1024 * 1024 * ticks.usecs ) );
       validate();
     }
     else
@@ -788,7 +834,6 @@ main( string[] args )
       try
       {
         runtime.init( p, d );
-        runtime.benchmark();
         writeln( "==================================================" );
         auto app = new Application( args );
         app.run();
