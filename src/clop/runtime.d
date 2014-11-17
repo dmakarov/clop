@@ -25,23 +25,34 @@ struct Runtime
     if ( !has_platform_ids )
     {
       DerelictCL.load();
-      status = clGetPlatformIDs( 0, null, &num_platforms );                                  assert( status == CL_SUCCESS && num_platforms > 0 && platform_id < num_platforms, "No OpenCL platform found: " ~ cl_strerror( status ) );
-      platform_ids = new cl_platform_id[num_platforms];                                      assert( platform_ids != null, "Can't allocate array of OpenCL platform IDs." );
-      status = clGetPlatformIDs( num_platforms, platform_ids.ptr, null );                    assert( status == CL_SUCCESS, "Can't get OpenCL platform IDs: " ~ cl_strerror( status ) );
+      status = clGetPlatformIDs( 0, null, &num_platforms );
+      assert( status == CL_SUCCESS && num_platforms > 0 && platform_id < num_platforms, "No OpenCL platform found: " ~ cl_strerror( status ) );
+      platform_ids = new cl_platform_id[num_platforms];
+      assert( platform_ids != null, "Can't allocate array of OpenCL platform IDs." );
+      status = clGetPlatformIDs( num_platforms, platform_ids.ptr, null );
+      assert( status == CL_SUCCESS, "Can't get OpenCL platform IDs: " ~ cl_strerror( status ) );
     }
     auto platform = platform_ids[platform_id];
-    status = clGetDeviceIDs( platform, CL_DEVICE_TYPE_ALL, 0, null, &num_devices );          assert( status == CL_SUCCESS && num_devices > 0 && device_id < num_devices, "No OpenCL device found:" ~ cl_strerror( status ) );
-    auto devices = new cl_device_id[num_devices];                                            assert( devices != null, "Can't allocate array of OpenCL device IDs." );
-    status = clGetDeviceIDs( platform, CL_DEVICE_TYPE_ALL, num_devices, devices.ptr, null ); assert( status == CL_SUCCESS, "Can't get OpenCL device IDs: " ~ cl_strerror( status ) );
+    status = clGetDeviceIDs( platform, CL_DEVICE_TYPE_ALL, 0, null, &num_devices );
+    assert( status == CL_SUCCESS && num_devices > 0 && device_id < num_devices, "No OpenCL device found:" ~ cl_strerror( status ) );
+    auto devices = new cl_device_id[num_devices];
+    assert( devices != null, "Can't allocate array of OpenCL device IDs." );
+    status = clGetDeviceIDs( platform, CL_DEVICE_TYPE_ALL, num_devices, devices.ptr, null );
+    assert( status == CL_SUCCESS, "Can't get OpenCL device IDs: " ~ cl_strerror( status ) );
     device = devices[device_id];
-    context = clCreateContext( null, 1, &device, null, null, &status );                      assert( status == CL_SUCCESS, "Can't create OpenCL context: " ~ cl_strerror( status ) );
-    queue = clCreateCommandQueue( context, device, CL_QUEUE_PROFILING_ENABLE, &status );     assert( status == CL_SUCCESS, "Can't create OpenCL command queue:" ~ cl_strerror( status ) );
+    context = clCreateContext( null, 1, &device, null, null, &status );
+    assert( status == CL_SUCCESS, "Can't create OpenCL context: " ~ cl_strerror( status ) );
+    queue = clCreateCommandQueue( context, device, CL_QUEUE_PROFILING_ENABLE, &status );
+    assert( status == CL_SUCCESS, "Can't create OpenCL command queue:" ~ cl_strerror( status ) );
     if ( verbose )
     {
       size_t value_size;
-      status = clGetDeviceInfo( device, CL_DEVICE_NAME, 0, null, &value_size );              assert( value_size > 0, "Can't get the device name: " ~ cl_strerror( status ) );
-      char[] buffer = new char[value_size];                                                  assert( buffer != null, "Can't allocate buffer to hold the device name." );
-      status = clGetDeviceInfo( device, CL_DEVICE_NAME, value_size, buffer.ptr, null );      assert( status == CL_SUCCESS, "Can't get the device name: " ~ cl_strerror( status ) );
+      status = clGetDeviceInfo( device, CL_DEVICE_NAME, 0, null, &value_size );
+      assert( value_size > 0, "Can't get the device name: " ~ cl_strerror( status ) );
+      char[] buffer = new char[value_size];
+      assert( buffer != null, "Can't allocate buffer to hold the device name." );
+      status = clGetDeviceInfo( device, CL_DEVICE_NAME, value_size, buffer.ptr, null );
+      assert( status == CL_SUCCESS, "Can't get the device name: " ~ cl_strerror( status ) );
       if ( buffer[$ - 1] == '\0' ) buffer.length -= 1;
       writefln( "OpenCL device: \"%s\"", buffer );
     }
@@ -72,7 +83,6 @@ struct Runtime
                 + 0.7f * a * ( 0.5f - a )
                 - 1.9f * a * ( 2.3f + a )
                 + 1.1f * a * ( 5.3f - a )
-                - 5.9f * a * ( 0.3f + a )
                 + 6.1f * a * ( 0.7f - a );
         out[x] = b;
       }
@@ -80,20 +90,29 @@ struct Runtime
     cl_int status;
     size_t size = code.length;
     char*[] strs = [code.ptr];
-    auto program = clCreateProgramWithSource( context, 1, strs.ptr, &size, &status );        assert( status == CL_SUCCESS, "Can't create program with source " ~ cl_strerror( status ) );
-    status = clBuildProgram( program, 1, &device, "", null, null );                          assert( status == CL_SUCCESS, "Can't build program " ~ cl_strerror( status ) );
-    kernel_copy = clCreateKernel( program, "copy", &status );                                assert( status == CL_SUCCESS, "Can't create kernel copy " ~ cl_strerror( status ) );
-    kernel_madd = clCreateKernel( program, "madd", &status );                                assert( status == CL_SUCCESS, "Can't create kernel madd " ~ cl_strerror( status ) );
-    status = clReleaseProgram( program );                                                    assert( status == CL_SUCCESS, "Can't release program " ~ cl_strerror( status ) );
+    auto program = clCreateProgramWithSource( context, 1, strs.ptr, &size, &status );
+    assert( status == CL_SUCCESS, "Can't create program with source " ~ cl_strerror( status ) );
+    status = clBuildProgram( program, 1, &device, "", null, null );
+    assert( status == CL_SUCCESS, "Can't build program " ~ cl_strerror( status ) );
+    kernel_copy = clCreateKernel( program, "copy", &status );
+    assert( status == CL_SUCCESS, "Can't create kernel copy " ~ cl_strerror( status ) );
+    kernel_madd = clCreateKernel( program, "madd", &status );
+    assert( status == CL_SUCCESS, "Can't create kernel madd " ~ cl_strerror( status ) );
+    status = clReleaseProgram( program );
+    assert( status == CL_SUCCESS, "Can't release program " ~ cl_strerror( status ) );
   }
 
   uint[] get_platforms()
   {
     DerelictCL.load();
-    status = clGetPlatformIDs( 0, null, &num_platforms );                                    assert( status == CL_SUCCESS, "No OpenCL platform found: " ~ cl_strerror( status ) );
-    platform_ids = new cl_platform_id[num_platforms];                                        assert( platform_ids != null, "Can't allocate array of OpenCL platform IDs." );
-    status = clGetPlatformIDs( num_platforms, platform_ids.ptr, null );                      assert( status == CL_SUCCESS, "Can't get OpenCL platform IDs: " ~ cl_strerror( status ) );
-    auto platforms = new uint[num_platforms];                                                assert( platforms != null, "Can't allocate array of platforms." );
+    status = clGetPlatformIDs( 0, null, &num_platforms );
+    assert( status == CL_SUCCESS, "No OpenCL platform found: " ~ cl_strerror( status ) );
+    platform_ids = new cl_platform_id[num_platforms];
+    assert( platform_ids != null, "Can't allocate array of OpenCL platform IDs." );
+    status = clGetPlatformIDs( num_platforms, platform_ids.ptr, null );
+    assert( status == CL_SUCCESS, "Can't get OpenCL platform IDs: " ~ cl_strerror( status ) );
+    auto platforms = new uint[num_platforms];
+    assert( platforms != null, "Can't allocate array of platforms." );
     foreach ( p; 0 .. platforms.length )
     {
       status = clGetDeviceIDs( platform_ids[p], CL_DEVICE_TYPE_ALL, 0, null, &platforms[p] );
@@ -151,7 +170,7 @@ struct Runtime
     assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );
 
     result = size * 1E9 / ( 1024 * 1024 * ( end_time - start_time ) );
-    writef( "%2d MI: 2 I/O %7.2f MI/s", size / ( 1024 * 1024 ), result );
+    writef( "%2.0f MI: 2 I/O %7.2f MI/s", size / ( 1024.0 * 1024.0 ), result );
 
     status = clSetKernelArg( kernel_madd, 0, cl_mem.sizeof, &dout );
     assert( status == CL_SUCCESS, "runtime madd benchmark " ~ cl_strerror( status ) );
@@ -181,7 +200,7 @@ struct Runtime
                                        null                     ); // size_t*           param_value_size_ret
     assert( status == CL_SUCCESS, "runtime madd benchmark " ~ cl_strerror( status ) );
 
-    writefln( ", 2 I/O + 27 FP %7.2f MI/s", size * 1E9 / ( 1024 * 1024 * ( end_time - start_time ) ) );
+    writefln( ", 2 I/O + 24 FP %7.2f MI/s", size * 1E9 / ( 1024 * 1024 * ( end_time - start_time ) ) );
 
     status = clReleaseMemObject( din );
     assert( status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror( status ) );

@@ -291,8 +291,11 @@ class Application {
     }
   }
 
-  void opencl_noblocks()
+  double opencl_noblocks( bool cleanup )
   {
+    double result = 0.0;
+    cl_event event;
+
     foreach ( c; 0 .. cols )
       sums[c] = data[c];
     cl_int status;
@@ -306,17 +309,26 @@ class Application {
     flags = CL_MEM_READ_WRITE;
     dsums[1] = clCreateBuffer( runtime.context, flags, cl_int.sizeof * cols, null, &status );                               assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
 
+    status = clSetKernelArg( kernel_noblocks,  0, cl_mem.sizeof, &ddata );                                                assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
+    status = clSetKernelArg( kernel_noblocks,  3, cl_mem.sizeof, &dmove );                                                assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
+    status = clSetKernelArg( kernel_noblocks,  4, cl_int.sizeof, &cols );                                                 assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
+
     int src = 0;
     size_t gwsize = cols;
+
+    StopWatch timer;
+    TickDuration ticks;
+    double ittime = 0.0;
+    int itcount = 0;
+
     foreach ( step; 1 .. rows )
     {
+    timer.reset();
+    timer.start();
       int dst = 1 - src;
 
-      status = clSetKernelArg( kernel_noblocks,  0, cl_mem.sizeof, &ddata );                                                assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
       status = clSetKernelArg( kernel_noblocks,  1, cl_mem.sizeof, &dsums[src] );                                           assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
       status = clSetKernelArg( kernel_noblocks,  2, cl_mem.sizeof, &dsums[dst] );                                           assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_noblocks,  3, cl_mem.sizeof, &dmove );                                                assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_noblocks,  4, cl_int.sizeof, &cols );                                                 assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
       status = clSetKernelArg( kernel_noblocks,  5, cl_int.sizeof, &step );                                                 assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
 
       status = clEnqueueNDRangeKernel( runtime.queue                   ,
@@ -327,11 +339,34 @@ class Application {
                                        null                            ,
                                        0                               ,
                                        null                            ,
-                                       null                           );
+                                       &event                         );
       assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
+      status = clWaitForEvents( 1, &event );
+      assert( status == CL_SUCCESS, "opencl_stencil_25pt_shared " ~ cl_strerror( status ) );
+
+      cl_ulong start_time;
+      status = clGetEventProfilingInfo ( event                     , // cl_event          event
+                                         CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
+                                         cl_ulong.sizeof           , // size_t            param_value_size
+                                         &start_time               , // void*             param_value
+                                         null                     ); // size_t*           param_value_size_ret
+      assert( status == CL_SUCCESS, "opencl_stencil_25pt_shared " ~ cl_strerror( status ) );
+      cl_ulong end_time;
+      status = clGetEventProfilingInfo ( event                     , // cl_event          event
+                                         CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
+                                         cl_ulong.sizeof           , // size_t            param_value_size
+                                         &end_time                 , // void*             param_value
+                                         null                     ); // size_t*           param_value_size_ret
+      assert( status == CL_SUCCESS, "opencl_stencil_25pt_shared " ~ cl_strerror( status ) );
+      result += ( end_time - start_time ) / 1E9;
 
       src = dst;
+    timer.stop();
+    ticks = timer.peek();
+    ittime += ticks.usecs / 1E6;
+    itcount += 1;
     }
+    writefln( "%d iterations in %f s, average iteration time %f", itcount, ittime, ittime / itcount );
 
     status = clEnqueueReadBuffer( runtime.queue              ,
                                   dsums[src]                 ,
@@ -358,11 +393,19 @@ class Application {
     status = clReleaseMemObject( dsums[0] );                                                                                assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
     status = clReleaseMemObject( dmove );                                                                                   assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
     status = clReleaseMemObject( ddata );                                                                                   assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
-    status = clReleaseKernel( kernel_noblocks );                                                                            assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
+    if ( cleanup )
+    {
+      status = clReleaseKernel( kernel_noblocks );
+      assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
+    }
+    return result;
   }
 
-  void opencl_ghost_zone()
+  double opencl_ghost_zone( bool cleanup )
   {
+    double result = 0.0;
+    cl_event event;
+
     foreach ( c; 0 .. cols )
       sums[c] = data[c];
     cl_int status;
@@ -406,8 +449,26 @@ class Application {
                                        &lwsize,
                                        0,
                                        null,
-                                       null );
+                                       &event );
       assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
+      status = clWaitForEvents( 1, &event );
+      assert( status == CL_SUCCESS, "opencl_stencil_25pt_shared " ~ cl_strerror( status ) );
+
+      cl_ulong start_time;
+      status = clGetEventProfilingInfo ( event                     , // cl_event          event
+                                         CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
+                                         cl_ulong.sizeof           , // size_t            param_value_size
+                                         &start_time               , // void*             param_value
+                                         null                     ); // size_t*           param_value_size_ret
+      assert( status == CL_SUCCESS, "opencl_stencil_25pt_shared " ~ cl_strerror( status ) );
+      cl_ulong end_time;
+      status = clGetEventProfilingInfo ( event                     , // cl_event          event
+                                         CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
+                                         cl_ulong.sizeof           , // size_t            param_value_size
+                                         &end_time                 , // void*             param_value
+                                         null                     ); // size_t*           param_value_size_ret
+      assert( status == CL_SUCCESS, "opencl_stencil_25pt_shared " ~ cl_strerror( status ) );
+      result += ( end_time - start_time ) / 1E9;
 
       src = dst;
     }
@@ -437,7 +498,12 @@ class Application {
     status = clReleaseMemObject( dsums[0] );                                                                                assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
     status = clReleaseMemObject( dmove );                                                                                   assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
     status = clReleaseMemObject( ddata );                                                                                   assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
-    status = clReleaseKernel( kernel_ghost_zone );                                                                          assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
+    if ( cleanup )
+    {
+      status = clReleaseKernel( kernel_ghost_zone );
+      assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
+    }
+    return result;
   }
 
   /**
@@ -492,7 +558,7 @@ class Application {
     baseline();
     timer.stop();
     ticks = timer.peek();
-    writefln( "%2d MI SEQUENTIAL %5.3f [s], %7.2f MI/s",
+    writefln( "%2d MI SEQUENTIAL %5.3f [s],         %7.2f MI/s",
               rows * cols / ( 1024 * 1024 ),
               ticks.usecs / 1E6,
               rows * cols * 1E6 / ( 1024 * 1024 * ticks.usecs ) );
@@ -502,22 +568,24 @@ class Application {
     ghost_zone_blocks();
     timer.stop();
     ticks = timer.peek();
-    writefln( "%2d MP GHOST ZONE %5.3f [s], %7.2f MI/s",
+    writefln( "%2d MI GHOST ZONE %5.3f [s],         %7.2f MI/s",
               rows * cols / ( 1024 * 1024 ),
               ticks.usecs / 1E6,
               rows * cols * 1E6 / ( 1024 * 1024 * ticks.usecs ) );
     validate();
 
     reset();
+    rate = opencl_noblocks( false );
+    reset();
     timer.reset();
     timer.start();
-    opencl_noblocks();
+    rate = opencl_noblocks( true );
     timer.stop();
     ticks = timer.peek();
-    writefln( "%2d MI CL NOBLOCK %5.3f [s], %7.2f MI/s, estimated %7.2f MI/s",
+    writefln( "%2d MI CL NOBLOCK %5.3f (%5.3f) [s], %7.2f MI/s, estimated %7.2f MI/s",
               rows * cols / ( 1024 * 1024 ),
-              ticks.usecs / 1E6,
-              rows * cols * 1E6 / ( 1024 * 1024 * ticks.usecs ),
+              ticks.usecs / 1E6, rate,
+              (rows - 1) * cols / ( 1024 * 1024 * rate ),
               2 * benchmark / 6 );
     validate();
 
@@ -530,15 +598,17 @@ class Application {
     if ( size >= BLOCK_SIZE + 2 * ( height - 1 ) )
     {
       reset();
+      rate = opencl_ghost_zone( false );
+      reset();
       timer.reset();
       timer.start();
-      opencl_ghost_zone();
+      rate = opencl_ghost_zone( true );
       timer.stop();
       ticks = timer.peek();
-      writefln( "%2d MI CL GHOST Z %5.3f [s], %7.2f MI/s",
+      writefln( "%2d MI CL GHOST Z %5.3f (%5.3f) [s], %7.2f MI/s",
                 rows * cols / ( 1024 * 1024 ),
-                ticks.usecs / 1E6,
-                rows * cols * 1E6 / ( 1024 * 1024 * ticks.usecs ) );
+                ticks.usecs / 1E6, rate,
+                (rows - 1) * cols / ( 1024 * 1024 * rate ) );
       validate();
     }
   }
