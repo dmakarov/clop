@@ -104,12 +104,12 @@ class Application {
                                           __global const FLOAT_PRECISION * v,
                                           __global const FLOAT_PRECISION * coef )
       {
-        size_t tz = get_global_id( 0 ) + 1;
+        size_t tx = get_global_id( 0 ) + 1;
         size_t ty = get_global_id( 1 ) + 1;
-        size_t tx = get_global_id( 2 ) + 1;
-        size_t zdim = get_global_size( 0 ) + 2;
+        size_t tz = get_global_id( 2 ) + 1;
+        size_t xdim = get_global_size( 0 ) + 2;
         size_t ydim = get_global_size( 1 ) + 2;
-        size_t xdim = get_global_size( 2 ) + 2;
+        size_t zdim = get_global_size( 2 ) + 2;
 
         u[V(tz,ty,tx)] = coef[C(0,tz,ty,tx)] * v[V(tz    ,ty    ,tx    )]
                        + coef[C(1,tz,ty,tx)] * v[V(tz    ,ty    ,tx - 1)]
@@ -124,13 +124,13 @@ class Application {
                                         __global const FLOAT_PRECISION * v,
                                         __global const FLOAT_PRECISION * coef )
       {
-        size_t tz = get_global_id( 0 );
+        size_t tx = get_global_id( 0 );
         size_t ty = get_global_id( 1 );
-        size_t tx = get_global_id( 2 );
-        size_t bs = get_local_size( 2 );
-        size_t zdim = get_global_size( 0 );
+        size_t tz = get_global_id( 2 );
+        size_t bs = get_local_size( 0 );
+        size_t xdim = get_global_size( 0 );
         size_t ydim = bs * get_global_size( 1 );
-        size_t xdim = get_global_size( 2 );
+        size_t zdim = get_global_size( 2 );
 
         for ( int y = 0; y < bs; ++y )
           if ( 0 < tz && tz < zdim - 1 && 0 < bs * ty + y && bs * ty + y < ydim - 1 && 0 < tx && tx < xdim - 1 )
@@ -149,18 +149,18 @@ class Application {
                                         __global const FLOAT_PRECISION * coef,
                                         __local        FLOAT_PRECISION * lv/*, __local        FLOAT_PRECISION * lc*/ )
       {
-        size_t iz = get_local_id( 0 ) + 1;
+        size_t ix = get_local_id( 0 ) + 1;
         size_t iy = get_local_id( 1 ) + 1;
-        size_t ix = get_local_id( 2 ) + 1;
-        size_t gz = get_local_size( 0 ) + 2;
+        size_t iz = get_local_id( 2 ) + 1;
+        size_t gx = get_local_size( 0 ) + 2;
         size_t gy = get_local_size( 1 ) + 2;
-        size_t gx = get_local_size( 2 ) + 2;
-        size_t tz = get_global_id( 0 );
+        size_t gz = get_local_size( 2 ) + 2;
+        size_t tx = get_global_id( 0 );
         size_t ty = get_global_id( 1 );
-        size_t tx = get_global_id( 2 );
-        size_t zdim = get_global_size( 0 );
+        size_t tz = get_global_id( 2 );
+        size_t xdim = get_global_size( 0 );
         size_t ydim = get_global_size( 1 );
-        size_t xdim = get_global_size( 2 );
+        size_t zdim = get_global_size( 2 );
 
         lv[LV(iz,iy,ix)] = v[V(tz,ty,tx)];
         /*for ( int ii = 0; ii < 7; ++ii )
@@ -226,12 +226,12 @@ class Application {
                                            __global const FLOAT_PRECISION * v,
                                            __global const FLOAT_PRECISION * coef )
       {
-        size_t tz = get_global_id( 0 ) + 4;
+        size_t tx = get_global_id( 0 ) + 4;
         size_t ty = get_global_id( 1 ) + 4;
-        size_t tx = get_global_id( 2 ) + 4;
-        size_t zdim = get_global_size( 0 ) + 8;
+        size_t tz = get_global_id( 2 ) + 4;
+        size_t xdim = get_global_size( 0 ) + 8;
         size_t ydim = get_global_size( 1 ) + 8;
-        size_t xdim = get_global_size( 2 ) + 8;
+        size_t zdim = get_global_size( 2 ) + 8;
 
         u[V(tz,ty,tx)] = coef[C( 0,tz,ty,tx)] *   v[V(tz    ,ty    ,tx    )]
                        + coef[C( 1,tz,ty,tx)] * ( v[V(tz    ,ty    ,tx - 1)] + v[V(tz    ,ty    ,tx + 1)] )
@@ -252,13 +252,13 @@ class Application {
                                          __global const FLOAT_PRECISION * v,
                                          __global const FLOAT_PRECISION * coef )
       {
-        size_t tz = get_global_id( 0 );
+        size_t tx = get_global_id( 0 );
         size_t ty = get_global_id( 1 );
-        size_t tx = get_global_id( 2 );
+        size_t tz = get_global_id( 2 );
         size_t bs = get_local_size( 2 );
-        size_t zdim = get_global_size( 0 );
+        size_t xdim = get_global_size( 0 );
         size_t ydim = get_global_size( 1 ) * bs;
-        size_t xdim = get_global_size( 2 );
+        size_t zdim = get_global_size( 2 );
 
         for ( int y = 0; y < bs; ++y )
           if ( 0 < tz && tz < zdim - 1 && 0 < bs * ty + y && bs * ty + y < ydim - 1 && 0 < tx && tx < xdim - 1 )
@@ -283,18 +283,18 @@ class Application {
                                          __global const FLOAT_PRECISION * coef,
                                          __local        FLOAT_PRECISION * lv )
       {
-        size_t iz = get_local_id( 0 ) + 4;
+        size_t ix = get_local_id( 0 ) + 4;
         size_t iy = get_local_id( 1 ) + 4;
-        size_t ix = get_local_id( 2 ) + 4;
-        size_t gz = get_local_size( 0 ) + 8;
+        size_t iz = get_local_id( 2 ) + 4;
+        size_t gx = get_local_size( 0 ) + 8;
         size_t gy = get_local_size( 1 ) + 8;
-        size_t gx = get_local_size( 2 ) + 8;
-        size_t tz = get_global_id( 0 );
+        size_t gz = get_local_size( 2 ) + 8;
+        size_t tx = get_global_id( 0 );
         size_t ty = get_global_id( 1 );
-        size_t tx = get_global_id( 2 );
-        size_t zdim = get_global_size( 0 );
+        size_t tz = get_global_id( 2 );
+        size_t xdim = get_global_size( 0 );
         size_t ydim = get_global_size( 1 );
-        size_t xdim = get_global_size( 2 );
+        size_t zdim = get_global_size( 2 );
 
         lv[LV(iz,iy,ix)] = v[V(tz,ty,tx)];
         if ( 4 == iz && 3 < tz )

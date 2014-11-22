@@ -15,6 +15,7 @@ struct Compiler
   uint[string] localtab;
   string declarations;
   string range;
+  string transformations;
   bool global_scope;
   bool internal;
 
@@ -24,6 +25,7 @@ struct Compiler
     //    localtab.length = 0;
     declarations = null;
     range = null;
+    transformations = null;
     source = expr;
     internal = false;
     global_scope = false;
@@ -42,11 +44,12 @@ struct Compiler
     case "CLOP":
       return evaluate( t.children[0] );
     case "CLOP.Identifier":
-      if ( global_scope && !is_local( t.matches[0] ) )
-        add_symbol( t.matches[0] );
+      string s = t.matches[0];
+      if ( global_scope && !is_local( s ) )
+        add_symbol( s );
       else
-        add_local( t.matches[0] );
-      return t.matches[0];
+        add_local( s );
+      return s;
     case "CLOP.FloatLiteral":
     case "CLOP.IntegerLiteral":
       return t.matches[0];
@@ -133,27 +136,68 @@ struct Compiler
       foreach ( c; t.children ) s ~= evaluate( c );
       return s ~ "}\n";
     case "CLOP.RangeSpec":
-      add_local( t.matches[0] );
-      range = t.matches[4].dup;
-      /+
-      string s = "foreach (";
-      foreach (c ; t.matches) s ~= " " ~ c;
-      return s ~ " )\n";
-      +/
-      string result;
-      if ( internal )
-        result = "  int " ~ t.matches[0] ~ " = (diagonal >= cols) ? diagonal - cols + tx + 1 : tx + 1;\n";
+      debug ( DEBUG_GRAMMAR )
+      {
+        ulong i = 0;
+        string s = "";
+        foreach ( c; t.children )
+          s ~= i2s( i++ ) ~ ": " ~ evaluate( c ) ~ "\n";
+        return "RS<" ~ s ~ ">SR";
+      }
       else
-        result = "  int " ~ t.matches[0] ~ " = (diagonal >= cols) ? cols - tx - 1 : diagonal - tx - 1;\n";
-      internal = true;
-      return result;
+      {
+        add_local( t.matches[0] );
+        range = t.matches[4].dup;
+        /+
+         string s = "foreach (";
+         foreach (c ; t.matches) s ~= " " ~ c;
+         return s ~ " )\n";
+         +/
+        string result;
+        if ( internal )
+          result = "  int " ~ t.matches[0] ~ " = (diagonal >= cols) ? diagonal - cols + tx + 1 : tx + 1;\n";
+        else
+          result = "  int " ~ t.matches[0] ~ " = (diagonal >= cols) ? cols - tx - 1 : diagonal - tx - 1;\n";
+        internal = true;
+        return result;
+      }
     case "CLOP.RangeList":
+      debug ( DEBUG_GRAMMAR )
+      {
+        string s = "0: " ~ evaluate( t.children[0] ) ~ "\n";
+        foreach ( i; 1 .. t.children.length )
+          s ~= i2s( i ) ~ ": " ~ evaluate( t.children[i] ) ~ "\n";
+        return "RL<" ~ s ~ ">LR";
+      }
+      else
+      {
+        string s = evaluate( t.children[0] );
+        for ( auto c = 1; c < t.children.length; ++c )
+          s ~= evaluate( t.children[c] );
+        return s;
+      }
+    case "CLOP.RangeDecl":
+      debug( DEBUG_GRAMMAR )
+      {
+        ulong i = 0;
+        string s = "";
+        foreach ( c; t.children )
+          s ~= i2s( i++ ) ~ ": " ~ evaluate( c ) ~ "\n";
+        return "RD<" ~ s ~ ">DR";
+      }
+      else
+      {
+        return "{\n  int tx = get_global_id( 0 );\n" ~ evaluate( t.children[0] );
+      }
+    case "CLOP.Transformations":
+      return evaluate( t.children[0] );
+    case "CLOP.TransList":
       string s = evaluate( t.children[0] );
       for ( auto c = 1; c < t.children.length; ++c )
         s ~= evaluate( t.children[c] );
       return s;
-    case "CLOP.RangeDecl":
-      return "{\n  int tx = get_global_id( 0 );\n" ~ evaluate( t.children[0] );
+    case "CLOP.TransSpec":
+      return evaluate( t.children[0] );
     case "CLOP.TypeSpecifier":
       return t.matches[0];
     case "CLOP.ParameterDeclaration":
@@ -191,26 +235,54 @@ struct Compiler
         s ~= "  " ~ evaluate( c ) ~ "\n";
       return s;
     case "CLOP.FunctionDefinition":
-      return evaluate( t.children[0] ) ~ " " ~ evaluate( t.children[1] ) ~ " " ~ evaluate( t.children[2] );
+      global_scope = false;
+      string y = evaluate( t.children[0] );
+      string d = evaluate( t.children[1] );
+      string s = evaluate( t.children[2] );
+      global_scope = true;
+      return y ~ " " ~ d ~ " " ~ s;
     case "CLOP.ExternalDeclaration":
       return evaluate( t.children[0] );
     case "CLOP.ExternalDeclarations":
-      string s = "";
-      foreach ( c; t.children )
-        s ~= evaluate( c );
-      return s;
-    case "CLOP.TranslationUnit":
-      if ( t.children.length == 2 )
+      debug ( DEBUG_GRAMMAR )
       {
-        global_scope = true;
-        return evaluate( t.children[0] ) ~ evaluate( t.children[1] ) ~ "}";
+        ulong i = 0;
+        string s = "";
+        foreach ( c; t.children )
+          s ~= i2s( i++ ) ~ ": " ~ evaluate( c ) ~ "\n";
+        return "ED<" ~ s ~ ">DE";
       }
       else
       {
-        //foreach ( m; t.children[0].matches ) c.declarations ~= " " ~ m;
-        declarations = evaluate( t.children[0] );
+        string s = "";
+        foreach ( c; t.children )
+          s ~= evaluate( c );
+        return s;
+      }
+    case "CLOP.TranslationUnit":
+      debug ( DEBUG_GRAMMAR )
+      {
+        string s = "0: " ~ evaluate( t.children[0] ) ~ "\n";
+        foreach ( i; 1 .. t.children.length )
+          s ~= i2s( i ) ~ ": " ~ evaluate( t.children[i] ) ~ "\n";
+        return "TU<" ~ s ~ ">UT";
+      }
+      else
+      {
+        ulong i = 0;
+        ulong n = t.children.length;
+        if ( t.children[n - 1].matches[0] == "apply" )
+        {
+          transformations = evaluate( t.children[--n] );
+        }
+        if ( n > 2 )
+        {
+          declarations = evaluate( t.children[i++] );
+        }
         global_scope = true;
-        return evaluate( t.children[1] ) ~ evaluate( t.children[2] ) ~ "}";
+        string r = evaluate( t.children[i++] );
+        string s = evaluate( t.children[i++] );
+        return r ~ s ~ "}";
       }
     default: return t.name;
     }
@@ -354,7 +426,11 @@ compile( immutable string expr )
     auto clop_opencl_kernel = clCreateKernel( program, "clop_opencl_kernel_main", &runtime.status );
     assert( runtime.status == CL_SUCCESS, "clCreateKernel failed." );
   } ~ c.set_args( "clop_opencl_kernel" ) ~ c.code_to_invoke_kernel() ~ c.code_to_read_data_from_device();
-  return "debug ( DEBUG ) writefln( \"DSL MIXIN:\\n%sEOD\", q{" ~ code ~ "} );\n" ~ code;
+  code ~= "\n// transformations <" ~ c.transformations ~ ">\n";
+  debug ( DEBUG_GRAMMAR )
+    return "debug ( DEBUG ) writefln( \"DSL MIXIN:\\n%sEOD\", q{" ~ code ~ "} );\n";
+  else
+    return "debug ( DEBUG ) writefln( \"DSL MIXIN:\\n%sEOD\", q{" ~ code ~ "} );\n" ~ code;
 }
 
 string
@@ -443,4 +519,25 @@ read_device_buffer( T )( string name )
   else
     code = "";
   return "debug ( DEBUG ) writefln( \"%s\", q{" ~ code ~ "} );\n" ~ code;
+}
+
+string
+i2s( ulong arg )
+{
+  switch ( arg )
+  {
+  case  0: return "0";
+  case  1: return "1";
+  case  2: return "2";
+  case  3: return "3";
+  case  4: return "4";
+  case  5: return "5";
+  case  6: return "6";
+  case  7: return "7";
+  case  8: return "8";
+  case  9: return "9";
+  case 10: return "10";
+  case 11: return "11";
+  default: return "TOO_BIG";
+  }
 }

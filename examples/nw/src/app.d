@@ -1237,7 +1237,7 @@ class Application {
   {
     try
     {
-      // use CLOP DSL to generate the loops around the computation
+      // use CLOP DSL to generate OpenCL kernel and API calls.
       mixin( compile(
       q{
         int max3( int a, int b, int c )
@@ -1245,10 +1245,11 @@ class Application {
           int k = a > b ? a : b;
           return k > c ? k : c;
         }
-        NDRange( r ; 1 .. rows, c ; 1 .. cols );
-        F[r * cols + c] = max3( F[(r - 1) * cols + c - 1] + S[r * cols + c],
-                                F[(r - 1) * cols + c    ] - penalty,
-                                F[ r      * cols + c - 1] - penalty );
+        NDRange( r : 1 .. rows, c : 1 .. cols ) {
+          F[r * cols + c] = max3( F[(r - 1) * cols + c - 1] + S[r * cols + c],
+                                  F[(r - 1) * cols + c    ] - penalty,
+                                  F[ r      * cols + c - 1] - penalty );
+        } apply( rectangular_blocking( 8 ) )
       } ) );
     }
     catch( Exception e )
@@ -1270,10 +1271,11 @@ class Application {
           int k = a > b ? a : b;
           return k > c ? k : c;
         }
-        NDRange( r ; 1 .. rows, c ; 1 .. cols );
-        F[r * cols + c] = max3( F[(r - 1) * cols + c - 1] + BLOSUM62[M[r] * CHARS + N[c]],
-                                F[(r - 1) * cols + c    ] - penalty,
-                                F[ r      * cols + c - 1] - penalty );
+        NDRange( r : 1 .. rows, c : 1 .. cols ) {
+          F[r * cols + c] = max3( F[(r - 1) * cols + c - 1] + BLOSUM62[M[r] * CHARS + N[c]],
+                                  F[(r - 1) * cols + c    ] - penalty,
+                                  F[ r      * cols + c - 1] - penalty );
+        } apply( rectangular_blocking )
       } ) );
     }
     catch( Exception e )
@@ -1301,6 +1303,8 @@ class Application {
               ticks.usecs / 1E6 );
     G[] = F[];
 
+    static if ( false ) 
+    {
     reset();
     timer.reset();
     timer.start();
@@ -1404,6 +1408,7 @@ class Application {
                 (rows - 1) * (cols - 1) / (1024 * 1024 * time) );
       validate();
     }
+    }
 
     reset();
     timer.reset();
@@ -1416,6 +1421,8 @@ class Application {
               ticks.usecs / 1E6 );
     validate();
 
+    static if ( false ) 
+    {
     reset();
     timer.reset();
     timer.start();
@@ -1426,6 +1433,7 @@ class Application {
               (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
               ticks.usecs / 1E6 );
     validate();
+    }
 
     save();
   }
