@@ -1123,19 +1123,31 @@ class Application {
       cl_int status;
       cl_event event;
       cl_mem_flags flags = CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR;
-      cl_mem dS = clCreateBuffer( runtime.context, flags, cl_int.sizeof * BLOSUM62.length, BLOSUM62.ptr, &status );              assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
-      cl_mem dM = clCreateBuffer( runtime.context, flags, cl_int.sizeof * M.length, M.ptr, &status );                            assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
-      cl_mem dN = clCreateBuffer( runtime.context, flags, cl_int.sizeof * N.length, N.ptr, &status );                            assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
+      cl_mem dS = clCreateBuffer( runtime.context, flags, cl_int.sizeof * BLOSUM62.length, BLOSUM62.ptr, &status );
+      assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
+      cl_mem dM = clCreateBuffer( runtime.context, flags, cl_int.sizeof * M.length, M.ptr, &status );
+      assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
+      cl_mem dN = clCreateBuffer( runtime.context, flags, cl_int.sizeof * N.length, N.ptr, &status );
+      assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
       flags = CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR;
-      cl_mem dF = clCreateBuffer( runtime.context, flags, cl_int.sizeof * F.length, F.ptr, &status );                            assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_diamonds_indirectS, 0, cl_mem.sizeof, &dS      );                                          assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_diamonds_indirectS, 1, cl_mem.sizeof, &dM      );                                          assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_diamonds_indirectS, 2, cl_mem.sizeof, &dN      );                                          assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_diamonds_indirectS, 3, cl_mem.sizeof, &dF      );                                          assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_diamonds_indirectS, 4, cl_int.sizeof, &cols    );                                          assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_diamonds_indirectS, 5, cl_int.sizeof, &penalty );                                          assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_diamonds_indirectS, 8, CHARS * CHARS * cl_int.sizeof, null );                              assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_diamonds_indirectS, 9, (BLOCK_SIZE + 1) * (BLOCK_SIZE + 2) * cl_int.sizeof, null );        assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
+      cl_mem dF = clCreateBuffer( runtime.context, flags, cl_int.sizeof * F.length, F.ptr, &status );
+      assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
+      status = clSetKernelArg( kernel_diamonds_indirectS, 0, cl_mem.sizeof, &dS      );
+      assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
+      status = clSetKernelArg( kernel_diamonds_indirectS, 1, cl_mem.sizeof, &dM      );
+      assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
+      status = clSetKernelArg( kernel_diamonds_indirectS, 2, cl_mem.sizeof, &dN      );
+      assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
+      status = clSetKernelArg( kernel_diamonds_indirectS, 3, cl_mem.sizeof, &dF      );
+      assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
+      status = clSetKernelArg( kernel_diamonds_indirectS, 4, cl_int.sizeof, &cols    );
+      assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
+      status = clSetKernelArg( kernel_diamonds_indirectS, 5, cl_int.sizeof, &penalty );
+      assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
+      status = clSetKernelArg( kernel_diamonds_indirectS, 8, CHARS * CHARS * cl_int.sizeof, null );
+      assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
+      status = clSetKernelArg( kernel_diamonds_indirectS, 9, (BLOCK_SIZE + 1) * (BLOCK_SIZE + 2) * cl_int.sizeof, null );
+      assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
       size_t wgroup = BLOCK_SIZE;
       auto groups = ( cols - 1 ) / BLOCK_SIZE;
       for ( int i = 0; i < rows / BLOCK_SIZE - 1; ++i )
@@ -1143,8 +1155,10 @@ class Application {
         cl_int br = i;
         cl_int bc = 1;
         size_t global = ( ( 2 * i + bc ) * BLOCK_SIZE < cols - 1 ) ? BLOCK_SIZE * ( i + 1 ) : ( cols - 1 ) / 2;
-        status = clSetKernelArg( kernel_diamonds_indirectS, 6, cl_int.sizeof, &br );                                             assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
-        status = clSetKernelArg( kernel_diamonds_indirectS, 7, cl_int.sizeof, &bc );                                             assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
+        status = clSetKernelArg( kernel_diamonds_indirectS, 6, cl_int.sizeof, &br );
+        assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
+        status = clSetKernelArg( kernel_diamonds_indirectS, 7, cl_int.sizeof, &bc );
+        assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
         status = clEnqueueNDRangeKernel( runtime.queue, kernel_diamonds_indirectS, 1, null, &global, &wgroup, 0, null, &event );
         assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
         status = clWaitForEvents( 1, &event );
@@ -1168,7 +1182,8 @@ class Application {
         bc = 2;
         global = ( ( 2 * i + bc ) * BLOCK_SIZE < cols - 1 ) ? BLOCK_SIZE * ( i + 1 ) : ( cols - 1 ) / 2 - BLOCK_SIZE;
         if ( global == 0 ) continue;
-        status = clSetKernelArg( kernel_diamonds_indirectS, 7, cl_int.sizeof, &bc );                                             assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
+        status = clSetKernelArg( kernel_diamonds_indirectS, 7, cl_int.sizeof, &bc );
+        assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
         status = clEnqueueNDRangeKernel( runtime.queue, kernel_diamonds_indirectS, 1, null, &global, &wgroup, 0, null, &event );
         assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
         status = clWaitForEvents( 1, &event );
@@ -1243,7 +1258,7 @@ class Application {
         int k = a > b ? a : b;
         return k > c ? k : c;
       }
-      NDRange( r : 1 .. rows, c : 1 .. cols ) {
+      Antidiagonal NDRange( r : 1 .. rows, c : 1 .. cols ) {
         F[r * cols + c] = max3( F[(r - 1) * cols + c - 1] + S[r * cols + c],
                                 F[(r - 1) * cols + c    ] - penalty,
                                 F[ r      * cols + c - 1] - penalty );
@@ -1262,7 +1277,7 @@ class Application {
         int k = a > b ? a : b;
         return k > c ? k : c;
       }
-      NDRange( r : 1 .. rows, c : 1 .. cols ) {
+      Antidiagonal NDRange( r : 1 .. rows, c : 1 .. cols ) {
         F[r * cols + c] = max3( F[(r - 1) * cols + c - 1] + BLOSUM62[M[r] * CHARS + N[c]],
                                 F[(r - 1) * cols + c    ] - penalty,
                                 F[ r      * cols + c - 1] - penalty );

@@ -14,6 +14,7 @@ struct Compiler
   uint[string] symtable;
   uint[string] localtab;
   string declarations;
+  string pattern;
   string range;
   string transformations;
   bool global_scope;
@@ -22,15 +23,14 @@ struct Compiler
 
   this( immutable string expr )
   {
-    //    symtable.length = 0;
-    //    localtab.length = 0;
-    declarations = null;
-    range = null;
+    declarations    = null;
+    pattern         = null;
+    range           = null;
     transformations = null;
-    source = expr;
-    internal = false;
-    global_scope = false;
-    depth = 0;
+    source          = expr;
+    internal        = false;
+    global_scope    = false;
+    depth           = 0;
     AST = CLOP( source );
   }
 
@@ -306,6 +306,15 @@ struct Compiler
     /+
      + specification of the ND range over which the kernel will be executed.
      +/
+    case "CLOP.SyncPattern":
+      debug ( DEBUG_GRAMMAR )
+      {
+        return debug_leaf( t );
+      }
+      else
+      {
+        return t.matches[0];
+      }
     case "CLOP.RangeSpec":
       debug ( DEBUG_GRAMMAR )
       {
@@ -313,15 +322,7 @@ struct Compiler
       }
       else
       {
-        add_local( t.matches[0] );
-        range = t.matches[4].dup;
-        string result;
-        if ( internal )
-          result = "  int " ~ t.matches[0] ~ " = (diagonal >= cols) ? diagonal - cols + tx + 1 : tx + 1;\n";
-        else
-          result = "  int " ~ t.matches[0] ~ " = (diagonal >= cols) ? cols - tx - 1 : diagonal - tx - 1;\n";
-        internal = true;
-        return result;
+        return null;
       }
     case "CLOP.RangeList":
       debug ( DEBUG_GRAMMAR )
@@ -330,10 +331,13 @@ struct Compiler
       }
       else
       {
-        string s = evaluate( t.children[0] );
-        for ( auto c = 1; c < t.children.length; ++c )
-          s ~= evaluate( t.children[c] );
-        return s;
+        switch ( pattern )
+        {
+        case "Antidiagonal": return generate_antidiagonal_range( t );
+        case "Horizontal":   return generate_horizontal_range( t );
+        case "Stencil":      return generate_stencil_range( t );
+        default:             return generate_ndrange( t );
+        }
       }
     case "CLOP.RangeDecl":
       debug( DEBUG_GRAMMAR )
@@ -342,7 +346,7 @@ struct Compiler
       }
       else
       {
-        return "{\n  int tx = get_global_id( 0 );\n" ~ evaluate( t.children[0] );
+        return evaluate( t.children[0] );
       }
     case "CLOP.Transformations":
       debug ( DEBUG_GRAMMAR )
@@ -480,11 +484,12 @@ struct Compiler
       }
       else
       {
+        bool saved_global_scope_value = global_scope;
         global_scope = false;
         string y = evaluate( t.children[0] );
         string d = evaluate( t.children[1] );
         string s = evaluate( t.children[2] );
-        global_scope = true;
+        global_scope = saved_global_scope_value;
         return y ~ " " ~ d ~ " " ~ s;
       }
     case "CLOP.ExternalDeclaration":
@@ -516,22 +521,84 @@ struct Compiler
       else
       {
         ulong i = 0;
-        ulong n = t.children.length;
-        if ( t.children[n - 1].matches[0] == "apply" )
-        {
-          transformations = evaluate( t.children[--n] );
-        }
-        if ( n > 2 )
+        if ( t.children[i].name == "CLOP.ExternalDeclarations" )
         {
           declarations = evaluate( t.children[i++] );
+        }
+        if ( t.children[i].name == "CLOP.SyncPattern" )
+        {
+          pattern = evaluate( t.children[i++] );
+        }
+        ulong n = t.children.length;
+        if ( t.children[n - 1].name == "CLOP.Transformations" )
+        {
+          transformations = evaluate( t.children[n - 1] );
         }
         global_scope = true;
         string r = evaluate( t.children[i++] );
         string s = evaluate( t.children[i++] );
-        return r ~ s ~ "}";
+        return "q{\n" ~ declarations ~ "} ~ \"__kernel void clop_opencl_kernel_main( \" ~ kernel_params ~ \" )\" ~\nq{\n{\n" ~ r ~ s ~ "}\n}";
       }
     default: return t.name;
     }
+  }
+
+  string generate_antidiagonal_range( ParseTree t )
+  {
+    /*
+        int bx = get_group_id( 0 );
+        int tx = get_local_id( 0 );
+        int rr = ( br - bx ) * BLOCK_SIZE + 1; // these are the indexes of
+        int cc = ( bc + bx ) * BLOCK_SIZE + 1; // the block's top-left element
+        // 1.
+        int index   = cols * rr + cc + tx;
+        int index_n = index - cols;
+        int index_w = cols * ( rr + tx ) + cc - 1;
+
+        for ( int k = 0; k < BLOCK_SIZE; ++k )
+          s[k * BLOCK_SIZE + tx] = S[k * cols + index];
+
+        if ( tx == 0 ) F_shared[0] = F[index_n - 1];        // copy the NW element into the TL corner of t
+        F_shared[(tx + 1) * (BLOCK_SIZE + 1)] = F[index_w]; // copy the column of W elements into the left column of t
+        F_shared[(tx + 1)                   ] = F[index_n]; // copy the row of N elements into the top row of t
+        barrier( CLK_LOCAL_MEM_FENCE );
+    */
+    string s = "  int tx = get_global_id( 0 );\n";
+    for ( auto c = 0; c < t.children.length; ++c )
+    {
+      ParseTree u = t.children[c];
+      add_local( u.matches[0] );
+      range = u.matches[4].dup;
+      s ~= ( internal )
+           ? "  int " ~ u.matches[0] ~ " = (diagonal >= cols) ? diagonal - cols + tx + 1 : tx + 1;\n"
+           : "  int " ~ u.matches[0] ~ " = (diagonal >= cols) ? cols - tx - 1 : diagonal - tx - 1;\n";
+      internal = true;
+    }
+    return s;
+  }
+
+  string generate_horizontal_range( ParseTree t )
+  {
+    return null;
+  }
+
+  string generate_stencil_range( ParseTree t )
+  {
+    return generate_ndrange( t );
+  }
+
+  string generate_ndrange( ParseTree t )
+  {
+    string s = "";
+    ulong n = t.children.length;
+    for ( auto c = 0; c < n; ++c )
+    {
+      ParseTree u = t.children[c];
+      add_local( u.matches[0] );
+      range = u.matches[4].dup;
+      s ~= "  int " ~ u.matches[0] ~ " = get_global_id( " ~ i2s( n - 1 - c ) ~ " );\n";
+    }
+    return s;
   }
 
   void add_symbol( string symbol )
@@ -671,9 +738,8 @@ compile( immutable string expr )
   auto c = new Compiler( expr );
   auto kernel = c.generate();
   auto params = c.set_params();
-  string code = params ~ "char[] clop_opencl_program_source = (q{\n" ~ c.declarations ~
-  "} ~ \"__kernel void clop_opencl_kernel_main( \" ~ kernel_params ~ \" )\" ~\n";
-  code ~= "q{\n" ~ kernel ~ "\n}).dup;" ~ q{
+  string code = params ~ "try\n{\n  char[] clop_opencl_program_source = (" ~ kernel ~ ").dup;";
+  code ~= q{
     debug ( DEBUG ) writeln( "OpenCL program:\n", clop_opencl_program_source, "EOF" );
     size_t clop_opencl_program_source_size = clop_opencl_program_source.length;
     char* clop_opencl_program_source_pointer = clop_opencl_program_source.ptr;
@@ -691,6 +757,7 @@ compile( immutable string expr )
     assert( runtime.status == CL_SUCCESS, "clCreateKernel failed." );
   } ~ c.set_args( "clop_opencl_kernel" ) ~ c.code_to_invoke_kernel() ~ c.code_to_read_data_from_device();
   code ~= "\n// transformations <" ~ c.transformations ~ ">\n";
+  code ~= "}\ncatch( Exception e )\n{\n  writeln( e );\n}\n";
   debug ( DEBUG_GRAMMAR )
     return "debug ( DEBUG ) writefln( \"DSL MIXIN:\\n%sEOD\", q{" ~ code ~ "} );\n";
   else

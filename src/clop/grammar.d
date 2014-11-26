@@ -7,7 +7,10 @@ import pegged.grammar;
 enum clop_rules = q{
 CLOP:
 
-TranslationUnit        <  ExternalDeclarations? RangeDecl :Spacing CompoundStatement :Spacing Transformations?
+TranslationUnit        <  ExternalDeclarations?
+                          (SyncPattern :Spacing)?
+                          RangeDecl :Spacing CompoundStatement
+                          (:Spacing Transformations)?
 ExternalDeclarations   <  ExternalDeclaration (:Spacing ExternalDeclaration)*
 ExternalDeclaration    <  FunctionDefinition / Declaration
 FunctionDefinition     <  TypeSpecifier Declarator CompoundStatement
@@ -37,6 +40,7 @@ InitDeclarator         <  Declarator ('=' Initializer)?
 Initializer            <  AssignExpr / '{' InitializerList ','? '}'
 InitializerList        <  Initializer (',' Initializer)*
 
+SyncPattern            <  "Antidiagonal" / "Horizontal" / "Stencil"
 RangeDecl              <  "NDRange" '(' RangeList ')'
 RangeList              <  RangeSpec ( ',' RangeSpec )*
 RangeSpec              <  Identifier ':' Expression ".." Expression
