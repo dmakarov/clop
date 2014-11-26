@@ -1235,53 +1235,39 @@ class Application {
    */
   void clop_dsl()
   {
-    try
-    {
-      // use CLOP DSL to generate OpenCL kernel and API calls.
-      mixin( compile(
-      q{
-        int max3( int a, int b, int c )
-        {
-          int k = a > b ? a : b;
-          return k > c ? k : c;
-        }
-        NDRange( r : 1 .. rows, c : 1 .. cols ) {
-          F[r * cols + c] = max3( F[(r - 1) * cols + c - 1] + S[r * cols + c],
-                                  F[(r - 1) * cols + c    ] - penalty,
-                                  F[ r      * cols + c - 1] - penalty );
-        } apply( rectangular_blocking( 8 ) )
-      } ) );
-    }
-    catch( Exception e )
-    {
-      writeln( e );
-    }
+    // use CLOP DSL to generate OpenCL kernel and API calls.
+    mixin( compile(
+    q{
+      int max3( int a, int b, int c )
+      {
+        int k = a > b ? a : b;
+        return k > c ? k : c;
+      }
+      NDRange( r : 1 .. rows, c : 1 .. cols ) {
+        F[r * cols + c] = max3( F[(r - 1) * cols + c - 1] + S[r * cols + c],
+                                F[(r - 1) * cols + c    ] - penalty,
+                                F[ r      * cols + c - 1] - penalty );
+      } apply( rectangular_blocking( 8 ) )
+    } ) );
   }
 
   /**
    */
   void clop_dsl_indirectS()
   {
-    try
-    {
-      mixin( compile(
-      q{
-        int max3( int a, int b, int c )
-        {
-          int k = a > b ? a : b;
-          return k > c ? k : c;
-        }
-        NDRange( r : 1 .. rows, c : 1 .. cols ) {
-          F[r * cols + c] = max3( F[(r - 1) * cols + c - 1] + BLOSUM62[M[r] * CHARS + N[c]],
-                                  F[(r - 1) * cols + c    ] - penalty,
-                                  F[ r      * cols + c - 1] - penalty );
-        } apply( rectangular_blocking )
-      } ) );
-    }
-    catch( Exception e )
-    {
-      writeln( e );
-    }
+    mixin( compile(
+    q{
+      int max3( int a, int b, int c )
+      {
+        int k = a > b ? a : b;
+        return k > c ? k : c;
+      }
+      NDRange( r : 1 .. rows, c : 1 .. cols ) {
+        F[r * cols + c] = max3( F[(r - 1) * cols + c - 1] + BLOSUM62[M[r] * CHARS + N[c]],
+                                F[(r - 1) * cols + c    ] - penalty,
+                                F[ r      * cols + c - 1] - penalty );
+      } apply( rectangular_blocking( 8 ) )
+    } ) );
   }
 
   /**
