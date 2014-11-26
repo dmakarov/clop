@@ -18,6 +18,7 @@ struct Compiler
   string transformations;
   bool global_scope;
   bool internal;
+  uint depth;
 
   this( immutable string expr )
   {
@@ -29,6 +30,7 @@ struct Compiler
     source = expr;
     internal = false;
     global_scope = false;
+    depth = 0;
     AST = CLOP( source );
   }
 
@@ -42,117 +44,277 @@ struct Compiler
     switch ( t.name )
     {
     case "CLOP":
-      return evaluate( t.children[0] );
-    case "CLOP.Identifier":
-      string s = t.matches[0];
-      if ( global_scope && !is_local( s ) )
-        add_symbol( s );
+      debug ( DEBUG_GRAMMAR )
+      {
+        return debug_node( t );
+      }
       else
-        add_local( s );
-      return s;
+      {
+        return evaluate( t.children[0] );
+      }
+    case "CLOP.Identifier":
+      debug ( DEBUG_GRAMMAR )
+      {
+        return debug_leaf( t );
+      }
+      else
+      {
+        string s = t.matches[0];
+        if ( global_scope && !is_local( s ) )
+          add_symbol( s );
+        else
+          add_local( s );
+        return s;
+      }
     case "CLOP.FloatLiteral":
     case "CLOP.IntegerLiteral":
-      return t.matches[0];
+      debug ( DEBUG_GRAMMAR )
+      {
+        return debug_leaf( t );
+      }
+      else
+      {
+        return t.matches[0];
+      }
     case "CLOP.ArrayIndex":
-      return "[" ~ evaluate( t.children[0] ) ~ "]";
+      debug ( DEBUG_GRAMMAR )
+      {
+        return debug_node( t );
+      }
+      else
+      {
+        return "[" ~ evaluate( t.children[0] ) ~ "]";
+      }
     case "CLOP.FunctionCall":
-      if ( t.children.length > 0 )
-        return "(" ~ evaluate( t.children[0] ) ~ ")";
-      return "()";
+      debug ( DEBUG_GRAMMAR )
+      {
+        return debug_node( t );
+      }
+      else
+      {
+        if ( t.children.length > 0 )
+        {
+          return "(" ~ evaluate( t.children[0] ) ~ ")";
+        }
+        return "()";
+      }
     case "CLOP.PrimaryExpr":
-      string s = evaluate( t.children[0] );
-      if ( t.matches[0] == "(" ) return "(" ~ s ~ ")";
-      return s;
+      debug ( DEBUG_GRAMMAR )
+      {
+        return debug_node( t );
+      }
+      else
+      {
+        string s = evaluate( t.children[0] );
+        if ( t.matches[0] == "(" ) return "(" ~ s ~ ")";
+        return s;
+      }
     case "CLOP.Factor":
     case "CLOP.UnaryExpr":
     case "CLOP.Expression":
-      string s = evaluate( t.children[0] );
-      for ( auto c = 1; c < t.children.length; ++c )
-        s ~= evaluate( t.children[c] );
-      return s;
+      debug ( DEBUG_GRAMMAR )
+      {
+        return debug_node( t );
+      }
+      else
+      {
+        string s = evaluate( t.children[0] );
+        for ( auto c = 1; c < t.children.length; ++c )
+          s ~= evaluate( t.children[c] );
+        return s;
+      }
     case "CLOP.ArgumentList":
-      string s = evaluate( t.children[0] );
-      for ( auto c = 1; c < t.children.length; ++c )
-        s ~= "," ~ evaluate( t.children[c] );
-      return s;
+      debug ( DEBUG_GRAMMAR )
+      {
+        return debug_node( t );
+      }
+      else
+      {
+        string s = evaluate( t.children[0] );
+        for ( auto c = 1; c < t.children.length; ++c )
+          s ~= "," ~ evaluate( t.children[c] );
+        return s;
+      }
     case "CLOP.MulExpr":
     case "CLOP.AddExpr":
-      return t.matches[0] ~ evaluate( t.children[0] );
-    case "CLOP.AssignExpr":
-      if ( t.children.length == 2 )
-        return evaluate( t.children[0] ) ~ " = " ~ evaluate( t.children[1] );
+      debug ( DEBUG_GRAMMAR )
+      {
+        return debug_node( t );
+      }
       else
-        return evaluate( t.children[0] );
+      {
+        return t.matches[0] ~ evaluate( t.children[0] );
+      }
+    case "CLOP.AssignExpr":
+      debug ( DEBUG_GRAMMAR )
+      {
+        return debug_node( t );
+      }
+      else
+      {
+        if ( t.children.length == 2 )
+        {
+          return evaluate( t.children[0] ) ~ " = " ~ evaluate( t.children[1] );
+        }
+        else
+        {
+          return evaluate( t.children[0] );
+        }
+      }
     case "CLOP.EqualityExpression":
     case "CLOP.RelationalExpression":
-      string s = evaluate( t.children[0] );
-      for ( auto i = 1; i < t.children.length; i += 2 )
-        s ~= " " ~ t.children[i].matches[0] ~ " " ~ evaluate( t.children[i + 1] );
-      return s;
-    case "CLOP.ANDExpression":
-      string s = evaluate( t.children[0] );
-      foreach ( i; 1 .. t.children.length )
-        s ~= "&" ~ evaluate( t.children[i] );
-      return s;
-    case "CLOP.ExclusiveORExpression":
-      string s = evaluate( t.children[0] );
-      foreach ( i; 1 .. t.children.length )
-        s ~= "^" ~ evaluate( t.children[i] );
-      return s;
-    case "CLOP.InclusiveORExpression":
-      string s = evaluate( t.children[0] );
-      foreach ( i; 1 .. t.children.length )
-        s ~= "|" ~ evaluate( t.children[i] );
-      return s;
-    case "CLOP.LogicalANDExpression":
-      string s = evaluate( t.children[0] );
-      foreach ( i; 1 .. t.children.length )
-        s ~= "&&" ~ evaluate( t.children[i] );
-      return s;
-    case "CLOP.LogicalORExpression":
-      string s = evaluate( t.children[0] );
-      foreach ( i; 1 .. t.children.length )
-        s ~= "||" ~ evaluate( t.children[i] );
-      return s;
-    case "CLOP.ConditionalExpression":
-      if ( t.children.length == 3 )
-        return "(" ~ evaluate( t.children[0] ) ~ " ? " ~ evaluate( t.children[1] ) ~
-                                              " : " ~ evaluate( t.children[2] ) ~ ")";
+      debug ( DEBUG_GRAMMAR )
+      {
+        return debug_node( t );
+      }
       else
-        return evaluate( t.children[0] );
+      {
+        string s = evaluate( t.children[0] );
+        for ( auto i = 1; i < t.children.length; i += 2 )
+          s ~= " " ~ t.children[i].matches[0] ~ " " ~ evaluate( t.children[i + 1] );
+        return s;
+      }
+    case "CLOP.ANDExpression":
+      debug ( DEBUG_GRAMMAR )
+      {
+        return debug_node( t );
+      }
+      else
+      {
+        string s = evaluate( t.children[0] );
+        foreach ( i; 1 .. t.children.length )
+          s ~= "&" ~ evaluate( t.children[i] );
+        return s;
+      }
+    case "CLOP.ExclusiveORExpression":
+      debug ( DEBUG_GRAMMAR )
+      {
+        return debug_node( t );
+      }
+      else
+      {
+        string s = evaluate( t.children[0] );
+        foreach ( i; 1 .. t.children.length )
+          s ~= "^" ~ evaluate( t.children[i] );
+        return s;
+      }
+    case "CLOP.InclusiveORExpression":
+      debug ( DEBUG_GRAMMAR )
+      {
+        return debug_node( t );
+      }
+      else
+      {
+        string s = evaluate( t.children[0] );
+        foreach ( i; 1 .. t.children.length )
+          s ~= "|" ~ evaluate( t.children[i] );
+        return s;
+      }
+    case "CLOP.LogicalANDExpression":
+      debug ( DEBUG_GRAMMAR )
+      {
+        return debug_node( t );
+      }
+      else
+      {
+        string s = evaluate( t.children[0] );
+        foreach ( i; 1 .. t.children.length )
+          s ~= "&&" ~ evaluate( t.children[i] );
+        return s;
+      }
+    case "CLOP.LogicalORExpression":
+      debug ( DEBUG_GRAMMAR )
+      {
+        return debug_node( t );
+      }
+      else
+      {
+        string s = evaluate( t.children[0] );
+        foreach ( i; 1 .. t.children.length )
+          s ~= "||" ~ evaluate( t.children[i] );
+        return s;
+      }
+    case "CLOP.ConditionalExpression":
+      debug ( DEBUG_GRAMMAR )
+      {
+        return debug_node( t );
+      }
+      else
+      {
+        if ( t.children.length == 3 )
+        {
+          string c = evaluate( t.children[0] );
+          string a = evaluate( t.children[1] );
+          string b = evaluate( t.children[2] );
+          return "(" ~ c ~ " ? " ~ a ~ " : " ~ b ~ ")";
+        }
+        else
+        {
+          return evaluate( t.children[0] );
+        }
+      }
     case "CLOP.ExpressionStatement":
-      string s = ( t.children.length > 0 ) ? evaluate( t.children[0] ) ~ ";" : ";";
-      return s;
+      debug ( DEBUG_GRAMMAR )
+      {
+        return debug_node( t );
+      }
+      else
+      {
+        string s = ( t.children.length > 0 ) ? evaluate( t.children[0] ) ~ ";" : ";";
+        return s;
+      }
     case "CLOP.ReturnStatement":
-      return "return " ~ evaluate( t.children[0] ) ~ ";";
+      debug ( DEBUG_GRAMMAR )
+      {
+        return debug_node( t );
+      }
+      else
+      {
+        return "return " ~ evaluate( t.children[0] ) ~ ";";
+      }
     case "CLOP.Statement":
-      return evaluate( t.children[0] );
+      debug ( DEBUG_GRAMMAR )
+      {
+        return debug_node( t );
+      }
+      else
+      {
+        return evaluate( t.children[0] );
+      }
     case "CLOP.StatementList":
-      string s = "";
-      foreach ( c; t.children ) s ~= "  " ~ evaluate( c ) ~ "\n";
-      return s;
+      debug ( DEBUG_GRAMMAR )
+      {
+        return debug_node( t );
+      }
+      else
+      {
+        string s = "";
+        foreach ( c; t.children ) s ~= "  " ~ evaluate( c ) ~ "\n";
+        return s;
+      }
     case "CLOP.CompoundStatement":
-      string s = "{\n";
-      foreach ( c; t.children ) s ~= evaluate( c );
-      return s ~ "}\n";
+      debug ( DEBUG_GRAMMAR )
+      {
+        return debug_node( t );
+      }
+      else
+      {
+        string s = "{\n";
+        foreach ( c; t.children ) s ~= evaluate( c );
+        return s ~ "}\n";
+      }
+    /+
+     + specification of the ND range over which the kernel will be executed.
+     +/
     case "CLOP.RangeSpec":
       debug ( DEBUG_GRAMMAR )
       {
-        ulong i = 0;
-        string s = "";
-        foreach ( c; t.children )
-          s ~= i2s( i++ ) ~ ": " ~ evaluate( c ) ~ "\n";
-        return "RS<" ~ s ~ ">SR";
+        return debug_node( t );
       }
       else
       {
         add_local( t.matches[0] );
         range = t.matches[4].dup;
-        /+
-         string s = "foreach (";
-         foreach (c ; t.matches) s ~= " " ~ c;
-         return s ~ " )\n";
-         +/
         string result;
         if ( internal )
           result = "  int " ~ t.matches[0] ~ " = (diagonal >= cols) ? diagonal - cols + tx + 1 : tx + 1;\n";
@@ -164,10 +326,7 @@ struct Compiler
     case "CLOP.RangeList":
       debug ( DEBUG_GRAMMAR )
       {
-        string s = "0: " ~ evaluate( t.children[0] ) ~ "\n";
-        foreach ( i; 1 .. t.children.length )
-          s ~= i2s( i ) ~ ": " ~ evaluate( t.children[i] ) ~ "\n";
-        return "RL<" ~ s ~ ">LR";
+        return debug_node( t );
       }
       else
       {
@@ -179,78 +338,168 @@ struct Compiler
     case "CLOP.RangeDecl":
       debug( DEBUG_GRAMMAR )
       {
-        ulong i = 0;
-        string s = "";
-        foreach ( c; t.children )
-          s ~= i2s( i++ ) ~ ": " ~ evaluate( c ) ~ "\n";
-        return "RD<" ~ s ~ ">DR";
+        return debug_node( t );
       }
       else
       {
         return "{\n  int tx = get_global_id( 0 );\n" ~ evaluate( t.children[0] );
       }
     case "CLOP.Transformations":
-      return evaluate( t.children[0] );
+      debug ( DEBUG_GRAMMAR )
+      {
+        return debug_node( t );
+      }
+      else
+      {
+        return evaluate( t.children[0] );
+      }
     case "CLOP.TransList":
-      string s = evaluate( t.children[0] );
-      for ( auto c = 1; c < t.children.length; ++c )
-        s ~= evaluate( t.children[c] );
-      return s;
+      debug ( DEBUG_GRAMMAR )
+      {
+        return debug_node( t );
+      }
+      else
+      {
+        string s = evaluate( t.children[0] );
+        for ( auto c = 1; c < t.children.length; ++c )
+          s ~= evaluate( t.children[c] );
+        return s;
+      }
     case "CLOP.TransSpec":
-      return evaluate( t.children[0] );
+      debug ( DEBUG_GRAMMAR )
+      {
+        return debug_node( t );
+      }
+      else
+      {
+        return evaluate( t.children[0] );
+      }
     case "CLOP.TypeSpecifier":
-      return t.matches[0];
+      debug ( DEBUG_GRAMMAR )
+      {
+        return debug_leaf( t );
+      }
+      else
+      {
+        return t.matches[0];
+      }
     case "CLOP.ParameterDeclaration":
-      return evaluate( t.children[0] ) ~ " " ~ evaluate( t.children[1] );
+      debug ( DEBUG_GRAMMAR )
+      {
+        return debug_node( t );
+      }
+      else
+      {
+        return evaluate( t.children[0] ) ~ " " ~ evaluate( t.children[1] );
+      }
     case "CLOP.ParameterList":
-      string s = evaluate( t.children[0] );
-      foreach ( i; 1 .. t.children.length )
-        s ~= ", " ~ evaluate( t.children[i] );
-      return s;
+      debug ( DEBUG_GRAMMAR )
+      {
+        return debug_node( t );
+      }
+      else
+      {
+        string s = evaluate( t.children[0] );
+        foreach ( i; 1 .. t.children.length )
+          s ~= ", " ~ evaluate( t.children[i] );
+        return s;
+      }
     case "CLOP.Initializer":
-      return evaluate( t.children[0] );
+      debug ( DEBUG_GRAMMAR )
+      {
+        return debug_node( t );
+      }
+      else
+      {
+        return evaluate( t.children[0] );
+      }
     case "CLOP.InitDeclarator":
-      string s = evaluate( t.children[0] );
-      if ( t.children.length > 1 )
-        s ~= " = " ~ evaluate( t.children[1] );
-      return s;
+      debug ( DEBUG_GRAMMAR )
+      {
+        return debug_node( t );
+      }
+      else
+      {
+        string s = evaluate( t.children[0] );
+        if ( t.children.length > 1 )
+          s ~= " = " ~ evaluate( t.children[1] );
+        return s;
+      }
     case "CLOP.InitDeclaratorList":
-      string s = evaluate( t.children[0] );
-      foreach ( i; 1 .. t.children.length )
-        s ~= ", " ~ evaluate( t.children[i] );
-      return s;
+      debug ( DEBUG_GRAMMAR )
+      {
+        return debug_node( t );
+      }
+      else
+      {
+        string s = evaluate( t.children[0] );
+        foreach ( i; 1 .. t.children.length )
+          s ~= ", " ~ evaluate( t.children[i] );
+        return s;
+      }
     case "CLOP.Declarator":
-      string s = evaluate( t.children[0] );
-      if ( t.children.length > 1 )
-        s ~= "( " ~ evaluate( t.children[1] ) ~ " )";
-      return s;
+      debug ( DEBUG_GRAMMAR )
+      {
+        return debug_node( t );
+      }
+      else
+      {
+        string s = evaluate( t.children[0] );
+        if ( t.children.length > 1 )
+          s ~= "( " ~ evaluate( t.children[1] ) ~ " )";
+        return s;
+      }
     case "CLOP.Declaration":
-      string s = evaluate( t.children[0] );
-      if ( t.children.length > 1 )
-        s ~= " " ~ evaluate( t.children[1] );
-      return s ~ ";";
+      debug ( DEBUG_GRAMMAR )
+      {
+        return debug_node( t );
+      }
+      else
+      {
+        string s = evaluate( t.children[0] );
+        if ( t.children.length > 1 )
+          s ~= " " ~ evaluate( t.children[1] );
+        return s ~ ";";
+      }
     case "CLOP.DeclarationList":
-      string s = "";
-      foreach ( c; t.children )
-        s ~= "  " ~ evaluate( c ) ~ "\n";
-      return s;
+      debug ( DEBUG_GRAMMAR )
+      {
+        return debug_node( t );
+      }
+      else
+      {
+        string s = "";
+        foreach ( c; t.children )
+          s ~= "  " ~ evaluate( c ) ~ "\n";
+        return s;
+      }
     case "CLOP.FunctionDefinition":
-      global_scope = false;
-      string y = evaluate( t.children[0] );
-      string d = evaluate( t.children[1] );
-      string s = evaluate( t.children[2] );
-      global_scope = true;
-      return y ~ " " ~ d ~ " " ~ s;
+      debug ( DEBUG_GRAMMAR )
+      {
+        return debug_node( t );
+      }
+      else
+      {
+        global_scope = false;
+        string y = evaluate( t.children[0] );
+        string d = evaluate( t.children[1] );
+        string s = evaluate( t.children[2] );
+        global_scope = true;
+        return y ~ " " ~ d ~ " " ~ s;
+      }
     case "CLOP.ExternalDeclaration":
-      return evaluate( t.children[0] );
+      debug ( DEBUG_GRAMMAR )
+      {
+        return debug_node( t );
+      }
+      else
+      {
+        return evaluate( t.children[0] );
+      }
     case "CLOP.ExternalDeclarations":
       debug ( DEBUG_GRAMMAR )
       {
-        ulong i = 0;
-        string s = "";
-        foreach ( c; t.children )
-          s ~= i2s( i++ ) ~ ": " ~ evaluate( c ) ~ "\n";
-        return "ED<" ~ s ~ ">DE";
+        return debug_node( t );
       }
       else
       {
@@ -262,10 +511,7 @@ struct Compiler
     case "CLOP.TranslationUnit":
       debug ( DEBUG_GRAMMAR )
       {
-        string s = "0: " ~ evaluate( t.children[0] ) ~ "\n";
-        foreach ( i; 1 .. t.children.length )
-          s ~= i2s( i ) ~ ": " ~ evaluate( t.children[i] ) ~ "\n";
-        return "TU<" ~ s ~ ">UT";
+        return debug_node( t );
       }
       else
       {
@@ -398,6 +644,24 @@ struct Compiler
       runtime.status = clEnqueueNDRangeKernel( runtime.queue, clop_opencl_kernel, 1, null, &global, null, 0, null, null );
       assert( runtime.status == CL_SUCCESS, \"clEnqueueNDRangeKernel failed.\" );
     }\n";
+  }
+
+  string debug_node( ParseTree t )
+  {
+    ulong i = 0;
+    string s = "\n";
+    string indent = "";
+    foreach ( x ; 0 .. depth ) indent ~= "  ";
+    ++depth;
+    foreach ( c; t.children )
+      s ~= indent ~ i2s( i++ ) ~ ": " ~ evaluate( c ) ~ "\n";
+    --depth;
+    return "<" ~ t.name ~ ">" ~ s ~ indent ~ "</" ~ t.name ~ ">";
+  }
+
+  string debug_leaf( ParseTree t )
+  {
+    return "<" ~ t.name ~ ">" ~ t.matches[0] ~ "</" ~ t.name ~ ">";
   }
 }
 
