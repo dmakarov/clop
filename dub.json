@@ -1,12 +1,30 @@
 {
-  "name" : "clop",
-  "description" : "OpenCL OPtimizer DSL.",
-  "targetType" : "library",
-  "targetPath" : "./lib",
+  "name"         : "clop",
+  "description"  : "OpenCL OPtimizer DSL.",
+  "targetType"   : "none",
   "dependencies" : {
-    "derelict_extras-opencl" : ">=1.2.0",
-    "pegged" : ">=0.0.0"
-  },
-  "lflags-linux" : ["-lOpenCL", "-lrt"],
-  "lflags-osx"   : ["-framework", "OpenCL"]
+                     "clop:runtime" : "*",
+                     "clop:nw"      : "*",
+                     "clop:pf"      : "*",
+                     "clop:stencil" : "*"
+                   },
+  
+  "subPackages"  : [
+      {
+        "name"         : "runtime",
+        "targetType"   : "library",
+        "targetPath"   : "./lib",
+        "sourcePaths"  : ["src"],
+        "importPaths"  : ["src"],
+        "lflags-linux" : ["-lOpenCL", "-lrt"],
+        "lflags-osx"   : ["-framework", "OpenCL"],
+        "dependencies" : {
+          "derelict_extras-opencl" : ">=1.2.0",
+          "pegged"                 : ">=0.0.0"
+        }
+      },
+      "./examples/nw",
+      "./examples/pf",
+      "./examples/stencil"
+  ]
 }
