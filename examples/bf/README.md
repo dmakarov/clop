@@ -1,11 +1,8 @@
 -*- org -*-
 
-* Note: This program generate two sequences randomly. Please specify
-      your own sequences for different uses.  At the current stage,
-      the program only supports two sequences with the same lengh,
-      which can be divided by 16.
+* General information
 
-* Usage: ./nw 2048 10 ./nw.cl 2048
-      //the length of the sequence 10 //penalty value ./nw.cl //ocl
-      kernel file
-
+* Usage
+#+BEGIN_SRC sh
+  ./bin/bf
+#+END_SRC
