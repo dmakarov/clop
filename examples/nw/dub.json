@@ -16,7 +16,7 @@
     },
     "configurations": [
         {
-            "name"               : "default",
+            "name"               : "default"
         },
         {
             "name"               : "debug-grammar",

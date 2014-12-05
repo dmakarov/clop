@@ -1,36 +1,32 @@
 module clop.compiler;
 
+import std.string;
 import std.traits;
 
 import pegged.grammar;
 
+import clop.analysis;
 public import clop.grammar;
 public import clop.runtime;
 
-struct Compiler
+class Compiler
 {
   immutable string source;
   ParseTree AST;
+  Interval[string] intervals;
   uint[string] symtable;
   uint[string] localtab;
+  uint[string] arraytab;
   string declarations;
   string pattern;
-  string range;
   string transformations;
-  bool global_scope;
-  bool internal;
-  uint depth;
+  bool global_scope = false;
+  bool internal     = false;
+  uint depth        = 0;
 
   this( immutable string expr )
   {
-    declarations    = null;
-    pattern         = null;
-    range           = null;
-    transformations = null;
-    source          = expr;
-    internal        = false;
-    global_scope    = false;
-    depth           = 0;
+    source = expr;
     AST = CLOP( source );
   }
 
@@ -83,7 +79,8 @@ struct Compiler
       }
       else
       {
-        return "[" ~ evaluate( t.children[0] ) ~ "]";
+        string s = "/*" ~ interval_apply( t.children[0] ).toString() ~ "*/";
+        return "[" ~ evaluate( t.children[0] ) ~  s ~ "]";
       }
     case "CLOP.FunctionCall":
       debug ( DEBUG_GRAMMAR )
@@ -110,7 +107,39 @@ struct Compiler
         return s;
       }
     case "CLOP.Factor":
+      debug ( DEBUG_GRAMMAR )
+      {
+        return debug_node( t );
+      }
+      else
+      {
+        string s = evaluate( t.children[0] );
+        for ( auto c = 1; c < t.children.length; ++c )
+          s ~= evaluate( t.children[c] );
+        return s;
+      }
     case "CLOP.UnaryExpr":
+      debug ( DEBUG_GRAMMAR )
+      {
+        return debug_node( t );
+      }
+      else
+      {
+        // this primary expression
+        string s = evaluate( t.children[0] );
+        string symbol = s;
+        // this can be array index or function call
+        for ( auto c = 1; c < t.children.length; ++c )
+        {
+          if ( "CLOP.ArrayIndex" == t.children[c].name )
+          {
+            // analyze index expression
+            add_array( symbol );
+          }
+          s ~= evaluate( t.children[c] );
+        }
+        return s;
+      }
     case "CLOP.Expression":
       debug ( DEBUG_GRAMMAR )
       {
@@ -543,6 +572,43 @@ struct Compiler
     }
   }
 
+  Interval interval_apply( ParseTree t )
+  {
+    switch ( t.name )
+    {
+    case "CLOP.Expression":
+      auto r = interval_apply( t.children[0] );
+      for ( auto c = 1; c < t.children.length; ++c )
+        if ( "+" == t.children[c].matches[0] )
+          r = interval_arithmetic_operation( r, "+", interval_apply( t.children[c] ) );
+        else
+          r = interval_arithmetic_operation( r, "-", interval_apply( t.children[c] ) );
+      return r;
+    case "CLOP.Factor":
+      auto r = interval_apply( t.children[0] );
+      for ( auto c = 1; c < t.children.length; ++c )
+        if ( "*" == t.children[c].matches[0] )
+          r = interval_arithmetic_operation( r, "*", interval_apply( t.children[c] ) );
+        else
+          r = interval_arithmetic_operation( r, "/", interval_apply( t.children[c] ) );
+      return r;
+    case "CLOP.AddExpr":
+    case "CLOP.MulExpr":
+      return interval_apply( t.children[0] );
+    case "CLOP.UnaryExpr":
+      return interval_apply( t.children[0] );
+    case "CLOP.PrimaryExpr":
+      return interval_apply( t.children[0] );
+    case "CLOP.Identifier":
+      return intervals.get( t.matches[0], Interval( t, t ) );
+    case "CLOP.FloatLiteral":
+    case "CLOP.IntegerLiteral":
+      return Interval( t, t );
+    default:
+      return Interval();
+    }
+  }
+
   string generate_antidiagonal_range( ParseTree t )
   {
     /*
@@ -567,11 +633,13 @@ struct Compiler
     for ( auto c = 0; c < t.children.length; ++c )
     {
       ParseTree u = t.children[c];
-      add_local( u.matches[0] );
-      range = u.matches[4].dup;
+      auto name = u.matches[0];
+      auto interval = Interval( u.children[1], u.children[2] );
+      add_interval( name, interval );
+      add_local( name );
       s ~= ( internal )
-           ? "  int " ~ u.matches[0] ~ " = (diagonal >= cols) ? diagonal - cols + tx + 1 : tx + 1;\n"
-           : "  int " ~ u.matches[0] ~ " = (diagonal >= cols) ? cols - tx - 1 : diagonal - tx - 1;\n";
+           ? "  int " ~ u.matches[0] ~ " = c0 + tx;\n"
+           : "  int " ~ u.matches[0] ~ " = r0 - tx;\n";
       internal = true;
     }
     return s;
@@ -595,10 +663,19 @@ struct Compiler
     {
       ParseTree u = t.children[c];
       add_local( u.matches[0] );
-      range = u.matches[4].dup;
       s ~= "  int " ~ u.matches[0] ~ " = get_global_id( " ~ i2s( n - 1 - c ) ~ " );\n";
     }
     return s;
+  }
+
+  void add_array( string symbol )
+  {
+    if ( arraytab.length == 0 )
+      arraytab[symbol] = 1;
+    else if ( arraytab.get( symbol, 0 ) == 0 )
+      arraytab[symbol] = 1;
+    else
+      ++arraytab[symbol];
   }
 
   void add_symbol( string symbol )
@@ -619,6 +696,11 @@ struct Compiler
       localtab[symbol] = 1;
     else
       ++localtab[symbol];
+  }
+
+  void add_interval( string name, Interval interval )
+  {
+    intervals[name] = interval;
   }
 
   bool is_local( string sym )
@@ -670,7 +752,7 @@ struct Compiler
         ++i;
       }
     }
-    result ~= "kernel_params ~= \", int diagonal\";\n";
+    result ~= "kernel_params ~= \", int r0, int c0\";\n";
     return result;
   }
 
@@ -703,27 +785,76 @@ struct Compiler
 
   string code_to_invoke_kernel()
   {
-    return "foreach ( clop_diagonal; 2 .. 2 * (" ~ range ~ ") - 1 )
+    debug ( DEBUG_GRAMMAR )
     {
-      size_t global = (clop_diagonal < (" ~ range ~ ")) ? clop_diagonal - 1 : 2 * (" ~ range ~ ") - clop_diagonal - 1;
-      runtime.status = clSetKernelArg( clop_opencl_kernel, clop_opencl_kernel_arg, cl_int.sizeof, &clop_diagonal );
-      assert( runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\" );
-      runtime.status = clEnqueueNDRangeKernel( runtime.queue, clop_opencl_kernel, 1, null, &global, null, 0, null, null );
-      assert( runtime.status == CL_SUCCESS, \"clEnqueueNDRangeKernel failed.\" );
-    }\n";
+      return "";
+    }
+    else
+    {
+      Interval outter = intervals.get( intervals.keys[0], Interval() );
+      Interval inner  = intervals.get( intervals.keys[1], Interval() );
+      return format( q{
+        uint clop_c0 = %s;
+        runtime.status = clSetKernelArg( clop_opencl_kernel, clop_opencl_kernel_arg + 1, cl_int.sizeof, &clop_c0 );
+        assert( runtime.status == CL_SUCCESS, "clSetKernelArg failed." );
+        uint clop_r0;
+        for ( clop_r0 = %s; clop_r0 < %s; ++clop_r0 )
+        {
+          size_t global = clop_r0;
+          runtime.status = clSetKernelArg( clop_opencl_kernel, clop_opencl_kernel_arg, cl_int.sizeof, &clop_r0 );
+          assert( runtime.status == CL_SUCCESS, "clSetKernelArg failed." );
+          runtime.status = clEnqueueNDRangeKernel( runtime.queue, clop_opencl_kernel, 1, null, &global, null, 0, null, null );
+          assert( runtime.status == CL_SUCCESS, "clEnqueueNDRangeKernel failed." );
+        }
+        for ( clop_c0 = %s + 1, clop_r0 -= 1; clop_c0 < %s; ++clop_c0 )
+        {
+          size_t global = clop_r0 - clop_c0 + 1;
+          runtime.status = clSetKernelArg( clop_opencl_kernel, clop_opencl_kernel_arg + 1, cl_int.sizeof, &clop_c0 );
+          assert( runtime.status == CL_SUCCESS, "clSetKernelArg failed." );
+          runtime.status = clEnqueueNDRangeKernel( runtime.queue, clop_opencl_kernel, 1, null, &global, null, 0, null, null );
+          assert( runtime.status == CL_SUCCESS, "clEnqueueNDRangeKernel failed." );
+        }
+      }, inner.min.matches[0],
+         outter.min.matches[0],
+         outter.max.matches[0],
+         inner.min.matches[0],
+         inner.max.matches[0] );
+    }
+  }
+
+  string dump_arraytab()
+  {
+    string result = "// Recognized the following array variables:\n";
+    foreach ( sym; arraytab.keys )
+    {
+      result ~= "// " ~ sym ~ "\n";
+    }
+    return result;
+  }
+
+  string dump_intervals()
+  {
+    string result = "// The intervals:\n";
+    foreach ( k; intervals.keys )
+    {
+      result ~= "// " ~ k ~ ": " ~ intervals[k].toString() ~ "\n";
+    }
+    return result;
   }
 
   string debug_node( ParseTree t )
   {
-    ulong i = 0;
     string s = "\n";
     string indent = "";
-    foreach ( x ; 0 .. depth ) indent ~= "  ";
+    foreach ( x; 0 .. depth ) indent ~= "  ";
     ++depth;
-    foreach ( c; t.children )
-      s ~= indent ~ i2s( i++ ) ~ ": " ~ evaluate( c ) ~ "\n";
+    foreach ( i, c; t.children )
+      s ~= indent ~ i2s( i ) ~ ": " ~ evaluate( c ) ~ "\n";
     --depth;
-    return "<" ~ t.name ~ ">" ~ s ~ indent ~ "</" ~ t.name ~ ">";
+    string m = "";
+    foreach ( i, x; t.matches )
+      m ~= " " ~ i2s( i ) ~ ":\"" ~ x ~ "\"";
+    return format( "<%s, input[%d,%d]:\"%s\" matches%s>%s%s</%s>", t.name, t.begin, t.end, t.input[t.begin .. t.end], m, s, indent, t.name );
   }
 
   string debug_leaf( ParseTree t )
@@ -757,6 +888,8 @@ compile( immutable string expr )
     assert( runtime.status == CL_SUCCESS, "clCreateKernel failed." );
   } ~ c.set_args( "clop_opencl_kernel" ) ~ c.code_to_invoke_kernel() ~ c.code_to_read_data_from_device();
   code ~= "\n// transformations <" ~ c.transformations ~ ">\n";
+  code ~= c.dump_arraytab();
+  code ~= c.dump_intervals();
   code ~= "}\ncatch( Exception e )\n{\n  writeln( e );\n}\n";
   debug ( DEBUG_GRAMMAR )
     return "debug ( DEBUG ) writefln( \"DSL MIXIN:\\n%sEOD\", q{" ~ code ~ "} );\n";

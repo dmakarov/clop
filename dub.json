@@ -2,13 +2,16 @@
   "name"         : "clop",
   "description"  : "OpenCL OPtimizer DSL.",
   "targetType"   : "none",
-  "dependencies" : {
-                     "clop:runtime" : "*",
-                     "clop:nw"      : "*",
-                     "clop:pf"      : "*",
-                     "clop:stencil" : "*"
-                   },
-  
+
+  "configurations": [
+      {
+        "name"         : "default"
+      },
+      {
+        "name"         : "debug-grammar",
+        "debugVersions": ["DEBUG_GRAMMAR"]
+      }
+  ],  
   "subPackages"  : [
       {
         "name"         : "runtime",
