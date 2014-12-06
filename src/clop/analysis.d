@@ -50,6 +50,14 @@ struct Interval
 }
 
 Interval
+interval_union( Interval a, Interval b )
+{
+  auto min = create_call( "min", [a.min, b.min] );
+  auto max = create_call( "max", [a.max, b.max] );
+  return Interval( min, max );
+}
+
+Interval
 interval_arithmetic_operation( Interval a, string op, Interval b )
 {
   switch ( op )
