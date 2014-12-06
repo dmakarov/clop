@@ -16,7 +16,7 @@ class Compiler
   Interval[string] intervals;
   uint[string] symtable;
   uint[string] localtab;
-  uint[string] arraytab;
+  ParseTree[][string] arraytab;
   string declarations;
   string pattern;
   string transformations;
@@ -79,8 +79,7 @@ class Compiler
       }
       else
       {
-        string s = "/*" ~ interval_apply( t.children[0] ).toString() ~ "*/";
-        return "[" ~ evaluate( t.children[0] ) ~  s ~ "]";
+        return "[" ~ evaluate( t.children[0] ) ~ "]";
       }
     case "CLOP.FunctionCall":
       debug ( DEBUG_GRAMMAR )
@@ -134,7 +133,9 @@ class Compiler
           if ( "CLOP.ArrayIndex" == t.children[c].name )
           {
             // analyze index expression
-            add_array( symbol );
+            auto a = arraytab.get( symbol, [] );
+            a ~= t.children[c].children[0];
+            arraytab[symbol] = a;
           }
           s ~= evaluate( t.children[c] );
         }
@@ -668,16 +669,6 @@ class Compiler
     return s;
   }
 
-  void add_array( string symbol )
-  {
-    if ( arraytab.length == 0 )
-      arraytab[symbol] = 1;
-    else if ( arraytab.get( symbol, 0 ) == 0 )
-      arraytab[symbol] = 1;
-    else
-      ++arraytab[symbol];
-  }
-
   void add_symbol( string symbol )
   {
     if ( symtable.length == 0 )
@@ -827,7 +818,10 @@ class Compiler
     string result = "// Recognized the following array variables:\n";
     foreach ( sym; arraytab.keys )
     {
-      result ~= "// " ~ sym ~ "\n";
+      string s = "";
+      foreach ( a; arraytab[sym] )
+        s ~= interval_apply( a ).toString() ~ ",";
+      result ~= "// " ~ sym ~ ": " ~ s ~ "\n";
     }
     return result;
   }
