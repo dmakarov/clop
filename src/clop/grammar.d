@@ -59,8 +59,7 @@ MulExpr                <  [*/] UnaryExpr
 Factor                 <  UnaryExpr MulExpr*
 AddExpr                <  [-+] Factor
 Expression             <  Factor AddExpr*
-AssignExpr             <  UnaryExpr '=' AssignExpr
-                       /  ConditionalExpression
+AssignExpr             <  UnaryExpr '=' AssignExpr /  ConditionalExpression
 RelationalExpression   <  Expression (RelationalOperator RelationalExpression)*
 RelationalOperator     <  "<=" / ">=" / "<" / ">"
 EqualityExpression     <  RelationalExpression (EqualityOperator EqualityExpression)*

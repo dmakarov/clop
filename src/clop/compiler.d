@@ -6,6 +6,7 @@ import std.traits;
 import pegged.grammar;
 
 import clop.analysis;
+import clop.symbol;
 public import clop.grammar;
 public import clop.runtime;
 
@@ -13,14 +14,14 @@ class Compiler
 {
   immutable string source;
   ParseTree AST;
+  Symbol[string] symtable;
   Interval[string] intervals;
-  uint[string] symtable;
-  uint[string] localtab;
-  ParseTree[][string] arraytab;
   string declarations;
   string pattern;
   string transformations;
+  string block_size;
   bool global_scope = false;
+  bool eval_def     = false;
   bool internal     = false;
   uint depth        = 0;
 
@@ -32,334 +33,413 @@ class Compiler
 
   string generate()
   {
-    return evaluate( AST );
+    debug ( DEBUG_GRAMMAR )
+    {
+      return debug_tree( AST );
+    }
+    else
+    {
+      analyze( AST );
+      return translate( AST );
+    }
   }
 
-  string evaluate( ParseTree t )
+  void analyze( ParseTree t )
   {
     switch ( t.name )
     {
     case "CLOP":
-      debug ( DEBUG_GRAMMAR )
       {
-        return debug_node( t );
+        analyze( t.children[0] );
+        break;
       }
-      else
+    case "CLOP.TranslationUnit":
       {
-        return evaluate( t.children[0] );
-      }
-    case "CLOP.Identifier":
-      debug ( DEBUG_GRAMMAR )
-      {
-        return debug_leaf( t );
-      }
-      else
-      {
-        string s = t.matches[0];
-        if ( global_scope && !is_local( s ) )
-          add_symbol( s );
-        else
-          add_local( s );
-        return s;
-      }
-    case "CLOP.FloatLiteral":
-    case "CLOP.IntegerLiteral":
-      debug ( DEBUG_GRAMMAR )
-      {
-        return debug_leaf( t );
-      }
-      else
-      {
-        return t.matches[0];
-      }
-    case "CLOP.ArrayIndex":
-      debug ( DEBUG_GRAMMAR )
-      {
-        return debug_node( t );
-      }
-      else
-      {
-        return "[" ~ evaluate( t.children[0] ) ~ "]";
-      }
-    case "CLOP.FunctionCall":
-      debug ( DEBUG_GRAMMAR )
-      {
-        return debug_node( t );
-      }
-      else
-      {
-        if ( t.children.length > 0 )
+        ulong i = 0;
+        if ( t.children[i].name == "CLOP.ExternalDeclarations" )
         {
-          return "(" ~ evaluate( t.children[0] ) ~ ")";
+          analyze( t.children[i++] );
         }
-        return "()";
+        if ( t.children[i].name == "CLOP.SyncPattern" )
+        {
+          analyze( t.children[i++] );
+        }
+        ulong n = t.children.length;
+        if ( t.children[n - 1].name == "CLOP.Transformations" )
+        {
+          analyze( t.children[n - 1] );
+        }
+        global_scope = true;
+        for ( ; i < t.children.length; ++i )
+          analyze( t.children[i] );
+        break;
+      }
+    case "CLOP.ExternalDeclarations":
+      {
+        foreach ( c; t.children )
+          analyze( c );
+        break;
+      }
+    case "CLOP.ExternalDeclaration":
+      {
+        analyze( t.children[0] );
+        break;
+      }
+    case "CLOP.FunctionDefinition":
+      {
+        bool saved_global_scope_value = global_scope;
+        global_scope = false;
+        foreach ( c; t.children )
+          analyze( c );
+        global_scope = saved_global_scope_value;
+        break;
+      }
+    case "CLOP.DeclarationList":
+      {
+        foreach ( c; t.children )
+          analyze( c );
+        break;
+      }
+    case "CLOP.Declaration":
+      {
+        foreach ( c; t.children )
+          analyze( c );
+        break;
+      }
+    case "CLOP.Declarator":
+      {
+        foreach ( c; t.children )
+          analyze( c );
+        break;
+      }
+    case "CLOP.TypeSpecifier":
+      {
+        break;
+      }
+    case "CLOP.ParameterList":
+      {
+        foreach ( c; t.children )
+          analyze( c );
+        break;
+      }
+    case "CLOP.ParameterDeclaration":
+      {
+        foreach ( c; t.children )
+          analyze( c );
+        break;
+      }
+    case "CLOP.IdentifierList":
+      {
+        foreach ( c; t.children )
+          analyze( c );
+        break;
+      }
+    case "CLOP.InitDeclaratorList":
+      {
+        foreach ( c; t.children )
+          analyze( c );
+        break;
+      }
+    case "CLOP.InitDeclarator":
+      {
+        foreach ( c; t.children )
+          analyze( c );
+        break;
+      }
+    case "CLOP.Initializer":
+      {
+        analyze( t.children[0] );
+        break;
+      }
+    case "CLOP.InitializerList":
+      {
+        foreach ( c; t.children )
+          analyze( c );
+        break;
+      }
+    case "CLOP.SyncPattern":
+      {
+        pattern = t.matches[0];
+        break;
+      }
+    case "CLOP.RangeDecl":
+      {
+        analyze( t.children[0] );
+        break;
+      }
+    case "CLOP.RangeList":
+      {
+        foreach ( c; t.children )
+          analyze( c );
+        break;
+      }
+    case "CLOP.RangeSpec":
+      {
+        break;
+      }
+    case "CLOP.Transformations":
+      {
+        analyze( t.children[0] );
+        break;
+      }
+    case "CLOP.TransList":
+      {
+        foreach ( c; t.children )
+          analyze( c );
+        break;
+      }
+    case "CLOP.TransSpec":
+      {
+        if ( t.matches.length > 3 )
+        {
+          block_size = t.matches[$-2];
+        }
+        transformations = t.matches[0];
+        break;
       }
     case "CLOP.PrimaryExpr":
-      debug ( DEBUG_GRAMMAR )
       {
-        return debug_node( t );
-      }
-      else
-      {
-        string s = evaluate( t.children[0] );
-        if ( t.matches[0] == "(" ) return "(" ~ s ~ ")";
-        return s;
-      }
-    case "CLOP.Factor":
-      debug ( DEBUG_GRAMMAR )
-      {
-        return debug_node( t );
-      }
-      else
-      {
-        string s = evaluate( t.children[0] );
-        for ( auto c = 1; c < t.children.length; ++c )
-          s ~= evaluate( t.children[c] );
-        return s;
+        analyze( t.children[0] );
+        break;
       }
     case "CLOP.UnaryExpr":
-      debug ( DEBUG_GRAMMAR )
       {
-        return debug_node( t );
-      }
-      else
-      {
-        // this primary expression
-        string s = evaluate( t.children[0] );
-        string symbol = s;
+        analyze( t.children[0] );
+        // this is primary expression
+        string symbol = t.matches[0];
         // this can be array index or function call
         for ( auto c = 1; c < t.children.length; ++c )
         {
           if ( "CLOP.ArrayIndex" == t.children[c].name )
           {
             // analyze index expression
-            auto a = arraytab.get( symbol, [] );
-            a ~= t.children[c].children[0];
-            arraytab[symbol] = a;
+            symtable[symbol].is_array = true;
+            if ( eval_def )
+            {
+              symtable[symbol].defs ~= t.children[c].children[0];
+            }
+            else
+            {
+              symtable[symbol].uses ~= t.children[c].children[0];
+            }
           }
-          s ~= evaluate( t.children[c] );
+          analyze( t.children[c] );
         }
-        return s;
+        break;
       }
-    case "CLOP.Expression":
-      debug ( DEBUG_GRAMMAR )
+    case "CLOP.ArrayIndex":
       {
-        return debug_node( t );
+        analyze( t.children[0] );
+        break;
       }
-      else
+    case "CLOP.FunctionCall":
       {
-        string s = evaluate( t.children[0] );
-        for ( auto c = 1; c < t.children.length; ++c )
-          s ~= evaluate( t.children[c] );
-        return s;
+        if ( t.children.length > 0 )
+        {
+          analyze( t.children[0] );
+        }
+        break;
       }
     case "CLOP.ArgumentList":
-      debug ( DEBUG_GRAMMAR )
       {
-        return debug_node( t );
-      }
-      else
-      {
-        string s = evaluate( t.children[0] );
-        for ( auto c = 1; c < t.children.length; ++c )
-          s ~= "," ~ evaluate( t.children[c] );
-        return s;
+        foreach ( c; t.children )
+          analyze( c );
+        break;
       }
     case "CLOP.MulExpr":
+    case "CLOP.Factor":
     case "CLOP.AddExpr":
-      debug ( DEBUG_GRAMMAR )
+    case "CLOP.Expression":
       {
-        return debug_node( t );
-      }
-      else
-      {
-        return t.matches[0] ~ evaluate( t.children[0] );
+        foreach ( c; t.children )
+          analyze( c );
+        break;
       }
     case "CLOP.AssignExpr":
-      debug ( DEBUG_GRAMMAR )
-      {
-        return debug_node( t );
-      }
-      else
       {
         if ( t.children.length == 2 )
         {
-          return evaluate( t.children[0] ) ~ " = " ~ evaluate( t.children[1] );
+          eval_def = true;
+          analyze( t.children[0] );
+          eval_def = false;
+          analyze( t.children[1] );
         }
         else
         {
-          return evaluate( t.children[0] );
+          analyze( t.children[0] );
         }
+        break;
       }
-    case "CLOP.EqualityExpression":
     case "CLOP.RelationalExpression":
-      debug ( DEBUG_GRAMMAR )
+    case "CLOP.EqualityExpression":
       {
-        return debug_node( t );
-      }
-      else
-      {
-        string s = evaluate( t.children[0] );
+        analyze( t.children[0] );
         for ( auto i = 1; i < t.children.length; i += 2 )
-          s ~= " " ~ t.children[i].matches[0] ~ " " ~ evaluate( t.children[i + 1] );
-        return s;
+          analyze( t.children[i + 1] );
+        break;
       }
     case "CLOP.ANDExpression":
-      debug ( DEBUG_GRAMMAR )
-      {
-        return debug_node( t );
-      }
-      else
-      {
-        string s = evaluate( t.children[0] );
-        foreach ( i; 1 .. t.children.length )
-          s ~= "&" ~ evaluate( t.children[i] );
-        return s;
-      }
     case "CLOP.ExclusiveORExpression":
-      debug ( DEBUG_GRAMMAR )
-      {
-        return debug_node( t );
-      }
-      else
-      {
-        string s = evaluate( t.children[0] );
-        foreach ( i; 1 .. t.children.length )
-          s ~= "^" ~ evaluate( t.children[i] );
-        return s;
-      }
     case "CLOP.InclusiveORExpression":
-      debug ( DEBUG_GRAMMAR )
-      {
-        return debug_node( t );
-      }
-      else
-      {
-        string s = evaluate( t.children[0] );
-        foreach ( i; 1 .. t.children.length )
-          s ~= "|" ~ evaluate( t.children[i] );
-        return s;
-      }
     case "CLOP.LogicalANDExpression":
-      debug ( DEBUG_GRAMMAR )
-      {
-        return debug_node( t );
-      }
-      else
-      {
-        string s = evaluate( t.children[0] );
-        foreach ( i; 1 .. t.children.length )
-          s ~= "&&" ~ evaluate( t.children[i] );
-        return s;
-      }
     case "CLOP.LogicalORExpression":
-      debug ( DEBUG_GRAMMAR )
-      {
-        return debug_node( t );
-      }
-      else
-      {
-        string s = evaluate( t.children[0] );
-        foreach ( i; 1 .. t.children.length )
-          s ~= "||" ~ evaluate( t.children[i] );
-        return s;
-      }
     case "CLOP.ConditionalExpression":
-      debug ( DEBUG_GRAMMAR )
+    case "CLOP.ConstantExpression":
+    case "CLOP.CompoundStatement":
       {
-        return debug_node( t );
-      }
-      else
-      {
-        if ( t.children.length == 3 )
-        {
-          string c = evaluate( t.children[0] );
-          string a = evaluate( t.children[1] );
-          string b = evaluate( t.children[2] );
-          return "(" ~ c ~ " ? " ~ a ~ " : " ~ b ~ ")";
-        }
-        else
-        {
-          return evaluate( t.children[0] );
-        }
+        foreach ( c; t.children )
+          analyze( c );
+        break;
       }
     case "CLOP.ExpressionStatement":
-      debug ( DEBUG_GRAMMAR )
       {
-        return debug_node( t );
-      }
-      else
-      {
-        string s = ( t.children.length > 0 ) ? evaluate( t.children[0] ) ~ ";" : ";";
-        return s;
+        if ( t.children.length > 0 )
+          analyze( t.children[0] );
+        break;
       }
     case "CLOP.ReturnStatement":
-      debug ( DEBUG_GRAMMAR )
-      {
-        return debug_node( t );
-      }
-      else
-      {
-        return "return " ~ evaluate( t.children[0] ) ~ ";";
-      }
     case "CLOP.Statement":
-      debug ( DEBUG_GRAMMAR )
       {
-        return debug_node( t );
-      }
-      else
-      {
-        return evaluate( t.children[0] );
+        analyze( t.children[0] );
+        break;
       }
     case "CLOP.StatementList":
-      debug ( DEBUG_GRAMMAR )
       {
-        return debug_node( t );
+        foreach ( c; t.children )
+          analyze( c );
+        break;
       }
-      else
+    case "CLOP.Identifier":
+      {
+        string s = t.matches[0];
+        if ( symtable.get( s, Symbol() ) == Symbol() )
+          symtable[s] = Symbol( s, t, !global_scope, false, [], [] );
+        break;
+      }
+    case "CLOP.FloatLiteral":
+    case "CLOP.IntegerLiteral":
+      {
+        break;
+      }
+    default:
+      {
+        break;
+      }
+    }
+  }
+
+  string translate( ParseTree t )
+  {
+    switch ( t.name )
+    {
+    case "CLOP":
+      {
+        return translate( t.children[0] );
+      }
+    case "CLOP.TranslationUnit":
+      {
+        ulong i = 0;
+        if ( t.children[i].name == "CLOP.ExternalDeclarations" )
+        {
+          declarations = translate( t.children[i++] );
+        }
+        if ( t.children[i].name == "CLOP.SyncPattern" )
+        {
+          i++;
+        }
+        global_scope = true;
+        string r = translate( t.children[i++] );
+        string s = translate( t.children[i] );
+        string k = generate_kernel_name();
+        return "q{\n" ~ declarations ~ "} ~ \"__kernel void " ~ k ~ "( \" ~ kernel_params ~ \" )\" ~\nq{\n{\n" ~ r ~ s ~ "}\n}";
+      }
+    case "CLOP.ExternalDeclarations":
       {
         string s = "";
-        foreach ( c; t.children ) s ~= "  " ~ evaluate( c ) ~ "\n";
+        foreach ( c; t.children )
+          s ~= translate( c );
         return s;
       }
-    case "CLOP.CompoundStatement":
-      debug ( DEBUG_GRAMMAR )
+    case "CLOP.ExternalDeclaration":
       {
-        return debug_node( t );
+        return translate( t.children[0] );
       }
-      else
+    case "CLOP.FunctionDefinition":
       {
-        string s = "{\n";
-        foreach ( c; t.children ) s ~= evaluate( c );
-        return s ~ "}\n";
+        bool saved_global_scope_value = global_scope;
+        global_scope = false;
+        string y = translate( t.children[0] );
+        string d = translate( t.children[1] );
+        string s = translate( t.children[2] );
+        global_scope = saved_global_scope_value;
+        return y ~ " " ~ d ~ " " ~ s;
+      }
+    case "CLOP.DeclarationList":
+      {
+        string s = "";
+        foreach ( c; t.children )
+          s ~= "  " ~ translate( c ) ~ "\n";
+        return s;
+      }
+    case "CLOP.Declaration":
+      {
+        string s = translate( t.children[0] );
+        if ( t.children.length > 1 )
+          s ~= " " ~ translate( t.children[1] );
+        return s ~ ";";
+      }
+    case "CLOP.Declarator":
+      {
+        string s = translate( t.children[0] );
+        if ( t.children.length > 1 )
+          s ~= "( " ~ translate( t.children[1] ) ~ " )";
+        return s;
+      }
+    case "CLOP.TypeSpecifier":
+      {
+        return t.matches[0];
+      }
+    case "CLOP.ParameterList":
+      {
+        string s = translate( t.children[0] );
+        foreach ( i; 1 .. t.children.length )
+          s ~= ", " ~ translate( t.children[i] );
+        return s;
+      }
+    case "CLOP.ParameterDeclaration":
+      {
+        return translate( t.children[0] ) ~ " " ~ translate( t.children[1] );
+      }
+    case "CLOP.InitDeclaratorList":
+      {
+        string s = translate( t.children[0] );
+        foreach ( i; 1 .. t.children.length )
+          s ~= ", " ~ translate( t.children[i] );
+        return s;
+      }
+    case "CLOP.InitDeclarator":
+      {
+        string s = translate( t.children[0] );
+        if ( t.children.length > 1 )
+          s ~= " = " ~ translate( t.children[1] );
+        return s;
+      }
+    case "CLOP.Initializer":
+      {
+        return translate( t.children[0] );
       }
     /+
      + specification of the ND range over which the kernel will be executed.
      +/
     case "CLOP.SyncPattern":
-      debug ( DEBUG_GRAMMAR )
-      {
-        return debug_leaf( t );
-      }
-      else
       {
         return t.matches[0];
       }
-    case "CLOP.RangeSpec":
-      debug ( DEBUG_GRAMMAR )
+    case "CLOP.RangeDecl":
       {
-        return debug_node( t );
-      }
-      else
-      {
-        return null;
+        return translate( t.children[0] );
       }
     case "CLOP.RangeList":
-      debug ( DEBUG_GRAMMAR )
-      {
-        return debug_node( t );
-      }
-      else
       {
         switch ( pattern )
         {
@@ -369,205 +449,197 @@ class Compiler
         default:             return generate_ndrange( t );
         }
       }
-    case "CLOP.RangeDecl":
-      debug( DEBUG_GRAMMAR )
-      {
-        return debug_node( t );
-      }
-      else
-      {
-        return evaluate( t.children[0] );
-      }
     case "CLOP.Transformations":
-      debug ( DEBUG_GRAMMAR )
       {
-        return debug_node( t );
-      }
-      else
-      {
-        return evaluate( t.children[0] );
+        return translate( t.children[0] );
       }
     case "CLOP.TransList":
-      debug ( DEBUG_GRAMMAR )
       {
-        return debug_node( t );
-      }
-      else
-      {
-        string s = evaluate( t.children[0] );
+        string s = translate( t.children[0] );
         for ( auto c = 1; c < t.children.length; ++c )
-          s ~= evaluate( t.children[c] );
+          s ~= translate( t.children[c] );
         return s;
       }
     case "CLOP.TransSpec":
-      debug ( DEBUG_GRAMMAR )
       {
-        return debug_node( t );
+        if ( t.matches.length > 3 )
+        {
+          block_size = t.matches[$-2];
+        }
+        return translate( t.children[0] );
       }
-      else
+    case "CLOP.PrimaryExpr":
       {
-        return evaluate( t.children[0] );
+        string s = translate( t.children[0] );
+        if ( t.matches[0] == "(" ) return "(" ~ s ~ ")";
+        return s;
       }
-    case "CLOP.TypeSpecifier":
-      debug ( DEBUG_GRAMMAR )
+    case "CLOP.UnaryExpr":
       {
-        return debug_leaf( t );
+        // this primary expression
+        string s = translate( t.children[0] );
+        // this can be array index or function call
+        for ( auto c = 1; c < t.children.length; ++c )
+        {
+          if ( "CLOP.ArrayIndex" == t.children[c].name )
+          {
+            // translate index expression
+            if ( eval_def )
+            {
+              s = "/*def*/" ~ s;
+            }
+            else
+            {
+              s = "/*use*/" ~ s;
+            }
+          }
+          s ~= translate( t.children[c] );
+        }
+        return s;
       }
-      else
+    case "CLOP.ArrayIndex":
+      {
+        return "[" ~ translate( t.children[0] ) ~ "]";
+      }
+    case "CLOP.FunctionCall":
+      {
+        if ( t.children.length > 0 )
+        {
+          return "(" ~ translate( t.children[0] ) ~ ")";
+        }
+        return "()";
+      }
+    case "CLOP.ArgumentList":
+      {
+        string s = translate( t.children[0] );
+        for ( auto c = 1; c < t.children.length; ++c )
+          s ~= "," ~ translate( t.children[c] );
+        return s;
+      }
+    case "CLOP.MulExpr":
+    case "CLOP.AddExpr":
+      {
+        return t.matches[0] ~ translate( t.children[0] );
+      }
+    case "CLOP.Factor":
+      {
+        string s = translate( t.children[0] );
+        for ( auto c = 1; c < t.children.length; ++c )
+          s ~= translate( t.children[c] );
+        return s;
+      }
+    case "CLOP.Expression":
+      {
+        string s = translate( t.children[0] );
+        for ( auto c = 1; c < t.children.length; ++c )
+          s ~= translate( t.children[c] );
+        return s;
+      }
+    case "CLOP.AssignExpr":
+      {
+        if ( t.children.length == 2 )
+        {
+          eval_def = true;
+          string lhs = translate( t.children[0] );
+          eval_def = false;
+          string rhs = translate( t.children[1] );
+          return lhs ~ " = " ~ rhs;
+        }
+        else
+        {
+          return translate( t.children[0] );
+        }
+      }
+    case "CLOP.RelationalExpression":
+    case "CLOP.EqualityExpression":
+      {
+        string s = translate( t.children[0] );
+        for ( auto i = 1; i < t.children.length; i += 2 )
+          s ~= " " ~ t.children[i].matches[0] ~ " " ~ translate( t.children[i + 1] );
+        return s;
+      }
+    case "CLOP.ANDExpression":
+      {
+        string s = translate( t.children[0] );
+        foreach ( i; 1 .. t.children.length )
+          s ~= "&" ~ translate( t.children[i] );
+        return s;
+      }
+    case "CLOP.ExclusiveORExpression":
+      {
+        string s = translate( t.children[0] );
+        foreach ( i; 1 .. t.children.length )
+          s ~= "^" ~ translate( t.children[i] );
+        return s;
+      }
+    case "CLOP.InclusiveORExpression":
+      {
+        string s = translate( t.children[0] );
+        foreach ( i; 1 .. t.children.length )
+          s ~= "|" ~ translate( t.children[i] );
+        return s;
+      }
+    case "CLOP.LogicalANDExpression":
+      {
+        string s = translate( t.children[0] );
+        foreach ( i; 1 .. t.children.length )
+          s ~= "&&" ~ translate( t.children[i] );
+        return s;
+      }
+    case "CLOP.LogicalORExpression":
+      {
+        string s = translate( t.children[0] );
+        foreach ( i; 1 .. t.children.length )
+          s ~= "||" ~ translate( t.children[i] );
+        return s;
+      }
+    case "CLOP.ConditionalExpression":
+      {
+        if ( t.children.length == 3 )
+        {
+          string c = translate( t.children[0] );
+          string a = translate( t.children[1] );
+          string b = translate( t.children[2] );
+          return "(" ~ c ~ " ? " ~ a ~ " : " ~ b ~ ")";
+        }
+        else
+        {
+          return translate( t.children[0] );
+        }
+      }
+    case "CLOP.CompoundStatement":
+      {
+        string s = "{\n";
+        foreach ( c; t.children ) s ~= translate( c );
+        return s ~ "}\n";
+      }
+    case "CLOP.ExpressionStatement":
+      {
+        string s = ( t.children.length > 0 ) ? translate( t.children[0] ) ~ ";" : ";";
+        return s;
+      }
+    case "CLOP.ReturnStatement":
+      {
+        return "return " ~ translate( t.children[0] ) ~ ";";
+      }
+    case "CLOP.Statement":
+      {
+        return translate( t.children[0] );
+      }
+    case "CLOP.StatementList":
+      {
+        string s = "";
+        foreach ( c; t.children ) s ~= "  " ~ translate( c ) ~ "\n";
+        return s;
+      }
+    case "CLOP.Identifier":
       {
         return t.matches[0];
       }
-    case "CLOP.ParameterDeclaration":
-      debug ( DEBUG_GRAMMAR )
+    case "CLOP.IntegerLiteral":
+    case "CLOP.FloatLiteral":
       {
-        return debug_node( t );
-      }
-      else
-      {
-        return evaluate( t.children[0] ) ~ " " ~ evaluate( t.children[1] );
-      }
-    case "CLOP.ParameterList":
-      debug ( DEBUG_GRAMMAR )
-      {
-        return debug_node( t );
-      }
-      else
-      {
-        string s = evaluate( t.children[0] );
-        foreach ( i; 1 .. t.children.length )
-          s ~= ", " ~ evaluate( t.children[i] );
-        return s;
-      }
-    case "CLOP.Initializer":
-      debug ( DEBUG_GRAMMAR )
-      {
-        return debug_node( t );
-      }
-      else
-      {
-        return evaluate( t.children[0] );
-      }
-    case "CLOP.InitDeclarator":
-      debug ( DEBUG_GRAMMAR )
-      {
-        return debug_node( t );
-      }
-      else
-      {
-        string s = evaluate( t.children[0] );
-        if ( t.children.length > 1 )
-          s ~= " = " ~ evaluate( t.children[1] );
-        return s;
-      }
-    case "CLOP.InitDeclaratorList":
-      debug ( DEBUG_GRAMMAR )
-      {
-        return debug_node( t );
-      }
-      else
-      {
-        string s = evaluate( t.children[0] );
-        foreach ( i; 1 .. t.children.length )
-          s ~= ", " ~ evaluate( t.children[i] );
-        return s;
-      }
-    case "CLOP.Declarator":
-      debug ( DEBUG_GRAMMAR )
-      {
-        return debug_node( t );
-      }
-      else
-      {
-        string s = evaluate( t.children[0] );
-        if ( t.children.length > 1 )
-          s ~= "( " ~ evaluate( t.children[1] ) ~ " )";
-        return s;
-      }
-    case "CLOP.Declaration":
-      debug ( DEBUG_GRAMMAR )
-      {
-        return debug_node( t );
-      }
-      else
-      {
-        string s = evaluate( t.children[0] );
-        if ( t.children.length > 1 )
-          s ~= " " ~ evaluate( t.children[1] );
-        return s ~ ";";
-      }
-    case "CLOP.DeclarationList":
-      debug ( DEBUG_GRAMMAR )
-      {
-        return debug_node( t );
-      }
-      else
-      {
-        string s = "";
-        foreach ( c; t.children )
-          s ~= "  " ~ evaluate( c ) ~ "\n";
-        return s;
-      }
-    case "CLOP.FunctionDefinition":
-      debug ( DEBUG_GRAMMAR )
-      {
-        return debug_node( t );
-      }
-      else
-      {
-        bool saved_global_scope_value = global_scope;
-        global_scope = false;
-        string y = evaluate( t.children[0] );
-        string d = evaluate( t.children[1] );
-        string s = evaluate( t.children[2] );
-        global_scope = saved_global_scope_value;
-        return y ~ " " ~ d ~ " " ~ s;
-      }
-    case "CLOP.ExternalDeclaration":
-      debug ( DEBUG_GRAMMAR )
-      {
-        return debug_node( t );
-      }
-      else
-      {
-        return evaluate( t.children[0] );
-      }
-    case "CLOP.ExternalDeclarations":
-      debug ( DEBUG_GRAMMAR )
-      {
-        return debug_node( t );
-      }
-      else
-      {
-        string s = "";
-        foreach ( c; t.children )
-          s ~= evaluate( c );
-        return s;
-      }
-    case "CLOP.TranslationUnit":
-      debug ( DEBUG_GRAMMAR )
-      {
-        return debug_node( t );
-      }
-      else
-      {
-        ulong i = 0;
-        if ( t.children[i].name == "CLOP.ExternalDeclarations" )
-        {
-          declarations = evaluate( t.children[i++] );
-        }
-        if ( t.children[i].name == "CLOP.SyncPattern" )
-        {
-          pattern = evaluate( t.children[i++] );
-        }
-        ulong n = t.children.length;
-        if ( t.children[n - 1].name == "CLOP.Transformations" )
-        {
-          transformations = evaluate( t.children[n - 1] );
-        }
-        global_scope = true;
-        string r = evaluate( t.children[i++] );
-        string s = evaluate( t.children[i++] );
-        return "q{\n" ~ declarations ~ "} ~ \"__kernel void clop_opencl_kernel_main( \" ~ kernel_params ~ \" )\" ~\nq{\n{\n" ~ r ~ s ~ "}\n}";
+        return t.matches[0];
       }
     default: return t.name;
     }
@@ -610,6 +682,21 @@ class Compiler
     }
   }
 
+  string generate_kernel_name()
+  {
+    return format( "clop_kernel_main_%s_%s", pattern, transformations );
+  }
+
+  string select_array_for_shared_memory()
+  {
+    return "F";
+  }
+
+  string generate_shared_memory_variable( string v )
+  {
+    return v ~ "_in_shared_memory";
+  }
+
   string generate_antidiagonal_range( ParseTree t )
   {
     /*
@@ -630,18 +717,68 @@ class Compiler
         F_shared[(tx + 1)                   ] = F[index_n]; // copy the row of N elements into the top row of t
         barrier( CLK_LOCAL_MEM_FENCE );
     */
-    string s = "  int tx = get_global_id( 0 );\n";
-    for ( auto c = 0; c < t.children.length; ++c )
+    string s = "";
+    if ( transformations == "rectangular_blocking" )
     {
-      ParseTree u = t.children[c];
-      auto name = u.matches[0];
-      auto interval = Interval( u.children[1], u.children[2] );
-      add_interval( name, interval );
-      add_local( name );
-      s ~= ( internal )
-           ? "  int " ~ u.matches[0] ~ " = c0 + tx;\n"
-           : "  int " ~ u.matches[0] ~ " = r0 - tx;\n";
-      internal = true;
+      s ~= "  int bx = get_group_id( 0 );\n";
+      s ~= "  int tx = get_local_id( 0 );\n";
+      string inner;
+      string outter;
+      for ( auto c = 0; c < t.children.length; ++c )
+      {
+        ParseTree u = t.children[c];
+        auto name = u.matches[0];
+        auto interval = Interval( u.children[1], u.children[2] );
+        add_interval( name, interval );
+        symtable[name] = Symbol( name, t, true );
+        string v = u.matches[0];
+        if ( internal )
+        {
+          inner = v;
+          s ~= format( "  int b%s = b%s0 + bx;\n", v, v );
+        }
+        else
+        {
+          outter = v;
+          s ~= format( "  int b%s = b%s0 - bx;\n", v, v );
+        }
+        s ~= format( "  int %s = b%s * %s + 1;\n", v, v, block_size );
+        internal = true;
+      }
+      string v = select_array_for_shared_memory();
+      string u = generate_shared_memory_variable( v );
+      string w = "1";
+      string h = "1";
+      string nw = format( "(%s - %s) * %s + %s - %s", outter, h, "cols", inner, w );
+      string wi = format( "(%s - %s) * %s + %s - %s", outter, h, "cols", inner, w );
+      string ni = format( "(%s - %s) * %s + %s - %s", outter, h, "cols", inner, w );
+      s ~= format( q{
+        if ( tx == 0 )
+          for ( int i = 0; i < %s; ++i ) // h
+            for ( int j = 0; j < %s; ++j ) // w
+              %s[i * (%s + %s)] = %s[%s]; // u, bs, w, v, nw
+        for ( int i = 0; i < %s; ++i ) // w
+              %s[(tx + %s) * (%s + %s)] = %s[%s]; // u, h, bs, w, v, wi
+        for ( int i = 0; i < %s; ++i ) // h
+              %s[(tx + %s)] = %s[%s]; // u, w, v, ni
+        barrier( CLK_LOCAL_MEM_FENCE );
+      }, h, w, u, block_size, w, v, nw, w, u, h, block_size, w, v, wi, h, u, w, v, ni );
+    }
+    else
+    {
+      s ~= "  int tx = get_global_id( 0 );\n";
+      for ( auto c = 0; c < t.children.length; ++c )
+      {
+        ParseTree u = t.children[c];
+        auto name = u.matches[0];
+        auto interval = Interval( u.children[1], u.children[2] );
+        add_interval( name, interval );
+        symtable[name] = Symbol( name, t, true );
+        s ~= ( internal )
+             ? "  int " ~ u.matches[0] ~ " = c0 + tx;\n"
+             : "  int " ~ u.matches[0] ~ " = r0 - tx;\n";
+        internal = true;
+      }
     }
     return s;
   }
@@ -663,30 +800,11 @@ class Compiler
     for ( auto c = 0; c < n; ++c )
     {
       ParseTree u = t.children[c];
-      add_local( u.matches[0] );
-      s ~= "  int " ~ u.matches[0] ~ " = get_global_id( " ~ i2s( n - 1 - c ) ~ " );\n";
+      string name = u.matches[0];
+      symtable[name] = Symbol( name, t, true );
+      s ~= "  int " ~ name ~ " = get_global_id( " ~ i2s( n - 1 - c ) ~ " );\n";
     }
     return s;
-  }
-
-  void add_symbol( string symbol )
-  {
-    if ( symtable.length == 0 )
-      symtable[symbol] = 1;
-    else if ( symtable.get( symbol, 0 ) == 0 )
-      symtable[symbol] = 1;
-    else
-      ++symtable[symbol];
-  }
-
-  void add_local( string symbol )
-  {
-    if ( localtab.length == 0 )
-      localtab[symbol] = 1;
-    else if ( localtab.get( symbol, 0 ) == 0 )
-      localtab[symbol] = 1;
-    else
-      ++localtab[symbol];
   }
 
   void add_interval( string name, Interval interval )
@@ -696,7 +814,7 @@ class Compiler
 
   bool is_local( string sym )
   {
-    return ( localtab.get( sym, 0 ) != 0 );
+    return symtable.get( sym, Symbol() ).is_local;
   }
 
   string ct_itoa(T)(T x)
@@ -729,7 +847,7 @@ class Compiler
     uint i = 0;
     foreach( sym; symtable.keys )
     {
-      if ( localtab.get( sym, 0 ) == 0 )
+      if ( !symtable[sym].is_local )
       {
         result ~= "param = mixin( set_kernel_param!(typeof(" ~ sym ~ "))(\"" ~ sym ~ "\") );\n";
         if ( i == 0 )
@@ -743,7 +861,7 @@ class Compiler
         ++i;
       }
     }
-    result ~= "kernel_params ~= \", int r0, int c0\";\n";
+    result ~= "kernel_params ~= \", int br0, int bc0, __local int* F_in_shared_memory\";\n";
     return result;
   }
 
@@ -752,7 +870,7 @@ class Compiler
     string result = "uint clop_opencl_kernel_arg = 0;\n";
     foreach( sym; symtable.keys )
     {
-      if ( localtab.get( sym, 0 ) == 0 )
+      if ( !symtable[sym].is_local )
       {
         result ~= "mixin( set_kernel_arg!(typeof(" ~ sym ~ "))(\"" ~
         kernel ~ "\",\"clop_opencl_kernel_arg\",\"" ~ sym ~ "\") );\n";
@@ -766,7 +884,7 @@ class Compiler
     string result = "";
     foreach( sym; symtable.keys )
     {
-      if ( localtab.get( sym, 0 ) == 0 )
+      if ( !symtable[sym].is_local )
       {
         result ~= "mixin( read_device_buffer!(typeof(" ~ sym ~ "))(\"" ~ sym ~ "\") );\n";
       }
@@ -792,17 +910,17 @@ class Compiler
         for ( clop_r0 = %s; clop_r0 < %s; ++clop_r0 )
         {
           size_t global = clop_r0;
-          runtime.status = clSetKernelArg( clop_opencl_kernel, clop_opencl_kernel_arg, cl_int.sizeof, &clop_r0 );
+          //runtime.status = clSetKernelArg( clop_opencl_kernel, clop_opencl_kernel_arg, cl_int.sizeof, &clop_r0 );
           assert( runtime.status == CL_SUCCESS, "clSetKernelArg failed." );
-          runtime.status = clEnqueueNDRangeKernel( runtime.queue, clop_opencl_kernel, 1, null, &global, null, 0, null, null );
+          //runtime.status = clEnqueueNDRangeKernel( runtime.queue, clop_opencl_kernel, 1, null, &global, null, 0, null, null );
           assert( runtime.status == CL_SUCCESS, "clEnqueueNDRangeKernel failed." );
         }
         for ( clop_c0 = %s + 1, clop_r0 -= 1; clop_c0 < %s; ++clop_c0 )
         {
           size_t global = clop_r0 - clop_c0 + 1;
-          runtime.status = clSetKernelArg( clop_opencl_kernel, clop_opencl_kernel_arg + 1, cl_int.sizeof, &clop_c0 );
+          //runtime.status = clSetKernelArg( clop_opencl_kernel, clop_opencl_kernel_arg + 1, cl_int.sizeof, &clop_c0 );
           assert( runtime.status == CL_SUCCESS, "clSetKernelArg failed." );
-          runtime.status = clEnqueueNDRangeKernel( runtime.queue, clop_opencl_kernel, 1, null, &global, null, 0, null, null );
+          //runtime.status = clEnqueueNDRangeKernel( runtime.queue, clop_opencl_kernel, 1, null, &global, null, 0, null, null );
           assert( runtime.status == CL_SUCCESS, "clEnqueueNDRangeKernel failed." );
         }
       }, inner.min.matches[0],
@@ -816,12 +934,18 @@ class Compiler
   string dump_arraytab()
   {
     string result = "// Recognized the following array variables:\n";
-    foreach ( sym; arraytab.keys )
+    foreach ( sym; symtable.keys )
     {
-      string s = "";
-      foreach ( a; arraytab[sym] )
-        s ~= interval_apply( a ).toString() ~ ",";
-      result ~= "// " ~ sym ~ ": " ~ s ~ "\n";
+      if ( symtable[sym].is_array )
+      {
+        string s = "// defs " ~ i2s(symtable[sym].defs.length) ~ "\n";
+        foreach ( a; symtable[sym].defs )
+          s ~= "// " ~ interval_apply( a ).toString() ~ "\n";
+        s ~= "// uses " ~ i2s(symtable[sym].uses.length) ~ "\n";
+        foreach ( a; symtable[sym].uses )
+          s ~= "// " ~ interval_apply( a ).toString() ~ "\n";
+        result ~= "// " ~ sym ~ ":\n" ~ s;
+      }
     }
     return result;
   }
@@ -843,7 +967,7 @@ class Compiler
     foreach ( x; 0 .. depth ) indent ~= "  ";
     ++depth;
     foreach ( i, c; t.children )
-      s ~= indent ~ i2s( i ) ~ ": " ~ evaluate( c ) ~ "\n";
+      s ~= indent ~ i2s( i ) ~ ": " ~ debug_tree( c ) ~ "\n";
     --depth;
     string m = "";
     foreach ( i, x; t.matches )
@@ -855,6 +979,64 @@ class Compiler
   {
     return "<" ~ t.name ~ ">" ~ t.matches[0] ~ "</" ~ t.name ~ ">";
   }
+  
+  string debug_tree( ParseTree t )
+  {
+    switch ( t.name )
+    {
+    case "CLOP":
+    case "CLOP.ArrayIndex":
+    case "CLOP.FunctionCall":
+    case "CLOP.PrimaryExpr":
+    case "CLOP.Factor":
+    case "CLOP.UnaryExpr":
+    case "CLOP.Expression":
+    case "CLOP.ArgumentList":
+    case "CLOP.MulExpr":
+    case "CLOP.AddExpr":
+    case "CLOP.AssignExpr":
+    case "CLOP.EqualityExpression":
+    case "CLOP.RelationalExpression":
+    case "CLOP.ANDExpression":
+    case "CLOP.ExclusiveORExpression":
+    case "CLOP.InclusiveORExpression":
+    case "CLOP.LogicalANDExpression":
+    case "CLOP.LogicalORExpression":
+    case "CLOP.ConditionalExpression":
+    case "CLOP.ExpressionStatement":
+    case "CLOP.ReturnStatement":
+    case "CLOP.Statement":
+    case "CLOP.StatementList":
+    case "CLOP.CompoundStatement":
+    case "CLOP.SyncPattern":
+    case "CLOP.RangeSpec":
+    case "CLOP.RangeList":
+    case "CLOP.RangeDecl":
+    case "CLOP.Transformations":
+    case "CLOP.TransList":
+    case "CLOP.TransSpec":
+    case "CLOP.TypeSpecifier":
+    case "CLOP.ParameterDeclaration":
+    case "CLOP.ParameterList":
+    case "CLOP.Initializer":
+    case "CLOP.InitDeclarator":
+    case "CLOP.InitDeclaratorList":
+    case "CLOP.Declarator":
+    case "CLOP.Declaration":
+    case "CLOP.DeclarationList":
+    case "CLOP.FunctionDefinition":
+    case "CLOP.ExternalDeclaration":
+    case "CLOP.ExternalDeclarations":
+    case "CLOP.TranslationUnit":
+        return debug_node( t );
+    case "CLOP.Identifier":
+    case "CLOP.FloatLiteral":
+    case "CLOP.IntegerLiteral":
+        return debug_leaf( t );
+    default: return t.name;
+    }
+  }
+
 }
 
 string
@@ -864,7 +1046,7 @@ compile( immutable string expr )
   auto kernel = c.generate();
   auto params = c.set_params();
   string code = params ~ "try\n{\n  char[] clop_opencl_program_source = (" ~ kernel ~ ").dup;";
-  code ~= q{
+  code ~= format( q{
     debug ( DEBUG ) writeln( "OpenCL program:\n", clop_opencl_program_source, "EOF" );
     size_t clop_opencl_program_source_size = clop_opencl_program_source.length;
     char* clop_opencl_program_source_pointer = clop_opencl_program_source.ptr;
@@ -878,9 +1060,10 @@ compile( immutable string expr )
       writeln( log );
     }
     assert( runtime.status == CL_SUCCESS, "clBuildProgram failed." );
-    auto clop_opencl_kernel = clCreateKernel( program, "clop_opencl_kernel_main", &runtime.status );
+    auto clop_opencl_kernel = clCreateKernel( program, "%s", &runtime.status );
     assert( runtime.status == CL_SUCCESS, "clCreateKernel failed." );
-  } ~ c.set_args( "clop_opencl_kernel" ) ~ c.code_to_invoke_kernel() ~ c.code_to_read_data_from_device();
+  }, c.generate_kernel_name() );
+  code ~= c.set_args( "clop_opencl_kernel" ) ~ c.code_to_invoke_kernel() ~ c.code_to_read_data_from_device();
   code ~= "\n// transformations <" ~ c.transformations ~ ">\n";
   code ~= c.dump_arraytab();
   code ~= c.dump_intervals();
