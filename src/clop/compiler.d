@@ -7,6 +7,7 @@ import pegged.grammar;
 
 import clop.analysis;
 import clop.symbol;
+import clop.templates;
 public import clop.grammar;
 public import clop.runtime;
 
@@ -175,6 +176,9 @@ class Compiler
       }
     case "CLOP.RangeSpec":
       {
+        string s = t.matches[0];
+        symtable[s] = Symbol( s, t, true, false, [], [], "clop_local_index_" ~ s );
+        intervals[s] = Interval( t.children[1], t.children[2] );
         break;
       }
     case "CLOP.Transformations":
@@ -213,7 +217,11 @@ class Compiler
           if ( "CLOP.ArrayIndex" == t.children[c].name )
           {
             // analyze index expression
-            symtable[symbol].is_array = true;
+            if ( !symtable[symbol].is_array )
+            {
+              symtable[symbol].is_array = true;
+              symtable[symbol].shadow = generate_shared_memory_variable( symbol );
+            }
             if ( eval_def )
             {
               symtable[symbol].defs ~= t.children[c].children[0];
@@ -313,7 +321,7 @@ class Compiler
       {
         string s = t.matches[0];
         if ( symtable.get( s, Symbol() ) == Symbol() )
-          symtable[s] = Symbol( s, t, !global_scope, false, [], [] );
+          symtable[s] = Symbol( s, t, !global_scope, false, [], [], null );
         break;
       }
     case "CLOP.FloatLiteral":
@@ -348,10 +356,18 @@ class Compiler
           i++;
         }
         global_scope = true;
-        string r = translate( t.children[i++] );
+        string r = translate( t.children[i] );
+        string q;
+        switch ( pattern )
+        {
+        case "Antidiagonal": q = finish_antidiagonal_range( t.children[i++] ); break;
+        case "Horizontal":   q = finish_horizontal_range( t.children[i++] ); break;
+        case "Stencil":      q = finish_stencil_range( t.children[i++] ); break;
+        default:             q = finish_ndrange( t.children[i++] ); break;
+        }
         string s = translate( t.children[i] );
         string k = generate_kernel_name();
-        return "q{\n" ~ declarations ~ "} ~ \"__kernel void " ~ k ~ "( \" ~ kernel_params ~ \" )\" ~\nq{\n{\n" ~ r ~ s ~ "}\n}";
+        return "q{\n" ~ declarations ~ "} ~ \"__kernel void " ~ k ~ "( \" ~ kernel_params ~ \" )\" ~\nq{\n{\n" ~ r ~ s ~ q ~ "}\n}";
       }
     case "CLOP.ExternalDeclarations":
       {
@@ -471,29 +487,26 @@ class Compiler
     case "CLOP.PrimaryExpr":
       {
         string s = translate( t.children[0] );
-        if ( t.matches[0] == "(" ) return "(" ~ s ~ ")";
-        return s;
+        return "(" == t.matches[0] ? "(" ~ s ~ ")" : s;
       }
     case "CLOP.UnaryExpr":
       {
         // this primary expression
         string s = translate( t.children[0] );
         // this can be array index or function call
-        for ( auto c = 1; c < t.children.length; ++c )
+        if ( t.children.length == 2 )
         {
-          if ( "CLOP.ArrayIndex" == t.children[c].name )
+          if ( "CLOP.ArrayIndex" == t.children[1].name )
           {
-            // translate index expression
-            if ( eval_def )
-            {
-              s = "/*def*/" ~ s;
-            }
-            else
-            {
-              s = "/*use*/" ~ s;
-            }
+            if ( symtable.get( s, Symbol() ) != Symbol() && symtable[s].shadow != null )
+              s = symtable[s].shadow;
+            s = ( eval_def ? "/*def*/" : "/*use*/" ) ~ s;
+            s ~= patch_index_expression_for_shared_memory( t.children[1] );
           }
-          s ~= translate( t.children[c] );
+          else
+          {
+            s ~= translate( t.children[1] );
+          }
         }
         return s;
       }
@@ -634,7 +647,10 @@ class Compiler
       }
     case "CLOP.Identifier":
       {
-        return t.matches[0];
+        string s = t.matches[0];
+        if ( symtable.get( s, Symbol() ) != Symbol() && symtable[s].shadow != null )
+          return symtable[s].shadow;
+        return s;
       }
     case "CLOP.IntegerLiteral":
     case "CLOP.FloatLiteral":
@@ -682,6 +698,24 @@ class Compiler
     }
   }
 
+  string patch_index_expression_for_shared_memory( ParseTree t )
+  {
+    switch ( t.name )
+    {
+    case "CLOP.Expression":
+    case "CLOP.Factor":
+    case "CLOP.AddExpr":
+    case "CLOP.MulExpr":
+    case "CLOP.UnaryExpr":
+    case "CLOP.PrimaryExpr":
+    case "CLOP.Identifier":
+    case "CLOP.FloatLiteral":
+    case "CLOP.IntegerLiteral":
+    default: return translate( t );
+    }
+
+  }
+
   string generate_kernel_name()
   {
     return format( "clop_kernel_main_%s_%s", pattern, transformations );
@@ -727,10 +761,6 @@ class Compiler
       for ( auto c = 0; c < t.children.length; ++c )
       {
         ParseTree u = t.children[c];
-        auto name = u.matches[0];
-        auto interval = Interval( u.children[1], u.children[2] );
-        add_interval( name, interval );
-        symtable[name] = Symbol( name, t, true );
         string v = u.matches[0];
         if ( internal )
         {
@@ -752,17 +782,13 @@ class Compiler
       string nw = format( "(%s - %s) * %s + %s - %s", outter, h, "cols", inner, w );
       string wi = format( "(%s - %s) * %s + %s - %s", outter, h, "cols", inner, w );
       string ni = format( "(%s - %s) * %s + %s - %s", outter, h, "cols", inner, w );
-      s ~= format( q{
-        if ( tx == 0 )
-          for ( int i = 0; i < %s; ++i ) // h
-            for ( int j = 0; j < %s; ++j ) // w
-              %s[i * (%s + %s)] = %s[%s]; // u, bs, w, v, nw
-        for ( int i = 0; i < %s; ++i ) // w
-              %s[(tx + %s) * (%s + %s)] = %s[%s]; // u, h, bs, w, v, wi
-        for ( int i = 0; i < %s; ++i ) // h
-              %s[(tx + %s)] = %s[%s]; // u, w, v, ni
-        barrier( CLK_LOCAL_MEM_FENCE );
-      }, h, w, u, block_size, w, v, nw, w, u, h, block_size, w, v, wi, h, u, w, v, ni );
+      string loop_index = "it";
+      s ~= format( template_shared_memory_init, h, w, u, block_size, w, v, nw, w, u, h, block_size, w, v, wi, h, u, w, v, ni );
+      s ~= format( template_antidiagonal_loop_prefix,
+                   loop_index, loop_index, block_size, loop_index,
+                   symtable[inner].shadow, loop_index, block_size, loop_index, block_size,
+                   symtable[outter].shadow, loop_index, block_size, loop_index, block_size,
+                   symtable[inner].shadow , block_size, symtable[outter].shadow );
     }
     else
     {
@@ -770,10 +796,6 @@ class Compiler
       for ( auto c = 0; c < t.children.length; ++c )
       {
         ParseTree u = t.children[c];
-        auto name = u.matches[0];
-        auto interval = Interval( u.children[1], u.children[2] );
-        add_interval( name, interval );
-        symtable[name] = Symbol( name, t, true );
         s ~= ( internal )
              ? "  int " ~ u.matches[0] ~ " = c0 + tx;\n"
              : "  int " ~ u.matches[0] ~ " = r0 - tx;\n";
@@ -783,14 +805,40 @@ class Compiler
     return s;
   }
 
+  string finish_antidiagonal_range( ParseTree t )
+  {
+    string s = "";
+    if ( transformations == "rectangular_blocking" )
+    {
+      string v = select_array_for_shared_memory();
+      string u = symtable[v].shadow;
+      string w = "cols";
+      string b = "8";
+      s ~= template_antidiagonal_loop_suffix;
+      if ( symtable[v].defs.length > 0 )
+        s ~= format( template_shared_memory_fini, b, v, w, u, b );
+    }
+    return s;
+  }
+
   string generate_horizontal_range( ParseTree t )
   {
-    return null;
+    return "";
+  }
+
+  string finish_horizontal_range( ParseTree t )
+  {
+    return "";
   }
 
   string generate_stencil_range( ParseTree t )
   {
     return generate_ndrange( t );
+  }
+
+  string finish_stencil_range( ParseTree t )
+  {
+    return "";
   }
 
   string generate_ndrange( ParseTree t )
@@ -802,43 +850,19 @@ class Compiler
       ParseTree u = t.children[c];
       string name = u.matches[0];
       symtable[name] = Symbol( name, t, true );
-      s ~= "  int " ~ name ~ " = get_global_id( " ~ i2s( n - 1 - c ) ~ " );\n";
+      s ~= "  int " ~ name ~ " = get_global_id( " ~ ct_itoa( n - 1 - c ) ~ " );\n";
     }
     return s;
   }
 
-  void add_interval( string name, Interval interval )
+  string finish_ndrange( ParseTree t )
   {
-    intervals[name] = interval;
+    return "";
   }
 
   bool is_local( string sym )
   {
     return symtable.get( sym, Symbol() ).is_local;
-  }
-
-  string ct_itoa(T)(T x)
-  {
-    static assert( is ( T == byte  ) || is ( T == ubyte  ) ||
-                   is ( T == short ) || is ( T == ushort ) ||
-                   is ( T == int   ) || is ( T == uint   ) ||
-                   is ( T == long  ) || is ( T == ulong  ),
-                   "not an integer value" );
-    string s = "";
-    static if ( is ( T == byte ) || is ( T == short ) || is ( T == int ) || is ( T == long ) )
-    {
-      if ( x < 0 )
-      {
-        s = "-";
-        x = -x;
-      }
-    }
-    do
-    {
-      s = cast(char)( '0' + ( x % 10 ) ) ~ s;
-      x /= 10;
-    } while ( x > 0 );
-    return s;
   }
 
   string set_params()
@@ -861,7 +885,7 @@ class Compiler
         ++i;
       }
     }
-    result ~= "kernel_params ~= \", int br0, int bc0, __local int* F_in_shared_memory\";\n";
+    result ~= "kernel_params ~= \", int br0, int bc0, __local int* F_in_shared_memory, __local int* S_in_shared_memory\";\n";
     return result;
   }
 
@@ -902,32 +926,7 @@ class Compiler
     {
       Interval outter = intervals.get( intervals.keys[0], Interval() );
       Interval inner  = intervals.get( intervals.keys[1], Interval() );
-      return format( q{
-        uint clop_c0 = %s;
-        runtime.status = clSetKernelArg( clop_opencl_kernel, clop_opencl_kernel_arg + 1, cl_int.sizeof, &clop_c0 );
-        assert( runtime.status == CL_SUCCESS, "clSetKernelArg failed." );
-        uint clop_r0;
-        for ( clop_r0 = %s; clop_r0 < %s; ++clop_r0 )
-        {
-          size_t global = clop_r0;
-          //runtime.status = clSetKernelArg( clop_opencl_kernel, clop_opencl_kernel_arg, cl_int.sizeof, &clop_r0 );
-          assert( runtime.status == CL_SUCCESS, "clSetKernelArg failed." );
-          //runtime.status = clEnqueueNDRangeKernel( runtime.queue, clop_opencl_kernel, 1, null, &global, null, 0, null, null );
-          assert( runtime.status == CL_SUCCESS, "clEnqueueNDRangeKernel failed." );
-        }
-        for ( clop_c0 = %s + 1, clop_r0 -= 1; clop_c0 < %s; ++clop_c0 )
-        {
-          size_t global = clop_r0 - clop_c0 + 1;
-          //runtime.status = clSetKernelArg( clop_opencl_kernel, clop_opencl_kernel_arg + 1, cl_int.sizeof, &clop_c0 );
-          assert( runtime.status == CL_SUCCESS, "clSetKernelArg failed." );
-          //runtime.status = clEnqueueNDRangeKernel( runtime.queue, clop_opencl_kernel, 1, null, &global, null, 0, null, null );
-          assert( runtime.status == CL_SUCCESS, "clEnqueueNDRangeKernel failed." );
-        }
-      }, inner.min.matches[0],
-         outter.min.matches[0],
-         outter.max.matches[0],
-         inner.min.matches[0],
-         inner.max.matches[0] );
+      return format( template_antidiagonal_invoke_kernel, inner.min.matches[0], outter.min.matches[0], outter.max.matches[0], inner.min.matches[0], inner.max.matches[0] );
     }
   }
 
@@ -938,10 +937,10 @@ class Compiler
     {
       if ( symtable[sym].is_array )
       {
-        string s = "// defs " ~ i2s(symtable[sym].defs.length) ~ "\n";
+        string s = "// defs " ~ ct_itoa(symtable[sym].defs.length) ~ "\n";
         foreach ( a; symtable[sym].defs )
           s ~= "// " ~ interval_apply( a ).toString() ~ "\n";
-        s ~= "// uses " ~ i2s(symtable[sym].uses.length) ~ "\n";
+        s ~= "// uses " ~ ct_itoa(symtable[sym].uses.length) ~ "\n";
         foreach ( a; symtable[sym].uses )
           s ~= "// " ~ interval_apply( a ).toString() ~ "\n";
         result ~= "// " ~ sym ~ ":\n" ~ s;
@@ -967,11 +966,11 @@ class Compiler
     foreach ( x; 0 .. depth ) indent ~= "  ";
     ++depth;
     foreach ( i, c; t.children )
-      s ~= indent ~ i2s( i ) ~ ": " ~ debug_tree( c ) ~ "\n";
+      s ~= indent ~ ct_itoa( i ) ~ ": " ~ debug_tree( c ) ~ "\n";
     --depth;
     string m = "";
     foreach ( i, x; t.matches )
-      m ~= " " ~ i2s( i ) ~ ":\"" ~ x ~ "\"";
+      m ~= " " ~ ct_itoa( i ) ~ ":\"" ~ x ~ "\"";
     return format( "<%s, input[%d,%d]:\"%s\" matches%s>%s%s</%s>", t.name, t.begin, t.end, t.input[t.begin .. t.end], m, s, indent, t.name );
   }
 
@@ -979,7 +978,7 @@ class Compiler
   {
     return "<" ~ t.name ~ ">" ~ t.matches[0] ~ "</" ~ t.name ~ ">";
   }
-  
+
   string debug_tree( ParseTree t )
   {
     switch ( t.name )
@@ -1039,35 +1038,22 @@ class Compiler
 
 }
 
+/*
+ *  Free functions, not members of Compiler class.
+ */
+
 string
 compile( immutable string expr )
 {
   auto c = new Compiler( expr );
   auto kernel = c.generate();
   auto params = c.set_params();
-  string code = params ~ "try\n{\n  char[] clop_opencl_program_source = (" ~ kernel ~ ").dup;";
-  code ~= format( q{
-    debug ( DEBUG ) writeln( "OpenCL program:\n", clop_opencl_program_source, "EOF" );
-    size_t clop_opencl_program_source_size = clop_opencl_program_source.length;
-    char* clop_opencl_program_source_pointer = clop_opencl_program_source.ptr;
-    auto program = clCreateProgramWithSource( runtime.context, 1, &clop_opencl_program_source_pointer, &clop_opencl_program_source_size, &runtime.status );
-    assert( runtime.status == CL_SUCCESS, "clCreateProgramWithSource failed." );
-    runtime.status = clBuildProgram( program, 1, &runtime.device, "", null, null );
-    if ( runtime.status != CL_SUCCESS )
-    {
-      char[1024] log;
-      clGetProgramBuildInfo( program, runtime.device, CL_PROGRAM_BUILD_LOG, 1024, log.ptr, null );
-      writeln( log );
-    }
-    assert( runtime.status == CL_SUCCESS, "clBuildProgram failed." );
-    auto clop_opencl_kernel = clCreateKernel( program, "%s", &runtime.status );
-    assert( runtime.status == CL_SUCCESS, "clCreateKernel failed." );
-  }, c.generate_kernel_name() );
-  code ~= c.set_args( "clop_opencl_kernel" ) ~ c.code_to_invoke_kernel() ~ c.code_to_read_data_from_device();
-  code ~= "\n// transformations <" ~ c.transformations ~ ">\n";
-  code ~= c.dump_arraytab();
-  code ~= c.dump_intervals();
-  code ~= "}\ncatch( Exception e )\n{\n  writeln( e );\n}\n";
+  auto unit = format( template_create_opencl_kernel, c.generate_kernel_name() );
+  unit ~= c.set_args( "clop_opencl_kernel" ) ~ c.code_to_invoke_kernel() ~ c.code_to_read_data_from_device();
+  unit ~= "\n// transformations <" ~ c.transformations ~ ">\n";
+  unit ~= c.dump_arraytab();
+  unit ~= c.dump_intervals();
+  auto code = params ~ format( template_clop_unit, kernel, unit );
   debug ( DEBUG_GRAMMAR )
     return "debug ( DEBUG ) writefln( \"DSL MIXIN:\\n%sEOD\", q{" ~ code ~ "} );\n";
   else
@@ -1084,7 +1070,7 @@ set_kernel_param( T )( string name )
   else static if ( is ( T == ubyte  ) ) code = "\"uchar "  ~ name ~ "\"";
   else static if ( is ( T == short  ) ) code = "\"short "  ~ name ~ "\"";
   else static if ( is ( T == ushort ) ) code = "\"ushort " ~ name ~ "\"";
-  else static if ( is ( Unqual!(T) == int    ) ) code = "\"int "    ~ name ~ "\"";
+  else static if ( is ( Unqual!(T) == int ) ) code = "\"int "    ~ name ~ "\"";
   else static if ( is ( T == uint   ) ) code = "\"uint "   ~ name ~ "\"";
   else static if ( is ( T == long   ) ) code = "\"long "   ~ name ~ "\"";
   else static if ( is ( T == ulong  ) ) code = "\"ulong "  ~ name ~ "\"";
@@ -1162,23 +1148,29 @@ read_device_buffer( T )( string name )
   return "debug ( DEBUG ) writefln( \"%s\", q{" ~ code ~ "} );\n" ~ code;
 }
 
+/**
+ * This very limited integer to string conversion works at compile-time.
+ */
 string
-i2s( ulong arg )
+ct_itoa(T)(T x) if (is (T == byte ) || is (T == ubyte )
+                ||  is (T == short) || is (T == ushort)
+                ||  is (T == int  ) || is (T == uint  )
+                ||  is (T == long ) || is (T == ulong ))
 {
-  switch ( arg )
+  string s = "";
+  string v = "";
+  static if ( is ( T == byte ) || is ( T == short ) || is ( T == int ) || is ( T == long ) )
   {
-  case  0: return "0";
-  case  1: return "1";
-  case  2: return "2";
-  case  3: return "3";
-  case  4: return "4";
-  case  5: return "5";
-  case  6: return "6";
-  case  7: return "7";
-  case  8: return "8";
-  case  9: return "9";
-  case 10: return "10";
-  case 11: return "11";
-  default: return "TOO_BIG";
+    if ( x < 0 )
+    {
+      s = "-";
+      x = -x;
+    }
   }
+  do
+  {
+    v = cast(char)( '0' + ( x % 10 ) ) ~ v;
+    x /= 10;
+  } while ( x > 0 );
+  return s ~ v;
 }

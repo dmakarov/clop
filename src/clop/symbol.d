@@ -10,4 +10,5 @@ struct Symbol
   bool        is_array;
   ParseTree[] uses;
   ParseTree[] defs;
+  string      shadow;
 }
