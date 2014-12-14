@@ -15,8 +15,8 @@ class Compiler
 {
   immutable string source;
   ParseTree AST;
+  Range range;
   Symbol[string] symtable;
-  Interval[string] intervals;
   string declarations;
   string pattern;
   string transformations;
@@ -30,6 +30,7 @@ class Compiler
   {
     source = expr;
     AST = CLOP( source );
+    range = Range([], []);
   }
 
   string generate()
@@ -178,7 +179,9 @@ class Compiler
       {
         string s = t.matches[0];
         symtable[s] = Symbol( s, t, true, false, [], [], "clop_local_index_" ~ s );
-        intervals[s] = Interval( t.children[1], t.children[2] );
+        range.indices ~= [s];
+        range.intervals ~= [Interval( t.children[1], t.children[2] )];
+        range.s2i[s] = range.indices.length - 1;
         break;
       }
     case "CLOP.Transformations":
@@ -500,7 +503,6 @@ class Compiler
           {
             if ( symtable.get( s, Symbol() ) != Symbol() && symtable[s].shadow != null )
               s = symtable[s].shadow;
-            s = ( eval_def ? "/*def*/" : "/*use*/" ) ~ s;
             s ~= patch_index_expression_for_shared_memory( t.children[1] );
           }
           else
@@ -689,7 +691,10 @@ class Compiler
     case "CLOP.PrimaryExpr":
       return interval_apply( t.children[0] );
     case "CLOP.Identifier":
-      return intervals.get( t.matches[0], Interval( t, t ) );
+      auto x = range.s2i.get( t.matches[0], 0xffffffff );
+      if ( x != 0xffffffff )
+        return range.intervals[x];
+      return Interval( t, t );
     case "CLOP.FloatLiteral":
     case "CLOP.IntegerLiteral":
       return Interval( t, t );
@@ -700,20 +705,10 @@ class Compiler
 
   string patch_index_expression_for_shared_memory( ParseTree t )
   {
-    switch ( t.name )
-    {
-    case "CLOP.Expression":
-    case "CLOP.Factor":
-    case "CLOP.AddExpr":
-    case "CLOP.MulExpr":
-    case "CLOP.UnaryExpr":
-    case "CLOP.PrimaryExpr":
-    case "CLOP.Identifier":
-    case "CLOP.FloatLiteral":
-    case "CLOP.IntegerLiteral":
-    default: return translate( t );
-    }
-
+    auto x = translate( t.children[0] );
+    auto gsz0 = "cols";
+    auto bsz0 = "8";
+    return format( "[((%s)/(%s))*(%s) + (%s) %% (%s)]", x, gsz0, bsz0, x, gsz0 );
   }
 
   string generate_kernel_name()
@@ -733,31 +728,17 @@ class Compiler
 
   string generate_antidiagonal_range( ParseTree t )
   {
-    /*
-        int bx = get_group_id( 0 );
-        int tx = get_local_id( 0 );
-        int rr = ( br - bx ) * BLOCK_SIZE + 1; // these are the indexes of
-        int cc = ( bc + bx ) * BLOCK_SIZE + 1; // the block's top-left element
-        // 1.
-        int index   = cols * rr + cc + tx;
-        int index_n = index - cols;
-        int index_w = cols * ( rr + tx ) + cc - 1;
-
-        for ( int k = 0; k < BLOCK_SIZE; ++k )
-          s[k * BLOCK_SIZE + tx] = S[k * cols + index];
-
-        if ( tx == 0 ) F_shared[0] = F[index_n - 1];        // copy the NW element into the TL corner of t
-        F_shared[(tx + 1) * (BLOCK_SIZE + 1)] = F[index_w]; // copy the column of W elements into the left column of t
-        F_shared[(tx + 1)                   ] = F[index_n]; // copy the row of N elements into the top row of t
-        barrier( CLK_LOCAL_MEM_FENCE );
-    */
     string s = "";
     if ( transformations == "rectangular_blocking" )
     {
-      s ~= "  int bx = get_group_id( 0 );\n";
-      s ~= "  int tx = get_local_id( 0 );\n";
+      string bid0 = "bid0";
+      string tid0 = "tid0";
+      s ~= format( "  int %s = get_group_id( 0 );\n", bid0 );
+      s ~= format( "  int %s = get_local_id( 0 );\n", tid0 );
+      string b0 = "b0";
+      string b1 = "b1";
       string inner;
-      string outter;
+      string outer;
       for ( auto c = 0; c < t.children.length; ++c )
       {
         ParseTree u = t.children[c];
@@ -765,40 +746,57 @@ class Compiler
         if ( internal )
         {
           inner = v;
-          s ~= format( "  int b%s = b%s0 + bx;\n", v, v );
+          s ~= format( "  int b%s = b%s0 + %s;\n", ct_itoa( c ), v, bid0 );
         }
         else
         {
-          outter = v;
-          s ~= format( "  int b%s = b%s0 - bx;\n", v, v );
+          outer = v;
+          s ~= format( "  int b%s = b%s0 - %s;\n", ct_itoa( c ), v, bid0 );
         }
-        s ~= format( "  int %s = b%s * %s + 1;\n", v, v, block_size );
         internal = true;
       }
       string v = select_array_for_shared_memory();
       string u = generate_shared_memory_variable( v );
-      string w = "1";
-      string h = "1";
-      string nw = format( "(%s - %s) * %s + %s - %s", outter, h, "cols", inner, w );
-      string wi = format( "(%s - %s) * %s + %s - %s", outter, h, "cols", inner, w );
-      string ni = format( "(%s - %s) * %s + %s - %s", outter, h, "cols", inner, w );
-      string loop_index = "it";
-      s ~= format( template_shared_memory_init, h, w, u, block_size, w, v, nw, w, u, h, block_size, w, v, wi, h, u, w, v, ni );
+      string bound_min1 = "1";
+      string bound_min0 = "1";
+      string bsz0 = block_size;
+      string bsz1 = block_size;
+      string gsz0 = "cols";
+      string gsz1 = "rows";
+      string d0 = "d0";
+      string d1 = "d1";
+      string nw = format( "(%s - %s) * %s + %s - %s", outer, bound_min1, gsz0, inner, bound_min0 );
+      string wi = format( "(%s - %s) * %s + %s - %s", outer, bound_min1, gsz0, inner, bound_min0 );
+      string ni = format( "(%s - %s) * %s + %s - %s", outer, bound_min1, gsz0, inner, bound_min0 );
+      string nwl = format( template_2d_index, d1, bsz0 ~ "+" ~ bound_min0, d0 );
+      string nwg = format( template_2d_index, b1 ~ "*" ~ bsz1 ~ "+" ~ d1, gsz0, b0 ~ "*" ~ bsz0 ~ "+" ~ d0 );
+      string nil = format( template_2d_index, d1, bsz0 ~ "+" ~ bound_min0, tid0 ~ "+" ~ bound_min0 );
+      string nig = format( template_2d_index, b1 ~ "*" ~ bsz1 ~ "+" ~ d1, gsz0, b0 ~ "*" ~ bsz0 ~ "+" ~ tid0 ~ "+" ~ bound_min0 );
+      string wil = format( template_2d_index, tid0 ~ "+" ~ bound_min1, bsz0 ~ "+" ~ bound_min0, d0 );
+      string wig = format( template_2d_index, b1 ~ "*" ~ bsz1 ~ "+" ~ tid0 ~ "+" ~ bound_min1, gsz0, b0 ~ "*" ~ bsz0 ~ "+" ~ d0 );
+      s ~= format( template_shared_memory_init, tid0,
+                   d1, d1, bound_min1, d1,
+                   d0, d0, bound_min0, d0,
+                   u, nwl, v, nwg,
+                   d1, d1, bound_min1, d1,
+                   u, nil, v, nig,
+                   d0, d0, bound_min0, d0,
+                   u, wil, v, wig );
       s ~= format( template_antidiagonal_loop_prefix,
-                   loop_index, loop_index, block_size, loop_index,
-                   symtable[inner].shadow, loop_index, block_size, loop_index, block_size,
-                   symtable[outter].shadow, loop_index, block_size, loop_index, block_size,
-                   symtable[inner].shadow , block_size, symtable[outter].shadow );
+                   d1, d1, bsz1, bsz0, d1,
+                   symtable[outer].shadow, bound_min0, tid0, d1, bsz0, d1, bsz1,
+                   symtable[inner].shadow, bound_min0, tid0, d1, bsz0, d1, bsz1,
+                   symtable[inner].shadow, bsz0 ~ "+" ~ bound_min0, symtable[outer].shadow, bound_min1 );
     }
     else
     {
-      s ~= "  int tx = get_global_id( 0 );\n";
+      s ~= "  int tid0 = get_global_id( 0 );\n";
       for ( auto c = 0; c < t.children.length; ++c )
       {
         ParseTree u = t.children[c];
         s ~= ( internal )
-             ? "  int " ~ u.matches[0] ~ " = c0 + tx;\n"
-             : "  int " ~ u.matches[0] ~ " = r0 - tx;\n";
+             ? "  int " ~ u.matches[0] ~ " = c0 + tid0;\n"
+             : "  int " ~ u.matches[0] ~ " = r0 - tid1;\n";
         internal = true;
       }
     }
@@ -807,16 +805,27 @@ class Compiler
 
   string finish_antidiagonal_range( ParseTree t )
   {
-    string s = "";
+    auto s = "";
     if ( transformations == "rectangular_blocking" )
     {
-      string v = select_array_for_shared_memory();
-      string u = symtable[v].shadow;
-      string w = "cols";
-      string b = "8";
+      auto v = select_array_for_shared_memory();
+      auto u = symtable[v].shadow;
+      auto tid0 = "tid0";
+      auto w = "cols";
+      auto bsz0 = "8";
+      auto bsz1 = "8";
+      auto gsz0 = "cols";
+      auto d1 = "d1";
+      auto b0 = "b0";
+      auto b1 = "b1";
+      auto bound_min1 = "1";
+      auto bound_min0 = "1";
       s ~= template_antidiagonal_loop_suffix;
       if ( symtable[v].defs.length > 0 )
-        s ~= format( template_shared_memory_fini, b, v, w, u, b );
+        s ~= format( template_shared_memory_fini,
+                     d1, d1, bsz1, d1,
+                     v, "(" ~ b1 ~ "*" ~ bsz1 ~ "+" ~ d1 ~ "+" ~ bound_min1 ~ ") * " ~ gsz0 ~ " + " ~ b0 ~ "*" ~ bsz0 ~ "+" ~ tid0 ~ "+" ~ bound_min0,
+                     u, "(" ~ d1 ~ "+" ~ bound_min1 ~ ") * (" ~ bsz0 ~ "+" ~ bound_min0 ~ ") + " ~ tid0 ~ "+" ~ bound_min0 );
     }
     return s;
   }
@@ -924,9 +933,14 @@ class Compiler
     }
     else
     {
-      Interval outter = intervals.get( intervals.keys[0], Interval() );
-      Interval inner  = intervals.get( intervals.keys[1], Interval() );
-      return format( template_antidiagonal_invoke_kernel, inner.min.matches[0], outter.min.matches[0], outter.max.matches[0], inner.min.matches[0], inner.max.matches[0] );
+      auto outer = range.intervals[1];
+      auto inner = range.intervals[0];
+      auto gsz0 = "cols";
+      auto bsz0 = "8";
+      auto name = "clop_opencl_kernel";
+      return format( template_antidiagonal_rectangular_blocks_invoke_kernel,
+                     gsz0, bsz0, bsz0, bsz0,
+                     name, name, name );
     }
   }
 
@@ -952,9 +966,9 @@ class Compiler
   string dump_intervals()
   {
     string result = "// The intervals:\n";
-    foreach ( k; intervals.keys )
+    foreach ( k; 0 .. range.indices.length )
     {
-      result ~= "// " ~ k ~ ": " ~ intervals[k].toString() ~ "\n";
+      result ~= "// " ~ range.indices[k] ~ ": " ~ range.intervals[k].toString() ~ "\n";
     }
     return result;
   }

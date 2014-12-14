@@ -1,5 +1,6 @@
 module clop.runtime;
 
+public import std.algorithm;
 import std.stdio;
 
 import derelict.opencl.cl;

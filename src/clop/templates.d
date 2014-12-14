@@ -55,32 +55,51 @@ template_antidiagonal_invoke_kernel = q{
   }
 },
 
+template_antidiagonal_rectangular_blocks_invoke_kernel = q{
+  auto max_blocks = ((%s) - 1) / (%s);
+  for ( int i = 0; i < 2 * max_blocks - 1; ++i )
+  {
+    cl_int br = ( i < max_blocks ) ? i :     max_blocks - 1;
+    cl_int bc = ( i < max_blocks ) ? 0 : i - max_blocks + 1;
+    size_t wgroup = %s;
+    size_t global = (%s) * min( br, max_blocks - bc );
+    runtime.status = clSetKernelArg( %s, clop_opencl_kernel_arg, cl_int.sizeof, &br );
+    assert( runtime.status == CL_SUCCESS, "clSetKernelArg " ~ cl_strerror( runtime.status ) );
+    runtime.status = clSetKernelArg( %s, clop_opencl_kernel_arg, cl_int.sizeof, &bc );
+    assert( runtime.status == CL_SUCCESS, "clSetKernelArg " ~ cl_strerror( runtime.status ) );
+    runtime.status = clEnqueueNDRangeKernel( runtime.queue, %s, 1, null, &global, &wgroup, 0, null, null );
+    assert( runtime.status == CL_SUCCESS, "clEnqueueNDRangeKernel " ~ cl_strerror( runtime.status ) );
+  }
+},
+
 template_shared_memory_init = q{
-  if ( tx == 0 )
-    for ( int i = 0; i < %s; ++i ) // h
-      for ( int j = 0; j < %s; ++j ) // w
-        %s[i * (%s + %s)] = %s[%s]; // u, bs, w, v, nw
-  for ( int i = 0; i < %s; ++i ) // w
-        %s[(tx + %s) * (%s + %s)] = %s[%s]; // u, h, bs, w, v, wi
-  for ( int i = 0; i < %s; ++i ) // h
-        %s[(tx + %s)] = %s[%s]; // u, w, v, ni
+  if ( %s == 0 )
+    for ( int %s = 0; %s < %s; ++%s )
+      for ( int %s = 0; %s < %s; ++%s )
+        %s[%s] = %s[%s];
+  for ( int %s = 0; %s < %s; ++%s )
+    %s[%s] = %s[%s];
+  for ( int %s = 0; %s < %s; ++%s )
+    %s[%s] = %s[%s];
   barrier( CLK_LOCAL_MEM_FENCE );
 },
 
 template_shared_memory_fini = q{
-  for ( int ty = 0; ty < %s; ++ty )
-    %s[ty * %s + tx] = %s[(ty + 1) * (%s + 1) + tx + 1];
+  for ( int %s = 0; %s < %s; ++%s )
+    %s[%s] = %s[%s];
 },
 
 template_antidiagonal_loop_prefix = "
-  for ( int %s = 0; %s < 2 * %s - 1; ++%s )
+  for ( int %s = 0; %s < (%s) + (%s) - 1; ++%s )
   {
-    int %s = (%s < %s ? %s : %s - 1) + tx;
-    int %s = (%s < %s ? 0 : %s - %s + 1) - tx;
-    if ( %s < %s && %s >= 0 )
+    int %s = (%s) - (%s) + ((%s) < (%s) ? (%s) : (%s) - 1);
+    int %s = (%s) + (%s) + ((%s) < (%s) ? 0 : (%s) - (%s) + 1);
+    if ( (%s) < (%s) && (%s) >= (%s) )
 ",
 
 template_antidiagonal_loop_suffix = "
     barrier( CLK_LOCAL_MEM_FENCE );
   }
-";
+",
+
+template_2d_index = "(%s) * (%s) + (%s)";

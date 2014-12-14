@@ -22,12 +22,26 @@ struct Interval
   ParseTree min;
   ParseTree max;
 
+  this( ParseTree t )
+  {
+    this( t, t );
+  }
+
   this( ParseTree min, ParseTree max )
   {
     Interval.min = min;
     Interval.max = max;
   }
-  
+
+  string get_size()
+  {
+    ParseTree x = create_add_expr( max, min, "-" );
+    string s = "";
+    foreach ( m; x.matches )
+      s ~= m;
+    return s;
+  }
+
   string toString()
   {
     string s = "[";
@@ -39,7 +53,7 @@ struct Interval
     s ~= "]";
     return s;
   }
-  
+
   Interval dup() @property
   {
     Interval result = this;
