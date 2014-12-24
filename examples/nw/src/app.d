@@ -1258,11 +1258,9 @@ class Application {
         int k = a > b ? a : b;
         return k > c ? k : c;
       }
-      Antidiagonal NDRange( r : 1 .. rows, c : 1 .. cols ) {
-        F[r * cols + c] = max3( F[(r - 1) * cols + c - 1] + S[r * cols + c],
-                                F[(r - 1) * cols + c    ] - penalty,
-                                F[ r      * cols + c - 1] - penalty );
-      } apply( rectangular_blocking( 8 ) )
+      Antidiagonal NDRange( c : 1 .. cols, r : 1 .. rows ) {
+        F[c, r] = max3( F[c - 1, r - 1] + S[c, r], F[c - 1, r] - penalty, F[c, r - 1] - penalty );
+      } apply( rectangular_blocking( 8, 8 ) )
     } ) );
   }
 
@@ -1277,11 +1275,9 @@ class Application {
         int k = a > b ? a : b;
         return k > c ? k : c;
       }
-      Antidiagonal NDRange( r : 1 .. rows, c : 1 .. cols ) {
-        F[r * cols + c] = max3( F[(r - 1) * cols + c - 1] + BLOSUM62[M[r] * CHARS + N[c]],
-                                F[(r - 1) * cols + c    ] - penalty,
-                                F[ r      * cols + c - 1] - penalty );
-      } apply( rectangular_blocking( 8 ) )
+      Antidiagonal NDRange( c : 1 .. cols, r : 1 .. rows ) {
+        F[c, r] = max3( F[c - 1, r - 1] + BLOSUM62[M[r] * CHARS + N[c]], F[c - 1, r] - penalty, F[c, r - 1] - penalty );
+      } apply( rectangular_blocking( 8, 8 ) )
     } ) );
   }
 
@@ -1411,31 +1407,39 @@ class Application {
     }
     }
 
-    reset();
-    timer.reset();
-    timer.start();
-    clop_dsl();
-    timer.stop();
-    ticks = timer.peek();
-    writefln( "%2.0f MI CLOP DSL   %5.3f [s]",
-              (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
-              ticks.usecs / 1E6 );
-    validate();
-
-    static if ( false ) 
+    clGetKernelWorkGroupInfo( kernel_rectangles,
+                              runtime.device,
+                              CL_KERNEL_WORK_GROUP_SIZE,
+                              size.sizeof,
+                              &size,
+                              null );
+    if ( size >= BLOCK_SIZE )
     {
-    reset();
-    timer.reset();
-    timer.start();
-    clop_dsl_indirectS();
-    timer.stop();
-    ticks = timer.peek();
-    writefln( "%2.0f MI CLOP DSL I %5.3f [s]",
-              (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
-              ticks.usecs / 1E6 );
-    validate();
+      reset();
+      timer.reset();
+      timer.start();
+      clop_dsl();
+      timer.stop();
+      ticks = timer.peek();
+      writefln( "%2.0f MI CLOP DSL   %5.3f [s]",
+                (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
+                ticks.usecs / 1E6 );
+      validate();
+  
+      static if ( false ) 
+      {
+      reset();
+      timer.reset();
+      timer.start();
+      clop_dsl_indirectS();
+      timer.stop();
+      ticks = timer.peek();
+      writefln( "%2.0f MI CLOP DSL I %5.3f [s]",
+                (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
+                ticks.usecs / 1E6 );
+      validate();
+      }
     }
-
     save();
   }
 }

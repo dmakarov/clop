@@ -50,8 +50,8 @@ TransList              < TransSpec ( ',' TransSpec )*
 TransSpec              < Identifier ( '(' ')' / '(' ArgumentList ')' )
 
 PrimaryExpr            <  Identifier / FloatLiteral / IntegerLiteral / '(' Expression ')'
-UnaryExpr              <  PrimaryExpr ( ArrayIndex / FunctionCall )*
-ArrayIndex             <  '[' Expression ']'
+UnaryExpr              <  PrimaryExpr ( ArrayIndex / FunctionCall )?
+ArrayIndex             <  '[' ArgumentList ']'
 FunctionCall           <  '(' ')' / '(' ArgumentList ')'
 ArgumentList           <  Expression ( ',' Expression )*
 

@@ -1,5 +1,6 @@
 module clop.compiler;
 
+import std.container;
 import std.string;
 import std.traits;
 
@@ -15,7 +16,7 @@ class Compiler
 {
   immutable string source;
   ParseTree AST;
-  Range range;
+  Box range;
   Symbol[string] symtable;
   string declarations;
   string pattern;
@@ -24,13 +25,14 @@ class Compiler
   bool global_scope = false;
   bool eval_def     = false;
   bool internal     = false;
+  bool use_shadow   = false;
   uint depth        = 0;
 
   this( immutable string expr )
   {
     source = expr;
-    AST = CLOP( source );
-    range = Range([], []);
+    AST    = CLOP( source );
+    range  = Box( [], [] );
   }
 
   string generate()
@@ -42,6 +44,7 @@ class Compiler
     else
     {
       analyze( AST );
+      compute_intervals();
       return translate( AST );
     }
   }
@@ -177,11 +180,17 @@ class Compiler
       }
     case "CLOP.RangeSpec":
       {
-        string s = t.matches[0];
+        auto s = t.matches[0];
+        auto d = range.get_dimensionality();
         symtable[s] = Symbol( s, t, true, false, [], [], "clop_local_index_" ~ s );
-        range.indices ~= [s];
         range.intervals ~= [Interval( t.children[1], t.children[2] )];
-        range.s2i[s] = range.indices.length - 1;
+        range.symbols ~= [s];
+        range.s2i[s] = d;
+        bool saved_global_scope_value = global_scope;
+        global_scope = true;
+        analyze( t.children[1] );
+        analyze( t.children[2] );
+        global_scope = saved_global_scope_value;
         break;
       }
     case "CLOP.Transformations":
@@ -494,16 +503,16 @@ class Compiler
       }
     case "CLOP.UnaryExpr":
       {
-        // this primary expression
+        // this is a primary expression
         string s = translate( t.children[0] );
         // this can be array index or function call
         if ( t.children.length == 2 )
         {
-          if ( "CLOP.ArrayIndex" == t.children[1].name )
+          if ( "CLOP.ArrayIndex" == t.children[1].name && symtable.get( s, Symbol() ) != Symbol() && symtable[s].shadow != null )
           {
-            if ( symtable.get( s, Symbol() ) != Symbol() && symtable[s].shadow != null )
-              s = symtable[s].shadow;
-            s ~= patch_index_expression_for_shared_memory( t.children[1] );
+            use_shadow = true;
+            s = symtable[s].shadow ~ patch_index_expression_for_shared_memory( s, t.children[1] );
+            use_shadow = false;
           }
           else
           {
@@ -650,7 +659,7 @@ class Compiler
     case "CLOP.Identifier":
       {
         string s = t.matches[0];
-        if ( symtable.get( s, Symbol() ) != Symbol() && symtable[s].shadow != null )
+        if ( use_shadow && symtable.get( s, Symbol() ) != Symbol() && symtable[s].shadow != null )
           return symtable[s].shadow;
         return s;
       }
@@ -663,37 +672,37 @@ class Compiler
     }
   }
 
-  Interval interval_apply( ParseTree t )
+  Interval interval_apply( ref ParseTree t, ref Box r )
   {
     switch ( t.name )
     {
     case "CLOP.Expression":
-      auto r = interval_apply( t.children[0] );
+      auto i = interval_apply( t.children[0], r );
       for ( auto c = 1; c < t.children.length; ++c )
         if ( "+" == t.children[c].matches[0] )
-          r = interval_arithmetic_operation( r, "+", interval_apply( t.children[c] ) );
+          i = interval_arithmetic_operation( i, "+", interval_apply( t.children[c], r ) );
         else
-          r = interval_arithmetic_operation( r, "-", interval_apply( t.children[c] ) );
-      return r;
+          i = interval_arithmetic_operation( i, "-", interval_apply( t.children[c], r ) );
+      return i;
     case "CLOP.Factor":
-      auto r = interval_apply( t.children[0] );
+      auto i = interval_apply( t.children[0], r );
       for ( auto c = 1; c < t.children.length; ++c )
         if ( "*" == t.children[c].matches[0] )
-          r = interval_arithmetic_operation( r, "*", interval_apply( t.children[c] ) );
+          i = interval_arithmetic_operation( i, "*", interval_apply( t.children[c], r ) );
         else
-          r = interval_arithmetic_operation( r, "/", interval_apply( t.children[c] ) );
-      return r;
+          i = interval_arithmetic_operation( i, "/", interval_apply( t.children[c], r ) );
+      return i;
     case "CLOP.AddExpr":
     case "CLOP.MulExpr":
-      return interval_apply( t.children[0] );
+      return interval_apply( t.children[0], r );
     case "CLOP.UnaryExpr":
-      return interval_apply( t.children[0] );
+      return interval_apply( t.children[0], r );
     case "CLOP.PrimaryExpr":
-      return interval_apply( t.children[0] );
+      return interval_apply( t.children[0], r );
     case "CLOP.Identifier":
-      auto x = range.s2i.get( t.matches[0], 0xffffffff );
+      auto x = r.s2i.get( t.matches[0], 0xffffffff );
       if ( x != 0xffffffff )
-        return range.intervals[x];
+        return r.intervals[x];
       return Interval( t, t );
     case "CLOP.FloatLiteral":
     case "CLOP.IntegerLiteral":
@@ -703,12 +712,67 @@ class Compiler
     }
   }
 
-  string patch_index_expression_for_shared_memory( ParseTree t )
+  void compute_intervals()
   {
-    auto x = translate( t.children[0] );
-    auto gsz0 = "cols";
-    auto bsz0 = "8";
-    return format( "[((%s)/(%s))*(%s) + (%s) %% (%s)]", x, gsz0, bsz0, x, gsz0 );
+    foreach ( k; symtable.keys )
+    {
+      auto v = symtable[k];
+      if ( v.is_array && v.shadow != null )
+      {
+        Interval[3] box;
+        auto uses = v.uses;
+        foreach ( i, c; uses[0].children )
+          box[i] = interval_apply( c, range );
+        for ( auto ii = 1; ii < uses.length; ++ii )
+          foreach ( i, c; uses[ii].children )
+            box[i] = interval_union( box[i], interval_apply( c, range ) );
+        symtable[k].box ~= box;
+      }
+    }
+  }
+
+  string patch_index_expression_for_shared_memory( string s, ParseTree t )
+  {
+    auto r = Box( [], [] );
+    foreach ( c, v; range.symbols )
+    {
+      r.symbols ~= [v];
+      r.s2i[v] = c;
+      auto n = "0";
+      auto x = block_size;
+      symtable[v].shadow = s ~ "_" ~ generate_shared_memory_variable( v );
+      r.intervals ~= [Interval( ParseTree( "CLOP.IntegerLiteral", true, [n], "", 0, 0, [] ),
+                                ParseTree( "CLOP.IntegerLiteral", true, [x], "", 0, 0, [] ) )];
+    }
+    auto uses = symtable[s].uses;
+    Interval[3] local_box;
+    foreach ( i, c; uses[0].children )
+      local_box[i] = interval_apply( c, r );
+    for ( auto ii = 1; ii < uses.length; ++ii )
+      foreach ( i, c; uses[ii].children )
+        local_box[i] = interval_union( local_box[i], interval_apply( c, r ) );
+    auto u = t.children[0];
+    auto bsz0 = local_box[0].get_size();
+    auto bsz1 = local_box[1].get_size();
+    auto x = "";
+    switch ( u.children.length )
+    {
+      case 1:
+        x = translate( u.children[0] );
+        break;
+      case 2:
+        x = format( "(%s) * (%s) + (%s)", translate( u.children[1] ), bsz0, translate( u.children[0] ) );
+        break;
+      case 3:
+        x = format( "(%s) * (%s) * (%s) + (%s) * (%s) + (%s)",
+                    translate( u.children[2] ), bsz1, bsz0,
+                    translate( u.children[1] ), bsz1,
+                    translate( u.children[0] ) );
+        break;
+      default:
+        x = "0";
+    }
+    return format( "[%s]", x );
   }
 
   string generate_kernel_name()
@@ -728,65 +792,127 @@ class Compiler
 
   string generate_antidiagonal_range( ParseTree t )
   {
-    string s = "";
+    auto s = "";
+    auto num_dimensions = t.children.length;
+    auto range_arg = new string[num_dimensions];
+    auto shadowed = SList!string();
+
+    foreach ( v; symtable )
+      if ( v.is_array && v.shadow != null )
+        shadowed.insert( v.name );
+
+    auto r = Box( [], [] );
+    foreach ( c, u; t.children )
+    {
+      auto v = u.matches[0];              // variable name in NDRange specification
+      r.symbols ~= [v];
+      r.s2i[v] = c;
+      auto n = "0";
+      auto x = block_size;
+      r.intervals ~= [Interval( ParseTree( "CLOP.IntegerLiteral", true, [n], "", 0, 0, [] ),
+                                ParseTree( "CLOP.IntegerLiteral", true, [x], "", 0, 0, [] ) )];
+    }
+
     if ( transformations == "rectangular_blocking" )
     {
-      string bid0 = "bid0";
-      string tid0 = "tid0";
+      auto bid0 = "bid0"; // block or work group id
+      auto tid0 = "tid0"; // thread or work item id
       s ~= format( "  int %s = get_group_id( 0 );\n", bid0 );
       s ~= format( "  int %s = get_local_id( 0 );\n", tid0 );
-      string b0 = "b0";
-      string b1 = "b1";
-      string inner;
-      string outer;
-      for ( auto c = 0; c < t.children.length; ++c )
+      auto factor = false;
+      string[3] bix;
+      foreach ( c, u; t.children )
       {
-        ParseTree u = t.children[c];
-        string v = u.matches[0];
-        if ( internal )
-        {
-          inner = v;
-          s ~= format( "  int b%s = b%s0 + %s;\n", ct_itoa( c ), v, bid0 );
-        }
-        else
-        {
-          outer = v;
-          s ~= format( "  int b%s = b%s0 - %s;\n", ct_itoa( c ), v, bid0 );
-        }
-        internal = true;
+        auto v = u.matches[0];              // variable name in NDRange specification
+        auto o = factor ? "-" : "+";        // arithmetic operation
+        factor = !factor;
+        range_arg[c] = v;
+        bix[c] = format( "b%d", c );
+        s ~= format( "  int b%d = b%s0 %s %s;\n", c, v, o, bid0 );
       }
-      string v = select_array_for_shared_memory();
-      string u = generate_shared_memory_variable( v );
-      string bound_min1 = "1";
-      string bound_min0 = "1";
-      string bsz0 = block_size;
-      string bsz1 = block_size;
-      string gsz0 = "cols";
-      string gsz1 = "rows";
-      string d0 = "d0";
-      string d1 = "d1";
-      string nw = format( "(%s - %s) * %s + %s - %s", outer, bound_min1, gsz0, inner, bound_min0 );
-      string wi = format( "(%s - %s) * %s + %s - %s", outer, bound_min1, gsz0, inner, bound_min0 );
-      string ni = format( "(%s - %s) * %s + %s - %s", outer, bound_min1, gsz0, inner, bound_min0 );
-      string nwl = format( template_2d_index, d1, bsz0 ~ "+" ~ bound_min0, d0 );
-      string nwg = format( template_2d_index, b1 ~ "*" ~ bsz1 ~ "+" ~ d1, gsz0, b0 ~ "*" ~ bsz0 ~ "+" ~ d0 );
-      string nil = format( template_2d_index, d1, bsz0 ~ "+" ~ bound_min0, tid0 ~ "+" ~ bound_min0 );
-      string nig = format( template_2d_index, b1 ~ "*" ~ bsz1 ~ "+" ~ d1, gsz0, b0 ~ "*" ~ bsz0 ~ "+" ~ tid0 ~ "+" ~ bound_min0 );
-      string wil = format( template_2d_index, tid0 ~ "+" ~ bound_min1, bsz0 ~ "+" ~ bound_min0, d0 );
-      string wig = format( template_2d_index, b1 ~ "*" ~ bsz1 ~ "+" ~ tid0 ~ "+" ~ bound_min1, gsz0, b0 ~ "*" ~ bsz0 ~ "+" ~ d0 );
-      s ~= format( template_shared_memory_init, tid0,
-                   d1, d1, bound_min1, d1,
-                   d0, d0, bound_min0, d0,
-                   u, nwl, v, nwg,
-                   d1, d1, bound_min1, d1,
-                   u, nil, v, nig,
-                   d0, d0, bound_min0, d0,
-                   u, wil, v, wig );
-      s ~= format( template_antidiagonal_loop_prefix,
-                   d1, d1, bsz1, bsz0, d1,
-                   symtable[outer].shadow, bound_min0, tid0, d1, bsz0, d1, bsz1,
-                   symtable[inner].shadow, bound_min0, tid0, d1, bsz0, d1, bsz1,
-                   symtable[inner].shadow, bsz0 ~ "+" ~ bound_min0, symtable[outer].shadow, bound_min1 );
+      auto safeguards = "";
+
+      foreach ( v; shadowed )
+      {
+        auto uses = symtable[v].uses;
+        Interval[3] local_box;
+        foreach ( i, c; uses[0].children )
+        {
+          local_box[i] = interval_apply( c, r );
+        }
+        for ( auto ii = 1; ii < uses.length; ++ii )
+          foreach ( i, c; uses[ii].children )
+          {
+            local_box[i] = interval_union( local_box[i], interval_apply( c, r ) );
+          }
+
+        // local index variables
+        auto li0 = "li0";
+        auto li1 = "li1";
+        // size of local index space
+        auto lsz0 = block_size;
+        auto lsz1 = block_size;
+        // size of current array block
+        auto bsz0 = local_box[0].get_size();
+        auto bsz1 = local_box[1].get_size();
+        // margin size
+        auto msz0 = bsz0 ~ "-" ~ lsz0;
+        auto msz1 = bsz1 ~ "-" ~ lsz1;
+        // global index of current array
+        auto gi0 = format( "(%s) * (%s) + (%s)", bix[0], lsz0, li0 );
+        auto gi1 = format( "(%s) * (%s) + (%s)", bix[1], lsz1, li1 );
+        // size of current global array
+        auto gsz0 = symtable[v].box[0].get_max();
+        // global memory array name
+        auto gma = v;
+        // shared memory array name
+        auto sma = generate_shared_memory_variable( v );
+        s ~= format( template_shared_memory_data_init,
+                     li1, li1, bsz1, li1,
+                     li0, li0, bsz0, li0, lsz0,
+                     li0, tid0, bsz0,
+                     sma, li1, bsz0, li0, tid0,
+                     gma, gi1, gsz0, gi0, tid0 );
+
+      }
+
+      auto iv = "iv";
+      auto lsz0 = block_size;
+      auto lsz1 = block_size;
+      s ~= format( template_antidiagonal_loop_prefix, iv, iv, lsz1, lsz0, iv );
+
+      foreach ( v; shadowed )
+      {
+        auto uses = symtable[v].uses;
+        Interval[3] local_box;
+        foreach ( i, c; uses[0].children )
+        {
+          local_box[i] = interval_apply( c, r );
+        }
+        for ( auto ii = 1; ii < uses.length; ++ii )
+          foreach ( i, c; uses[ii].children )
+          {
+            local_box[i] = interval_union( local_box[i], interval_apply( c, r ) );
+          }
+
+        // size of current array block
+        auto bsz0 = local_box[0].get_size();
+        auto bsz1 = local_box[1].get_size();
+        // margin size
+        auto msz0 = bsz0 ~ "-" ~ lsz0;
+        auto msz1 = bsz1 ~ "-" ~ lsz1;
+        // size of current global array
+        auto gsz0 = symtable[v].box[0].get_size();
+
+        s ~= format( template_shared_index_recalculation,
+                     v ~ "_" ~ generate_shared_memory_variable( range_arg[0] ), msz0, tid0, iv, lsz0, iv, lsz0,
+                     v ~ "_" ~ generate_shared_memory_variable( range_arg[1] ), msz1, tid0, iv, lsz1, iv, lsz1 );
+        if ( safeguards != "" ) safeguards ~= " && ";
+        safeguards ~= format( "(%s) < (%s) && (%s) >= (%s)",
+                              v ~ "_" ~ generate_shared_memory_variable( range_arg[0] ), bsz0,
+                              v ~ "_" ~ generate_shared_memory_variable( range_arg[1] ), msz1 );
+      }
+      s ~= format( "\n    if ( %s )\n", safeguards );
     }
     else
     {
@@ -939,6 +1065,7 @@ class Compiler
       auto bsz0 = "8";
       auto name = "clop_opencl_kernel";
       return format( template_antidiagonal_rectangular_blocks_invoke_kernel,
+                     name, name,
                      gsz0, bsz0, bsz0, bsz0,
                      name, name, name );
     }
@@ -953,10 +1080,10 @@ class Compiler
       {
         string s = "// defs " ~ ct_itoa(symtable[sym].defs.length) ~ "\n";
         foreach ( a; symtable[sym].defs )
-          s ~= "// " ~ interval_apply( a ).toString() ~ "\n";
+          s ~= "// " ~ interval_apply( a, range ).toString() ~ "\n";
         s ~= "// uses " ~ ct_itoa(symtable[sym].uses.length) ~ "\n";
         foreach ( a; symtable[sym].uses )
-          s ~= "// " ~ interval_apply( a ).toString() ~ "\n";
+          s ~= "// " ~ interval_apply( a, range ).toString() ~ "\n";
         result ~= "// " ~ sym ~ ":\n" ~ s;
       }
     }
@@ -966,9 +1093,9 @@ class Compiler
   string dump_intervals()
   {
     string result = "// The intervals:\n";
-    foreach ( k; 0 .. range.indices.length )
+    foreach ( k; 0 .. range.get_dimensionality() )
     {
-      result ~= "// " ~ range.indices[k] ~ ": " ~ range.intervals[k].toString() ~ "\n";
+      result ~= "// " ~ range.symbols[k] ~ ": " ~ range.intervals[k].toString() ~ "\n";
     }
     return result;
   }
@@ -1064,9 +1191,12 @@ compile( immutable string expr )
   auto params = c.set_params();
   auto unit = format( template_create_opencl_kernel, c.generate_kernel_name() );
   unit ~= c.set_args( "clop_opencl_kernel" ) ~ c.code_to_invoke_kernel() ~ c.code_to_read_data_from_device();
-  unit ~= "\n// transformations <" ~ c.transformations ~ ">\n";
-  unit ~= c.dump_arraytab();
-  unit ~= c.dump_intervals();
+  debug ( DISABLED )
+  {
+    unit ~= "\n// transformations <" ~ c.transformations ~ ">\n";
+    unit ~= c.dump_arraytab();
+    unit ~= c.dump_intervals();
+  }
   auto code = params ~ format( template_clop_unit, kernel, unit );
   debug ( DEBUG_GRAMMAR )
     return "debug ( DEBUG ) writefln( \"DSL MIXIN:\\n%sEOD\", q{" ~ code ~ "} );\n";

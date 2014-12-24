@@ -1,5 +1,7 @@
 module clop.analysis;
 
+import std.string;
+
 import pegged.grammar;
 
 /++
@@ -13,6 +15,43 @@ import pegged.grammar;
  +  size_t      begin, end; /// Indices for the matched part from the very beginning of the first match to the last char of the last match.
  +  ParseTree[] children;   /// The sub-trees created by sub-rules parsing.
  +/
+
+struct Box
+{
+  Interval[]    intervals;
+  string[]      symbols;
+  /// map range parameter name to dimension index; dimension 0 is the inner most
+  ulong[string] s2i;
+
+  this( this )
+  {
+    intervals = intervals.dup;
+    symbols   = symbols.dup;
+    s2i       = s2i.dup;
+  }
+
+  auto get_dimensionality()
+  {
+    return intervals.length;
+  }
+
+  string get_size( ulong dimension )
+  {
+    if ( dimension >= intervals.length )
+      return null;
+    return intervals[dimension].get_size();
+  }
+
+  string toString()
+  {
+    auto s = "";
+    foreach ( i, k; s2i.keys )
+    {
+      s ~= format( "// %d %d %s %s\n", i, s2i[k], k, intervals[s2i[k]].toString() );
+    }
+    return s;
+  }
+}
 
 struct Interval
 {
@@ -33,10 +72,27 @@ struct Interval
     Interval.max = max;
   }
 
+  string get_min()
+  {
+    auto s = "";
+    foreach ( x; min.matches )
+      s ~= x;
+    return s;
+  }
+
+  string get_max()
+  {
+    auto s = "";
+    foreach ( x; max.matches )
+      s ~= x;
+    return s;
+  }
+
   string get_size()
   {
     ParseTree x = create_add_expr( max, min, "-" );
-    string s = "";
+    x = simplify_expression( x );
+    auto s = "";
     foreach ( m; x.matches )
       s ~= m;
     return s;
@@ -44,7 +100,7 @@ struct Interval
 
   string toString()
   {
-    string s = "[";
+    auto s = "[";
     foreach ( x; min.matches )
       s ~= x;
     s ~= ",";
@@ -56,10 +112,268 @@ struct Interval
 
   Interval dup() @property
   {
-    Interval result = this;
+    auto result = this;
     result.min = result.min.dup();
     result.max = result.max.dup();
     return result;
+  }
+
+  bool is_constant( ParseTree t )
+  {
+    switch ( t.name )
+    {
+      case "CLOP.FloatLiteral":
+      case "CLOP.IntegerLiteral":
+        return true;
+      default:
+        auto result = false;
+        if ( t.children.length > 0 )
+        {
+          result = true;
+          foreach ( c; t.children )
+            result = result && is_constant( c );
+        }
+        return result;
+    }
+  }
+
+  int get_value( ParseTree t )
+  {
+    switch ( t.name )
+    {
+      case "CLOP.FloatLiteral":
+      case "CLOP.IntegerLiteral":
+        return to!(int)(t.matches[0]);
+      default:
+        int result = 0;
+        if ( t.children.length > 0 )
+        {
+          foreach ( c; t.children )
+            result = get_value( c );
+        }
+        return result;
+    }
+  }
+
+  ParseTree simplify_expression( ParseTree t )
+  {
+    switch ( t.name )
+    {
+    case "CLOP.Expression":
+      ParseTree[] children = [];
+      bool[] constants = [];
+      int[] values;
+      auto only_const = true;
+      foreach ( c; t.children )
+      {
+        auto s = simplify_expression( c );
+        children ~= [s];
+        auto b = is_constant( s );
+        only_const = only_const && b;
+        constants ~= [b];
+        if ( b )
+          values ~= [get_value( s )];
+        else
+          values ~= [0];
+      }
+
+      int sum = 0;
+      for ( auto i = 0; i < t.children.length; ++i )
+      {
+        if ( constants[i] )
+        {
+          if ( i == 0 || t.children[i].matches[0] == "+" )
+           sum += values[i];
+          else
+           sum -= values[i];
+        }
+      }
+      if ( only_const )
+      {
+        auto m = [format("%d", sum)];
+        auto u = ParseTree( "CLOP.Factor", true, m, "", 0, 0,
+                   [ParseTree( "CLOP.UnaryExpr", true, m, "", 0, 0,
+                      [ParseTree( "CLOP.PrimaryExpr", true, m, "", 0, 0,
+                         [ParseTree( "CLOP.IntegerLiteral", true, m, "", 0, 0, [] )] )] )] );
+        return ParseTree( "CLOP.Expression", true, m, "", 0, 0, [u] );
+      }
+      if ( sum == 0 )
+      {
+        ParseTree[] n = [];
+        string[] p = [];
+        if ( constants[0] )
+        {
+          auto m = [format("%d", sum)];
+          auto u = ParseTree( "CLOP.Factor", true, m, "", 0, 0,
+                     [ParseTree( "CLOP.UnaryExpr", true, m, "", 0, 0,
+                        [ParseTree( "CLOP.PrimaryExpr", true, m, "", 0, 0,
+                           [ParseTree( "CLOP.IntegerLiteral", true, m, "", 0, 0, [] )] )] )] );
+          n ~= [u];
+          p ~= m;
+        }
+        else
+        {
+          n ~= [children[0]];
+          p ~= children[0].matches;
+        }
+        for ( auto i = 1; i < t.children.length; ++i )
+        {
+          if ( !constants[i] )
+          {
+            n ~= [children[i]];
+            p ~= children[i].matches;
+          }
+        }
+        return ParseTree( "CLOP.Expression", true, p, "", 0, 0, n );
+      }
+      ParseTree[] n = [];
+      string[] p = [];
+      if ( constants[0] )
+      {
+        auto m = [format("%d", sum)];
+        auto u = ParseTree( "CLOP.Factor", true, m, "", 0, 0,
+                   [ParseTree( "CLOP.UnaryExpr", true, m, "", 0, 0,
+                      [ParseTree( "CLOP.PrimaryExpr", true, m, "", 0, 0,
+                         [ParseTree( "CLOP.IntegerLiteral", true, m, "", 0, 0, [] )] )] )] );
+        n ~= [u];
+        p ~= m;
+      }
+      else
+      {
+        n ~= [children[0]];
+        p ~= children[0].matches;
+        auto m = [format( "%s", sum < 0 ? "-" : "+" ), format( "%d", sum < 0 ? -sum : sum )];
+        auto u = ParseTree( "CLOP.AddExpr", true, m, "", 0, 0,
+                   [ParseTree( "CLOP.Factor", true, [m[1]], "", 0, 0,
+                      [ParseTree( "CLOP.UnaryExpr", true, [m[1]], "", 0, 0,
+                         [ParseTree( "CLOP.PrimaryExpr", true,[ m[1]], "", 0, 0,
+                            [ParseTree( "CLOP.IntegerLiteral", true, [m[1]], "", 0, 0, [] )] )] )] )] );
+        n ~= [u];
+        p ~= m;
+      }
+      for ( auto i = 1; i < t.children.length; ++i )
+      {
+        if ( !constants[i] )
+        {
+          n ~= [children[i]];
+          p ~= children[i].matches;
+        }
+      }
+      return ParseTree( "CLOP.Expression", true, p, "", 0, 0, n );
+    case "CLOP.Factor":
+      ParseTree[] p = [];
+      string[] m = [];
+      foreach ( c; t.children )
+      {
+        auto u = simplify_expression( c );
+        p ~= [u];
+        m ~= u.matches;
+      }
+      return ParseTree( "CLOP.Factor", true, m, "", 0, 0, p );
+    case "CLOP.AddExpr":
+    case "CLOP.MulExpr":
+      ParseTree[] p = [];
+      string[] m = [t.matches[0]];
+      foreach ( c; t.children )
+      {
+        auto u = simplify_expression( c );
+        p ~= [u];
+        m ~= u.matches;
+      }
+      return ParseTree( t.name, true, m, "", 0, 0, p );
+    case "CLOP.UnaryExpr":
+      if ( t.matches[0] == "min" && t.children.length > 1 && t.children[1].name == "CLOP.FunctionCall" )
+      {
+        auto args = t.children[1].children[0].children;
+        auto a0 = simplify_expression( args[0] );
+        auto a1 = simplify_expression( args[1] );
+        auto b0 = is_constant( a0 );
+        auto b1 = is_constant( a1 );
+        if ( b0 && b1 )
+        {
+          auto v0 = get_value( a0 );
+          auto v1 = get_value( a1 );
+          auto v = v0 < v1 ? v0 : v1;
+          auto m = format( "%d", v );
+          return ParseTree( "CLOP.UnaryExpr", true, [m], "", 0, 0,
+                   [ParseTree( "CLOP.PrimaryExpr", true,[m], "", 0, 0,
+                      [ParseTree( "CLOP.IntegerLiteral", true, [m], "", 0, 0, [] )] )] );
+        }
+      }
+      if ( t.matches[0] == "max" && t.children.length > 1 && t.children[1].name == "CLOP.FunctionCall" )
+      {
+        auto args = t.children[1].children[0].children;
+        auto a0 = simplify_expression( args[0] );
+        auto a1 = simplify_expression( args[1] );
+        auto b0 = is_constant( a0 );
+        auto b1 = is_constant( a1 );
+        if ( b0 && b1 )
+        {
+          auto v0 = get_value( a0 );
+          auto v1 = get_value( a1 );
+          auto v = v0 < v1 ? v1 : v0;
+          auto m = format( "%d", v );
+          return ParseTree( "CLOP.UnaryExpr", true, [m], "", 0, 0,
+                   [ParseTree( "CLOP.PrimaryExpr", true,[m], "", 0, 0,
+                      [ParseTree( "CLOP.IntegerLiteral", true, [m], "", 0, 0, [] )] )] );
+        }
+      }
+      ParseTree[] p = [];
+      string[] m = [];
+      foreach ( c; t.children )
+      {
+        auto u = simplify_expression( c );
+        p ~= [u];
+        m ~= u.matches;
+      }
+      return ParseTree( t.name, true, m, "", 0, 0, p );
+    case "CLOP.PrimaryExpr":
+      ParseTree[] p = [];
+      string[] m = [];
+      foreach ( c; t.children )
+      {
+        auto u = simplify_expression( c );
+        p ~= [u];
+        m ~= u.matches;
+      }
+      return ParseTree( t.name, true, m, "", 0, 0, p );
+    case "CLOP.FunctionCall":
+      ParseTree[] p = [];
+      string[] m = ["("];
+      foreach ( c; t.children )
+      {
+        auto u = simplify_expression( c );
+        p ~= [u];
+        m ~= u.matches;
+      }
+      m ~= [")"];
+      return ParseTree( t.name, true, m, "", 0, 0, p );
+    case "CLOP.ArgumentList":
+      ParseTree[] p = [];
+      string[] m = [];
+      foreach ( i, c; t.children )
+      {
+        auto u = simplify_expression( c );
+        p ~= [u];
+        if ( i > 0 ) m ~= [","];
+        m ~= u.matches;
+      }
+      return ParseTree( t.name, true, m, "", 0, 0, p );
+    case "CLOP.Identifier":
+    case "CLOP.FloatLiteral":
+    case "CLOP.IntegerLiteral":
+      return t;
+    default:
+      ParseTree[] p = [];
+      string[] m = [];
+      foreach ( c; t.children )
+      {
+        auto u = simplify_expression( c );
+        p ~= [u];
+        m ~= u.matches;
+      }
+      return ParseTree( t.name, true, m, "", 0, 0, p );
+    }
   }
 }
 
