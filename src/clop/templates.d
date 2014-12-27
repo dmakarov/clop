@@ -88,7 +88,10 @@ template_shared_memory_data_init = q{
 
 template_shared_memory_fini = q{
   for ( int %s = 0; %s < %s; ++%s )
-    %s[%s] = %s[%s];
+    for ( int %s = 0; %s < (%s); %s += (%s) )
+      if ( (%s) + (%s) < (%s) )
+        %s[(%s) * (%s) + (%s) + (%s)] =
+        %s[(%s) * (%s) + (%s) + (%s)];
 },
 
 template_antidiagonal_loop_prefix = "

@@ -91,7 +91,7 @@ struct Interval
   string get_size()
   {
     ParseTree x = create_add_expr( max, min, "-" );
-    x = simplify_expression( x );
+    //x = simplify_expression( x );
     auto s = "";
     foreach ( m; x.matches )
       s ~= m;

@@ -931,27 +931,71 @@ class Compiler
 
   string finish_antidiagonal_range( ParseTree t )
   {
-    auto s = "";
+    auto s = template_antidiagonal_loop_suffix;
+    auto shadowed = SList!string();
+
+    foreach ( v; symtable )
+      if ( v.is_array && v.shadow != null )
+      {
+        auto defs = v.defs;
+        if ( defs.length > 0 )
+          shadowed.insert( v.name );
+      }
+
     if ( transformations == "rectangular_blocking" )
     {
-      auto v = select_array_for_shared_memory();
-      auto u = symtable[v].shadow;
-      auto tid0 = "tid0";
-      auto w = "cols";
-      auto bsz0 = "8";
-      auto bsz1 = "8";
-      auto gsz0 = "cols";
-      auto d1 = "d1";
-      auto b0 = "b0";
-      auto b1 = "b1";
-      auto bound_min1 = "1";
-      auto bound_min0 = "1";
-      s ~= template_antidiagonal_loop_suffix;
-      if ( symtable[v].defs.length > 0 )
+      string[3] bix;
+      auto r = Box( [], [] );
+      foreach ( c, u; range.symbols )
+      {
+        bix[c] = format( "b%d", c );
+        r.symbols ~= [u];
+        r.s2i[u] = c;
+        auto n = "0";
+        auto x = block_size;
+        r.intervals ~= [Interval( ParseTree( "CLOP.IntegerLiteral", true, [n], "", 0, 0, [] ),
+                                  ParseTree( "CLOP.IntegerLiteral", true, [x], "", 0, 0, [] ) )];
+      }
+      foreach ( v; shadowed )
+      {
+        auto uses = symtable[v].uses;
+        Interval[3] local_box;
+        foreach ( i, c; uses[0].children )
+        {
+          local_box[i] = interval_apply( c, r );
+        }
+        for ( auto ii = 1; ii < uses.length; ++ii )
+          foreach ( i, c; uses[ii].children )
+          {
+            local_box[i] = interval_union( local_box[i], interval_apply( c, r ) );
+          }
+        // thread or work item id
+        auto tid0 = "tid0";
+        // local index variables
+        auto li0 = "li0";
+        auto li1 = "li1";
+        // size of local index space
+        auto lsz0 = block_size;
+        auto lsz1 = block_size;
+        // size of current array block
+        auto bsz0 = local_box[0].get_size();
+        auto bsz1 = local_box[1].get_size();
+        // global index of current array
+        auto gi0 = format( "(%s) * (%s) + (%s)", bix[0], lsz0, li0 );
+        auto gi1 = format( "(%s) * (%s) + (%s)", bix[1], lsz1, li1 );
+        // size of current global array
+        auto gsz0 = symtable[v].box[0].get_max();
+        // global memory array name
+        auto gma = v;
+        // shared memory array name
+        auto sma = generate_shared_memory_variable( v );
         s ~= format( template_shared_memory_fini,
-                     d1, d1, bsz1, d1,
-                     v, "(" ~ b1 ~ "*" ~ bsz1 ~ "+" ~ d1 ~ "+" ~ bound_min1 ~ ") * " ~ gsz0 ~ " + " ~ b0 ~ "*" ~ bsz0 ~ "+" ~ tid0 ~ "+" ~ bound_min0,
-                     u, "(" ~ d1 ~ "+" ~ bound_min1 ~ ") * (" ~ bsz0 ~ "+" ~ bound_min0 ~ ") + " ~ tid0 ~ "+" ~ bound_min0 );
+                     li1, li1, bsz1, li1,
+                     li0, li0, bsz0, li0, lsz0,
+                     li0, tid0, bsz0,
+                     gma, gi1, gsz0, gi0, tid0,
+                     sma, li1, bsz0, li0, tid0 );
+      }
     }
     return s;
   }
