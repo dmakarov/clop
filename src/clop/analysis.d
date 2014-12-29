@@ -91,7 +91,6 @@ struct Interval
   string get_size()
   {
     ParseTree x = create_add_expr( max, min, "-" );
-    //x = simplify_expression( x );
     auto s = "";
     foreach ( m; x.matches )
       s ~= m;
@@ -380,6 +379,8 @@ struct Interval
 Interval
 interval_union( Interval a, Interval b )
 {
+//  auto min = create_minmax_expr( a.min, b.min, "min" );
+//  auto max = create_minmax_expr( a.max, b.max, "max" );
   auto min = create_call( "min", [a.min, b.min] );
   auto max = create_call( "max", [a.max, b.max] );
   return Interval( min, max );
@@ -421,6 +422,39 @@ interval_arithmetic_operation( Interval a, string op, Interval b )
 /++
  +  The result of any IA operation is a CLOP.Expression node.
  +/
+ParseTree
+create_minmax_expr( ParseTree a, ParseTree b, string op )
+{
+  ParseTree te = ( op == "min" ) ? a : b;
+  ParseTree fe = ( op == "min" ) ? b : a;
+  string i = a.input;
+  size_t s = 0;
+  size_t e = i.length;
+  auto c = a.matches ~ ["<"] ~ b.matches;
+  auto m = ["( ("] ~ c ~ [") ? ("] ~ te.matches ~ [") : ("] ~ fe.matches ~ [") )"];
+  return
+  ParseTree( "CLOP.ConditionalExpression", true, m, i, s, e,
+    [ParseTree( "CLOP.LogicalORExpression", true, c, i, s, e,
+       [ParseTree( "CLOP.LogicalANDExpression", true, c, i, s, e,
+          [ParseTree( "CLOP.InclusiveORExpression", true, c, i, s, e,
+             [ParseTree( "CLOP.ExclusiveORExpression", true, c, i, s, e,
+                [ParseTree( "CLOP.ANDExpression", true, c, i, s, e,
+                   [ParseTree( "CLOP.EqualityExpression", true, c, i, s, e,
+                      [ParseTree( "CLOP.RelationalExpression", true, c, i, s, e,
+                         [a,
+                          ParseTree( "CLOP.RelationalOperator", true, ["<"], i, s, e, [] ),
+                          ParseTree( "CLOP.RelationalExpression", true, b.matches, i, s, e, [b] )] )] )] )] )] )] )] ),
+     te,
+     ParseTree( "CLOP.ConditionalExpression", true, fe.matches, i, s, e,
+       [ParseTree( "CLOP.LogicalORExpression", true, fe.matches, i, s, e,
+          [ParseTree( "CLOP.LogicalANDExpression", true, fe.matches, i, s, e,
+             [ParseTree( "CLOP.InclusiveORExpression", true, fe.matches, i, s, e,
+                [ParseTree( "CLOP.ExclusiveORExpression", true, fe.matches, i, s, e,
+                   [ParseTree( "CLOP.ANDExpression", true, fe.matches, i, s, e,
+                      [ParseTree( "CLOP.EqualityExpression", true, fe.matches, i, s, e,
+                         [ParseTree( "CLOP.RelationalExpression", true, fe.matches, i, s, e, [fe] )] )] )] )] )] )] )] )] );
+}
+
 ParseTree
 create_call( string name, ParseTree[] args )
 {
