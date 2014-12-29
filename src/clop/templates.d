@@ -40,26 +40,22 @@ template_antidiagonal_invoke_kernel = q{
   for ( clop_r0 = %s; clop_r0 < %s; ++clop_r0 )
   {
     size_t global = clop_r0;
-    //runtime.status = clSetKernelArg( clop_opencl_kernel, clop_opencl_kernel_arg, cl_int.sizeof, &clop_r0 );
+    runtime.status = clSetKernelArg( clop_opencl_kernel, clop_opencl_kernel_arg, cl_int.sizeof, &clop_r0 );
     assert( runtime.status == CL_SUCCESS, "clSetKernelArg failed." );
-    //runtime.status = clEnqueueNDRangeKernel( runtime.queue, clop_opencl_kernel, 1, null, &global, null, 0, null, null );
+    runtime.status = clEnqueueNDRangeKernel( runtime.queue, clop_opencl_kernel, 1, null, &global, null, 0, null, null );
     assert( runtime.status == CL_SUCCESS, "clEnqueueNDRangeKernel failed." );
   }
   for ( clop_c0 = %s + 1, clop_r0 -= 1; clop_c0 < %s; ++clop_c0 )
   {
     size_t global = clop_r0 - clop_c0 + 1;
-    //runtime.status = clSetKernelArg( clop_opencl_kernel, clop_opencl_kernel_arg + 1, cl_int.sizeof, &clop_c0 );
+    runtime.status = clSetKernelArg( clop_opencl_kernel, 5, cl_int.sizeof, &clop_c0 );
     assert( runtime.status == CL_SUCCESS, "clSetKernelArg failed." );
-    //runtime.status = clEnqueueNDRangeKernel( runtime.queue, clop_opencl_kernel, 1, null, &global, null, 0, null, null );
+    runtime.status = clEnqueueNDRangeKernel( runtime.queue, clop_opencl_kernel, 1, null, &global, null, 0, null, null );
     assert( runtime.status == CL_SUCCESS, "clEnqueueNDRangeKernel failed." );
   }
 },
 
 template_antidiagonal_rectangular_blocks_invoke_kernel = q{
-  runtime.status = clSetKernelArg( %s, clop_opencl_kernel_arg + 2, 81 * cl_int.sizeof, null );
-  assert( runtime.status == CL_SUCCESS, "clSetKernelArg " ~ cl_strerror( runtime.status ) );
-  runtime.status = clSetKernelArg( %s, clop_opencl_kernel_arg + 3, 81 * cl_int.sizeof, null );
-  assert( runtime.status == CL_SUCCESS, "clSetKernelArg " ~ cl_strerror( runtime.status ) );
   auto max_blocks = ((%s) - 1) / (%s);
   for ( int i = 0; i < 2 * max_blocks - 1; ++i )
   {
@@ -67,10 +63,9 @@ template_antidiagonal_rectangular_blocks_invoke_kernel = q{
     cl_int bc = ( i < max_blocks ) ? 0 : i - max_blocks + 1;
     size_t wgroup = %s;
     size_t global = (%s) * min( br + 1, max_blocks - bc );
-    writeln( "global size ", global, " br0 ", br, " bc0 ", bc );
-    runtime.status = clSetKernelArg( %s, clop_opencl_kernel_arg, cl_int.sizeof, &br );
+    runtime.status = clSetKernelArg( %s, 5, cl_int.sizeof, &bc );
     assert( runtime.status == CL_SUCCESS, "clSetKernelArg " ~ cl_strerror( runtime.status ) );
-    runtime.status = clSetKernelArg( %s, clop_opencl_kernel_arg + 1, cl_int.sizeof, &bc );
+    runtime.status = clSetKernelArg( %s, 6, cl_int.sizeof, &br );
     assert( runtime.status == CL_SUCCESS, "clSetKernelArg " ~ cl_strerror( runtime.status ) );
     runtime.status = clEnqueueNDRangeKernel( runtime.queue, %s, 1, null, &global, &wgroup, 0, null, null );
     assert( runtime.status == CL_SUCCESS, "clEnqueueNDRangeKernel " ~ cl_strerror( runtime.status ) );

@@ -18,6 +18,7 @@ class Compiler
   ParseTree AST;
   Box range;
   Symbol[string] symtable;
+  Argument[] parameters;
   string declarations;
   string pattern;
   string transformations;
@@ -182,7 +183,7 @@ class Compiler
       {
         auto s = t.matches[0];
         auto d = range.get_dimensionality();
-        symtable[s] = Symbol( s, t, true, false, [], [], "clop_local_index_" ~ s );
+        symtable[s] = Symbol( s, "int", t, true, false, false, [], [], "clop_local_index_" ~ s );
         range.intervals ~= [Interval( t.children[1], t.children[2] )];
         range.symbols ~= [s];
         range.s2i[s] = d;
@@ -333,7 +334,11 @@ class Compiler
       {
         string s = t.matches[0];
         if ( symtable.get( s, Symbol() ) == Symbol() )
-          symtable[s] = Symbol( s, t, !global_scope, false, [], [], null );
+        {
+          symtable[s] = Symbol( s, "", t, !global_scope, false, false, [], [], null );
+          if ( global_scope )
+            parameters ~= [Argument( s, "", "", "" )];
+        }
         break;
       }
     case "CLOP.FloatLiteral":
@@ -802,6 +807,8 @@ class Compiler
         shadowed.insert( v.name );
 
     auto r = Box( [], [] );
+    auto g = Box( [], [] );
+    string[3] bix;
     foreach ( c, u; t.children )
     {
       auto v = u.matches[0];              // variable name in NDRange specification
@@ -811,62 +818,79 @@ class Compiler
       auto x = block_size;
       r.intervals ~= [Interval( ParseTree( "CLOP.IntegerLiteral", true, [n], "", 0, 0, [] ),
                                 ParseTree( "CLOP.IntegerLiteral", true, [x], "", 0, 0, [] ) )];
+      // n = range.intervals[c].min + b%d * block_size;
+      // x = n + block_size;
+      bix[c] = format( "b%d", c );
+      auto y = ParseTree( "CLOP.Identifier", true, [bix[c]], "", 0, 0, [] );
+      auto w = ParseTree( "CLOP.IntegerLiteral", true, [x], "", 0, 0, [] );
+      auto f = create_mul_expr( y, w, "*" );
+      auto a = create_add_expr( range.intervals[c].min, f, "+" );
+      g.intervals ~= [Interval( a, create_add_expr( a, w, "+") )];
+      g.symbols ~= [v];
+      g.s2i[v] = c;
     }
 
     if ( transformations == "rectangular_blocking" )
     {
-      auto bid0 = "bid0"; // block or work group id
-      auto tid0 = "tid0"; // thread or work item id
+      auto iv = "iv";
+      // block or work group id
+      auto bid0 = "bid0";
+      // thread or work item id
+      auto tid0 = "tid0";
+      // local index variables
+      auto li0 = "li0";
+      auto li1 = "li1";
+      // size of local index space
+      auto lsz0 = block_size;
+      auto lsz1 = block_size;
+
       s ~= format( "  int %s = get_group_id( 0 );\n", bid0 );
       s ~= format( "  int %s = get_local_id( 0 );\n", tid0 );
       auto factor = false;
-      string[3] bix;
       foreach ( c, u; t.children )
       {
         auto v = u.matches[0];              // variable name in NDRange specification
         auto o = factor ? "-" : "+";        // arithmetic operation
         factor = !factor;
         range_arg[c] = v;
-        bix[c] = format( "b%d", c );
-        s ~= format( "  int b%d = b%s0 %s %s;\n", c, v, o, bid0 );
+        auto n = format( "b%s0", v );       // generated variable to pass the block index.
+        s ~= format( "  int b%d = %s %s %s;\n", c, n, o, bid0 );
+        parameters ~= [Argument( n, "int", "", "", "", true )];
       }
+
+      auto recalculations = "";
       auto safeguards = "";
 
       foreach ( v; shadowed )
       {
         auto uses = symtable[v].uses;
         Interval[3] local_box;
+        Interval[3] global_box;
         foreach ( i, c; uses[0].children )
         {
           local_box[i] = interval_apply( c, r );
+          global_box[i] = interval_apply( c, g );
         }
         for ( auto ii = 1; ii < uses.length; ++ii )
           foreach ( i, c; uses[ii].children )
           {
             local_box[i] = interval_union( local_box[i], interval_apply( c, r ) );
+            global_box[i] = interval_union( global_box[i], interval_apply( c, g ) );
           }
 
-        // local index variables
-        auto li0 = "li0";
-        auto li1 = "li1";
-        // size of local index space
-        auto lsz0 = block_size;
-        auto lsz1 = block_size;
         // size of current array block
         auto bsz0 = local_box[0].get_size();
         auto bsz1 = local_box[1].get_size();
-        // margin size
-        auto msz0 = bsz0 ~ "-" ~ lsz0;
-        auto msz1 = bsz1 ~ "-" ~ lsz1;
         // global index of current array
-        auto gi0 = format( "(%s) * (%s) + (%s)", bix[0], lsz0, li0 );
-        auto gi1 = format( "(%s) * (%s) + (%s)", bix[1], lsz1, li1 );
+        auto gi0 = format( "(%s) + (%s)", global_box[0].get_min(), li0 );
+        auto gi1 = format( "(%s) + (%s)", global_box[1].get_min(), li1 );
         // size of current global array
         auto gsz0 = symtable[v].box[0].get_max();
         // global memory array name
         auto gma = v;
         // shared memory array name
         auto sma = generate_shared_memory_variable( v );
+        parameters ~= Argument( sma, "", "__local", format( "(%s) * (%s)", bsz0, bsz1 ), gma );
         s ~= format( template_shared_memory_data_init,
                      li1, li1, bsz1, li1,
                      li0, li0, bsz0, li0, lsz0,
@@ -874,44 +898,20 @@ class Compiler
                      sma, li1, bsz0, li0, tid0,
                      gma, gi1, gsz0, gi0, tid0 );
 
-      }
-
-      auto iv = "iv";
-      auto lsz0 = block_size;
-      auto lsz1 = block_size;
-      s ~= format( template_antidiagonal_loop_prefix, iv, iv, lsz1, lsz0, iv );
-
-      foreach ( v; shadowed )
-      {
-        auto uses = symtable[v].uses;
-        Interval[3] local_box;
-        foreach ( i, c; uses[0].children )
-        {
-          local_box[i] = interval_apply( c, r );
-        }
-        for ( auto ii = 1; ii < uses.length; ++ii )
-          foreach ( i, c; uses[ii].children )
-          {
-            local_box[i] = interval_union( local_box[i], interval_apply( c, r ) );
-          }
-
-        // size of current array block
-        auto bsz0 = local_box[0].get_size();
-        auto bsz1 = local_box[1].get_size();
         // margin size
         auto msz0 = bsz0 ~ "-" ~ lsz0;
         auto msz1 = bsz1 ~ "-" ~ lsz1;
-        // size of current global array
-        auto gsz0 = symtable[v].box[0].get_size();
 
-        s ~= format( template_shared_index_recalculation,
-                     v ~ "_" ~ generate_shared_memory_variable( range_arg[0] ), msz0, tid0, iv, lsz0, iv, lsz0,
-                     v ~ "_" ~ generate_shared_memory_variable( range_arg[1] ), msz1, tid0, iv, lsz1, iv, lsz1 );
+        auto iv0 = v ~ "_" ~ generate_shared_memory_variable( range_arg[0] );
+        auto iv1 = v ~ "_" ~ generate_shared_memory_variable( range_arg[1] );
+        recalculations ~= format( template_shared_index_recalculation,
+                                  iv0, msz0, tid0, iv, lsz0, iv, lsz0,
+                                  iv1, msz1, tid0, iv, lsz1, iv, lsz1 );
         if ( safeguards != "" ) safeguards ~= " && ";
-        safeguards ~= format( "(%s) < (%s) && (%s) >= (%s)",
-                              v ~ "_" ~ generate_shared_memory_variable( range_arg[0] ), bsz0,
-                              v ~ "_" ~ generate_shared_memory_variable( range_arg[1] ), msz1 );
+        safeguards ~= format( "(%s) < (%s) && (%s) >= (%s)", iv0, bsz0, iv1, msz1 );
       }
+      s ~= format( template_antidiagonal_loop_prefix, iv, iv, lsz1, lsz0, iv );
+      s ~= recalculations;
       s ~= format( "\n    if ( %s )\n", safeguards );
     }
     else
@@ -1028,7 +1028,7 @@ class Compiler
     {
       ParseTree u = t.children[c];
       string name = u.matches[0];
-      symtable[name] = Symbol( name, t, true );
+      symtable[name] = Symbol( name, "int", t, true );
       s ~= "  int " ~ name ~ " = get_global_id( " ~ ct_itoa( n - 1 - c ) ~ " );\n";
     }
     return s;
@@ -1047,36 +1047,40 @@ class Compiler
   string set_params()
   {
     string result = "string param;\n";
-    uint i = 0;
-    foreach( sym; symtable.keys )
+    auto issued_declaration = false;
+    foreach( p; parameters )
     {
-      if ( !symtable[sym].is_local )
+      if ( p.type == "" )
       {
-        result ~= "param = mixin( set_kernel_param!(typeof(" ~ sym ~ "))(\"" ~ sym ~ "\") );\n";
-        if ( i == 0 )
-        {
-          result ~= "string kernel_params = param;\n";
-        }
+        if ( p.back == "" )
+          result ~= format( "param = mixin( set_kernel_param!(typeof(%s))(\"%s\",\"%s\") );\n", p.name, p.name, p.back );
         else
-        {
-          result ~= "if ( param != \"\" ) kernel_params ~= \", \" ~ param;\n";
-        }
-        ++i;
+          result ~= format( "param = mixin( set_kernel_param!(typeof(%s))(\"%s\",\"%s\") );\n", p.back, p.name, p.back );
+      }
+      else
+        result ~= format( "param = \"%s %s\";\n", p.type, p.name );
+      if ( issued_declaration )
+        result ~= "if ( param != \"\" ) kernel_params ~= \", \" ~ param;\n";
+      else
+      {
+        result ~= "string kernel_params = param;\n";
+        issued_declaration = true;
       }
     }
-    result ~= "kernel_params ~= \", int br0, int bc0, __local int* F_in_shared_memory, __local int* S_in_shared_memory\";\n";
     return result;
   }
 
   string set_args( string kernel )
   {
-    string result = "uint clop_opencl_kernel_arg = 0;\n";
-    foreach( sym; symtable.keys )
+    auto result = "";
+    foreach( i, p; parameters )
     {
-      if ( !symtable[sym].is_local )
+      if ( !p.skip )
       {
-        result ~= "mixin( set_kernel_arg!(typeof(" ~ sym ~ "))(\"" ~
-        kernel ~ "\",\"clop_opencl_kernel_arg\",\"" ~ sym ~ "\") );\n";
+        if ( p.back == "" )
+          result ~= format( "mixin( set_kernel_arg!(typeof(%s))(\"%s\",\"%d\",\"%s\",\"\",\"\") );\n", p.name, kernel, i, p.name );
+        else
+          result ~= format( "mixin( set_kernel_arg!(typeof(%s))(\"%s\",\"%d\",\"null\",\"%s\",\"%s\") );\n", p.back, kernel, i, p.back, p.size );
       }
     }
     return result;
@@ -1087,7 +1091,7 @@ class Compiler
     string result = "";
     foreach( sym; symtable.keys )
     {
-      if ( !symtable[sym].is_local )
+      if ( !symtable[sym].is_local && symtable[sym].type == "" && symtable[sym].defs.length > 0 )
       {
         result ~= "mixin( read_device_buffer!(typeof(" ~ sym ~ "))(\"" ~ sym ~ "\") );\n";
       }
@@ -1103,13 +1107,10 @@ class Compiler
     }
     else
     {
-      auto outer = range.intervals[1];
-      auto inner = range.intervals[0];
       auto gsz0 = "cols";
       auto bsz0 = "8";
       auto name = "clop_opencl_kernel";
       return format( template_antidiagonal_rectangular_blocks_invoke_kernel,
-                     name, name,
                      gsz0, bsz0, bsz0, bsz0,
                      name, name, name );
     }
@@ -1140,6 +1141,16 @@ class Compiler
     foreach ( k; 0 .. range.get_dimensionality() )
     {
       result ~= "// " ~ range.symbols[k] ~ ": " ~ range.intervals[k].toString() ~ "\n";
+    }
+    return result;
+  }
+
+  string dump_parameters()
+  {
+    string result = "// The kernel arguments:\n";
+    foreach ( i, a; parameters )
+    {
+      result ~= "// " ~ a.name ~ " " ~ a.type ~ " " ~ a.qual ~ " " ~ a.size ~ "\n";
     }
     return result;
   }
@@ -1249,7 +1260,7 @@ compile( immutable string expr )
 }
 
 string
-set_kernel_param( T )( string name )
+set_kernel_param( T )( string name, string back )
 {
   string code;
   static      if ( is ( T == bool   ) ) code = "\"uchar "  ~ name ~ "\"";
@@ -1265,59 +1276,71 @@ set_kernel_param( T )( string name )
   else static if ( is ( T == float  ) ) code = "\"float "  ~ name ~ "\"";
   else static if ( is ( T == double ) ) code = "\"double " ~ name ~ "\"";
   else static if ( isDynamicArray!T || isStaticArray!T )
-    code = "\"__global \" ~ typeid( *" ~ name ~ ".ptr ).toString() ~ \"* " ~ name ~ "\"";
+  {
+    if ( back != "" )
+      code = "\"__local \" ~ typeid( *" ~ back ~ ".ptr ).toString() ~ \"* " ~ name ~ "\"";
+    else
+      code = "\"__global \" ~ typeid( *" ~ name ~ ".ptr ).toString() ~ \"* " ~ name ~ "\"";
+  }
   else
     code = "\"\"";
   return code;
 }
 
 string
-set_kernel_arg( T )( string kernel, string arg, string name )
+set_kernel_arg( T )( string kernel, string arg, string name, string back, string size )
 {
   string code;
   static      if ( is ( T == bool ) )
-    code = "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ "++, cl_char.sizeof, &" ~ name ~ " );\n"
+    code = "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ ", cl_char.sizeof, &" ~ name ~ " );\n"
          ~ "assert( runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\" );";
   else static if ( is ( T == char ) )
-    code = "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ "++, cl_char.sizeof, &" ~ name ~ " );\n"
+    code = "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ ", cl_char.sizeof, &" ~ name ~ " );\n"
          ~ "assert( runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\" );";
   else static if ( is ( T == byte ) )
-    code = "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ "++, cl_char.sizeof, &" ~ name ~ " );\n"
+    code = "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ ", cl_char.sizeof, &" ~ name ~ " );\n"
          ~ "assert( runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\" );";
   else static if ( is ( T == ubyte ) )
-    code = "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ "++, cl_uchar.sizeof, &" ~ name ~ " );\n"
+    code = "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ ", cl_uchar.sizeof, &" ~ name ~ " );\n"
          ~ "assert( runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\" );";
   else static if ( is ( T == short ) )
-    code = "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ "++, cl_short.sizeof, &" ~ name ~ " );\n"
+    code = "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ ", cl_short.sizeof, &" ~ name ~ " );\n"
          ~ "assert( runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\" );";
   else static if ( is ( T == ushort ) )
-    code = "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ "++, cl_ushort.sizeof, &" ~ name ~ " );\n"
+    code = "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ ", cl_ushort.sizeof, &" ~ name ~ " );\n"
          ~ "assert( runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\" );";
   else static if ( is ( Unqual!(T) == int ) )
-    code = "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ "++, cl_int.sizeof, &" ~ name ~ " );\n"
+    code = "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ ", cl_int.sizeof, &" ~ name ~ " );\n"
          ~ "assert( runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\" );";
   else static if ( is ( T == uint ) )
-    code = "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ "++, cl_uint.sizeof, &" ~ name ~ " );\n"
+    code = "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ ", cl_uint.sizeof, &" ~ name ~ " );\n"
          ~ "assert( runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\" );";
   else static if ( is ( T == long ) )
-    code = "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ "++, cl_long.sizeof, &" ~ name ~ " );\n"
+    code = "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ ", cl_long.sizeof, &" ~ name ~ " );\n"
          ~ "assert( runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\" );";
   else static if ( is ( T == ulong ) )
-    code = "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ "++, cl_ulong.sizeof, &" ~ name ~ " );\n"
+    code = "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ ", cl_ulong.sizeof, &" ~ name ~ " );\n"
          ~ "assert( runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\" );";
   else static if ( is ( T == float ) )
-    code = "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ "++, cl_float.sizeof, &" ~ name ~ " );\n"
+    code = "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ ", cl_float.sizeof, &" ~ name ~ " );\n"
          ~ "assert( runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\" );";
   else static if ( is ( T == double ) )
-    code = "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ "++, cl_double.sizeof, &" ~ name ~ " );\n"
+    code = "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg  ~ ", cl_double.sizeof, &" ~ name ~ " );\n"
          ~ "assert( runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\" );";
   else static if ( isDynamicArray!T || isStaticArray!T )
-    code = "cl_mem clop_opencl_device_buffer_" ~ name ~
+  {
+    code = ( size == "" )
+           ?
+           "cl_mem clop_opencl_device_buffer_" ~ name ~
            " = clCreateBuffer( runtime.context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, typeid( *"
            ~ name ~ ".ptr ).tsize * " ~ name ~ ".length, " ~ name ~ ".ptr, &runtime.status );\n"
            ~ "assert( runtime.status == CL_SUCCESS, \"clCreateBuffer failed.\" );\n"
-           ~ "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg ~ "++, cl_mem.sizeof, &clop_opencl_device_buffer_"
-           ~ name ~ " );\nassert( runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\" );";
+           ~ "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg ~ ", cl_mem.sizeof, &clop_opencl_device_buffer_"
+           ~ name ~ " );\nassert( runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\" );"
+           :
+           "runtime.status = clSetKernelArg( " ~ kernel ~ ", " ~ arg ~ ", " ~ size ~ " * typeid( *" ~ back ~ ".ptr ).tsize, " ~ name ~ " );\n"
+           ~ "assert( runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\" );";
+  }
   else
     code = "";
   return "debug ( DEBUG ) writefln( \"%s\", q{" ~ code ~ "} );\n" ~ code;
