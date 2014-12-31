@@ -1426,8 +1426,6 @@ class Application {
                 ticks.usecs / 1E6 );
       validate();
   
-      static if ( false ) 
-      {
       reset();
       timer.reset();
       timer.start();
@@ -1438,7 +1436,6 @@ class Application {
                 (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
                 ticks.usecs / 1E6 );
       validate();
-      }
     }
     save();
   }

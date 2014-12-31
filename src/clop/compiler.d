@@ -183,7 +183,7 @@ class Compiler
       {
         auto s = t.matches[0];
         auto d = range.get_dimensionality();
-        symtable[s] = Symbol( s, "int", t, true, false, false, [], [], "clop_local_index_" ~ s );
+        symtable[s] = Symbol( s, "int", t, true, false, [], [], "clop_local_index_" ~ s );
         range.intervals ~= [Interval( t.children[1], t.children[2] )];
         range.symbols ~= [s];
         range.s2i[s] = d;
@@ -233,7 +233,8 @@ class Compiler
             if ( !symtable[symbol].is_array )
             {
               symtable[symbol].is_array = true;
-              symtable[symbol].shadow = generate_shared_memory_variable( symbol );
+              if ( can_transform_index_expression( t.children[c].children[0] ) )
+                symtable[symbol].shadow = generate_shared_memory_variable( symbol );
             }
             if ( eval_def )
             {
@@ -335,7 +336,7 @@ class Compiler
         string s = t.matches[0];
         if ( symtable.get( s, Symbol() ) == Symbol() )
         {
-          symtable[s] = Symbol( s, "", t, !global_scope, false, false, [], [], null );
+          symtable[s] = Symbol( s, "", t, !global_scope, false, [], [], null );
           if ( global_scope )
             parameters ~= [Argument( s, "", "", "" )];
         }
@@ -736,6 +737,25 @@ class Compiler
     }
   }
 
+  bool can_transform_index_expression( ParseTree t )
+  {
+    switch ( t.name )
+    {
+    case "CLOP.ArrayIndex":
+    case "CLOP.FunctionCall":
+      return false;
+    case "CLOP.ArgumentList":
+      if ( t.children.length == 1 )
+        return false;
+      goto default;
+    default:
+      auto result = true;
+      foreach ( c; t.children )
+        result = result && can_transform_index_expression( c );
+      return result;
+    }
+  }
+
   string patch_index_expression_for_shared_memory( string s, ParseTree t )
   {
     auto r = Box( [], [] );
@@ -911,6 +931,8 @@ class Compiler
         safeguards ~= format( "(%s) < (%s) && (%s) >= (%s)", iv0, bsz0, iv1, msz1 );
       }
       s ~= format( template_antidiagonal_loop_prefix, iv, iv, lsz1, lsz0, iv );
+      s ~= format( "    int %s = (%s) + tid0 + ((%s) < (%s) ?   0  : (%s) - (%s) + 1);\n", t.children[0].matches[0], g.intervals[0].get_min(), iv, lsz0, iv, lsz0 );
+      s ~= format( "    int %s = (%s) - tid0 + ((%s) < (%s) ? (%s) : (%s)        - 1);\n", t.children[1].matches[0], g.intervals[1].get_min(), iv, lsz1, iv, lsz1 );
       s ~= recalculations;
       s ~= format( "\n    if ( %s )\n", safeguards );
     }
@@ -1109,11 +1131,23 @@ class Compiler
     {
       auto gsz0 = "cols";
       auto bsz0 = "8";
+      auto bsz1 = "8";
       auto name = "clop_opencl_kernel";
-      return format( template_antidiagonal_rectangular_blocks_invoke_kernel,
-                     gsz0, bsz0, bsz0, bsz0,
-                     name, name, name );
+      auto n = 0;
+      ulong argindex[2];
+      foreach ( i, p; parameters )
+        if ( p.skip )
+          argindex[n++] = i;
+      return format( template_antidiagonal_rectangular_blocks_invoke_kernel, gsz0, bsz0, bsz0, bsz0, name, argindex[0], name, argindex[1], name );
     }
+  }
+
+  string dump_symtable()
+  {
+    auto result = "// Symbol table:\n";
+    foreach ( s; symtable )
+      result ~= format( "// %s\n", s.toString() );
+    return result;
   }
 
   string dump_arraytab()
@@ -1252,6 +1286,7 @@ compile( immutable string expr )
     unit ~= c.dump_arraytab();
     unit ~= c.dump_intervals();
   }
+  unit ~= c.dump_symtable();
   auto code = params ~ format( template_clop_unit, kernel, unit );
   debug ( DEBUG_GRAMMAR )
     return "debug ( DEBUG ) writefln( \"DSL MIXIN:\\n%sEOD\", q{" ~ code ~ "} );\n";
@@ -1329,7 +1364,7 @@ set_kernel_arg( T )( string kernel, string arg, string name, string back, string
          ~ "assert( runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\" );";
   else static if ( isDynamicArray!T || isStaticArray!T )
   {
-    code = ( size == "" )
+    code = ( null == size || size == "" )
            ?
            "cl_mem clop_opencl_device_buffer_" ~ name ~
            " = clCreateBuffer( runtime.context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, typeid( *"

@@ -1,5 +1,7 @@
 module clop.symbol;
 
+import std.string;
+
 import pegged.grammar;
 
 import clop.analysis;
@@ -11,7 +13,6 @@ struct Symbol
   ParseTree   decl;
   bool        is_local;
   bool        is_array;
-  bool        is_shared;
   ParseTree[] uses;
   ParseTree[] defs;
   string      shadow;
@@ -21,6 +22,12 @@ struct Symbol
   {
     uses = uses.dup;
     defs = defs.dup;
+  }
+  
+  string toString()
+  {
+    return format( "name %10s, type %10s, local %5s, array %5s, shadow %s",
+                   name, (type == null ? "null" : type), is_local, is_array, (shadow == null ? "null" : shadow) );
   }
 }
 
