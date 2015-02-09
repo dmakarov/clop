@@ -1,7 +1,9 @@
 module clop.runtime;
 
 public import std.algorithm;
+import std.exception;
 import std.stdio;
+import std.string;
 
 import derelict.opencl.cl;
 
@@ -220,8 +222,10 @@ struct Runtime
    */
   void shutdown()
   {
-    status = clReleaseCommandQueue( queue ); assert( status == CL_SUCCESS, "clReleaseCommandQueue failed." );
-    status = clReleaseContext( context );    assert( status == CL_SUCCESS, "clReleaseContext failed." );
+    status = clReleaseCommandQueue( queue );
+    assert( status == CL_SUCCESS, "clReleaseCommandQueue failed." );
+    status = clReleaseContext( context );
+    assert( status == CL_SUCCESS, "clReleaseContext failed." );
     writeln( "CLOP runtime shut down." );
   }
 }
@@ -285,4 +289,89 @@ cl_strerror( cl_int err )
   case CL_PROFILING_INFO_NOT_AVAILABLE:              return "CL_PROFILING_INFO_NOT_AVAILABLE";
   default:                                           return "UNKNOWN CL ERROR";
   }
+}
+
+class NDArray(T)
+{
+  private
+  {
+    T[]      data;
+    size_t[] dims; 
+  }
+
+  this( size_t[] dims... )
+  {
+    this.dims = new size_t[dims.length];
+    size_t size = 1;
+    foreach ( i, d; dims )
+    {
+      this.dims[i] = d;
+      size *= d;
+    }
+    data = new T[size];
+  }
+
+  auto get_num_dimensions()
+  {
+    return dims.length;
+  }
+
+  @property
+  auto length()
+  {
+    return data.length;
+  }
+
+  @property
+  auto ptr()
+  {
+    return data.ptr;
+  }
+
+  T[] opIndex()
+  {
+    return data[];
+  }
+
+  T opIndex( size_t[] indices... )
+  in
+  {
+    enforce( indices.length <= dims.length,
+             format( "Too many dimensions (%d) indexing %d-dimensional array.",
+                      indices.length, dims.length ) );
+  }
+  body
+  {
+    return data[get_index( indices )];
+  }
+
+  void opIndexAssign( T c )
+  {
+    data[] = c;
+  }
+
+  void opIndexAssign( T c, size_t[] indices... )
+  in
+  {
+    enforce( indices.length <= dims.length,
+             format( "Too many dimensions (%d) indexing %d-dimensional array.",
+                      indices.length, dims.length ) );
+  }
+  body
+  {
+    data[get_index( indices )] = c;
+  }
+
+  private size_t get_index( size_t[] indices... )
+  {
+    size_t index = 0;
+    size_t offset = 1;
+    foreach ( i, x; indices )
+    {
+      index = index + offset * x;
+      offset = offset * dims[i];
+    }
+    return index;
+  }
+
 }

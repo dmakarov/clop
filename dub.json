@@ -11,7 +11,7 @@
         "name"         : "debug-grammar",
         "debugVersions": ["DEBUG_GRAMMAR"]
       }
-  ],  
+  ],
   "subPackages"  : [
       {
         "name"         : "runtime",

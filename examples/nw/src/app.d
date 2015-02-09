@@ -46,7 +46,8 @@ class Application {
   int[] B; // reconstructed aligned sequence B
   int[] M; // characters of sequence A
   int[] N; // characters of sequence B
-  int[] F; // matrix of computed scores
+  //int[] F; // matrix of computed scores
+  NDArray!int F;
   int[] G; // copy of F for validation
   int[] S; // matrix of matches
   int[] I; // map of reads
@@ -63,6 +64,7 @@ class Application {
   cl_kernel kernel_rectangles_indirectS;
   cl_kernel kernel_diamonds;
   cl_kernel kernel_diamonds_indirectS;
+
 
   /**
    */
@@ -83,12 +85,15 @@ class Application {
       throw new Exception( "ERROR: rows # (" ~ r ~ ") must be a multiple of " ~ b );
     }
     S = new int[rows * cols]; assert( null != S, "Can't allocate array S" );
-    F = new int[rows * cols]; assert( null != F, "Can't allocate array F" );
+    //F = new int[rows * cols]; assert( null != F, "Can't allocate array F" );
+    F = new NDArray!int( cols, rows );
+
     G = new int[rows * cols]; assert( null != G, "Can't allocate array G" );
     M = new int[rows];        assert( null != M, "Can't allocate array M" );
     N = new int[cols];        assert( null != N, "Can't allocate array N" );
     A = new int[rows];        assert( null != A, "Can't allocate array A" );
     B = new int[cols];        assert( null != B, "Can't allocate array B" );
+
 
     debug ( DEBUG )
     {
@@ -385,11 +390,14 @@ class Application {
         t[(tx + 1) * (BLOCK_SIZE + 2) + 1] = F[index_w];
         barrier( CLK_LOCAL_MEM_FENCE );
 
+        int nextN = N[cc - tx];
         for ( int k = 0; k < BLOCK_SIZE; ++k )
         {
           int x =  k + 2;
           int y =  tx + 1;
-          int m = t[(y-1) * (BLOCK_SIZE + 2) + x-2] + s[M[rr + tx] * CHARS + N[cc - tx + k]];
+          int currN = nextN;
+          nextN = N[cc - tx + k + 1];
+          int m = t[(y-1) * (BLOCK_SIZE + 2) + x-2] + s[M[rr + tx] * CHARS + currN];
           int d = t[(y-1) * (BLOCK_SIZE + 2) + x-1] - penalty;
           int i = t[(y  ) * (BLOCK_SIZE + 2) + x-1] - penalty;
           t[y * (BLOCK_SIZE + 2) + x] = max3( m, d, i );
@@ -1260,7 +1268,7 @@ class Application {
       }
       Antidiagonal NDRange( c : 1 .. cols, r : 1 .. rows ) {
         F[c, r] = max3( F[c - 1, r - 1] + S[c, r], F[c - 1, r] - penalty, F[c, r - 1] - penalty );
-      } apply( rectangular_blocking( 8, 8 ) )
+      } apply( rectangular_blocking( 8, 8 ), prefetching() )
     } ) );
   }
 
@@ -1300,7 +1308,7 @@ class Application {
               ticks.usecs / 1E6 );
     G[] = F[];
 
-    static if ( false ) 
+    static if ( false )
     {
     reset();
     timer.reset();
@@ -1348,6 +1356,7 @@ class Application {
               ticks.usecs / 1E6, time,
               (rows - 1) * (cols - 1) / (1024 * 1024 * time) );
     validate();
+    }
 
     clGetKernelWorkGroupInfo( kernel_rectangles,
                               runtime.device,
@@ -1404,17 +1413,7 @@ class Application {
                 ticks.usecs / 1E6, time,
                 (rows - 1) * (cols - 1) / (1024 * 1024 * time) );
       validate();
-    }
-    }
 
-    clGetKernelWorkGroupInfo( kernel_rectangles,
-                              runtime.device,
-                              CL_KERNEL_WORK_GROUP_SIZE,
-                              size.sizeof,
-                              &size,
-                              null );
-    if ( size >= BLOCK_SIZE )
-    {
       reset();
       timer.reset();
       timer.start();
@@ -1425,7 +1424,7 @@ class Application {
                 (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
                 ticks.usecs / 1E6 );
       validate();
-  
+
       reset();
       timer.reset();
       timer.start();

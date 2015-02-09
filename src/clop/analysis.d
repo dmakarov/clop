@@ -9,7 +9,7 @@ import pegged.grammar;
  +  ParseTree has the following fields
  +
  +  string      name;       /// The node name
- +  bool        successful; /// Indicates whether a parsing was successful or not
+ +  bool        successful; /// Indicates whether parsing was successful
  +  string[]    matches;    /// The matched input's parts. Some expressions match at more than one place, hence matches is an array.
  +  string      input;      /// The input string that generated the parse tree. Stored here for the parse tree to be passed to other expressions, as input.
  +  size_t      begin, end; /// Indices for the matched part from the very beginning of the first match to the last char of the last match.
@@ -373,6 +373,47 @@ struct Interval
       }
       return ParseTree( t.name, true, m, "", 0, 0, p );
     }
+  }
+}
+
+Interval
+interval_apply (ref ParseTree t, ref Box r)
+{
+  switch ( t.name )
+  {
+  case "CLOP.Expression":
+    auto i = interval_apply( t.children[0], r );
+    for ( auto c = 1; c < t.children.length; ++c )
+      if ( "+" == t.children[c].matches[0] )
+        i = interval_arithmetic_operation( i, "+", interval_apply( t.children[c], r ) );
+      else
+        i = interval_arithmetic_operation( i, "-", interval_apply( t.children[c], r ) );
+    return i;
+  case "CLOP.Factor":
+    auto i = interval_apply( t.children[0], r );
+    for ( auto c = 1; c < t.children.length; ++c )
+      if ( "*" == t.children[c].matches[0] )
+        i = interval_arithmetic_operation( i, "*", interval_apply( t.children[c], r ) );
+      else
+        i = interval_arithmetic_operation( i, "/", interval_apply( t.children[c], r ) );
+    return i;
+  case "CLOP.AddExpr":
+  case "CLOP.MulExpr":
+    return interval_apply( t.children[0], r );
+  case "CLOP.UnaryExpr":
+    return interval_apply( t.children[0], r );
+  case "CLOP.PrimaryExpr":
+    return interval_apply( t.children[0], r );
+  case "CLOP.Identifier":
+    auto x = r.s2i.get( t.matches[0], 0xffffffff );
+    if ( x != 0xffffffff )
+      return r.intervals[x];
+    return Interval( t, t );
+  case "CLOP.FloatLiteral":
+  case "CLOP.IntegerLiteral":
+    return Interval( t, t );
+  default:
+    return Interval();
   }
 }
 
