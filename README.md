@@ -5,7 +5,7 @@ To compile an example
 
 -   install [LDC](https://github.com/ldc-developers/ldc) and
     [DUB](https://github.com/D-Programming-Language/dub).
--   invoke dub for a specific sample application, e.g
+-   invoke dub for a specific sample application, e.g.
 
     `dub --compiler=ldc2 :nw -- 32 10`
 

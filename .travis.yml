@@ -1,0 +1,8 @@
+language: d
+sudo: false
+
+d:
+  - ldc-0.15.1
+
+script:
+  - dub --compiler=ldc2 :nw -- 32 10
