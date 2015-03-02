@@ -5,7 +5,7 @@ enum
 template_clop_unit = q{
   try
   {
-    char[] clop_opencl_program_source = (%s).dup;
+    char[] clop_opencl_program_source = (%s ~ %s).dup;
     %s
   }
   catch( Exception e )

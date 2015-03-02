@@ -33,7 +33,6 @@ struct Program
   Box range;
   string pattern;
 
-  string block_size = "8";
   string kernel;
   bool use_shadow = false;
 
@@ -49,6 +48,8 @@ struct Program
   {
     switch (f.get_name())
     {
+    case "rectangular_blocking":
+      return apply_rectangular_blocking(t);
     default:
       return t.dup;
     }
@@ -67,7 +68,7 @@ struct Program
       r.symbols ~= [v];
       r.s2i[v] = c;
       auto n = "0";
-      auto x = block_size;
+      auto x = "8"; // block_size;
       symtable[v].shadow = s ~ "_" ~ generate_shared_memory_variable( v );
       r.intervals ~= [
                       Interval(
@@ -118,9 +119,80 @@ struct Program
     return format ("clop_kernel_main_%s_%s", pattern, suffix);
   }
 
-  auto generate_antidiagonal_range (ParseTree t)
+  auto apply_rectangular_blocking(ParseTree t)
   {
-    return "";
+    ParseTree stmts;
+    if (t.name != "CLOP.CompoundStatement")
+    {
+      return t;
+    }
+    if (t.children.length == 1 && t.children[0].name == "CLOP.StatementList")
+    {
+      stmts = t.children[0];
+    }
+    else if (t.children.length == 2 && t.children[1].name == "CLOP.StatementList")
+    {
+      stmts = t.children[1];
+    }
+    else
+    {
+      return t;
+    }
+    ParseTree n;
+    ulong i = 0;
+    do n = stmts.children[i++];
+    while (n.name != "CLOP.InternalNode" && i < stmts.children.length);
+    if (i == stmts.children.length)
+    {
+      i = 0;
+    }
+    n = stmts.children[i];
+
+    // collect all array variables we want to put in shared memory.
+    auto shadowed = SList!string();
+
+    foreach (v; symtable)
+      if (v.is_array && v.shadow != null)
+        shadowed.insert(v.name);
+
+    foreach (v; shadowed)
+    {
+      Interval[3] local_box;
+      Interval[3] global_box;
+      auto uses = symtable[v].uses;
+      foreach (i, c; uses[0].children)
+      {
+        local_box[i] = interval_apply(c, r);
+        global_box[i] = interval_apply(c, g);
+      }
+      for (auto ii = 1; ii < uses.length; ++ii)
+      {
+        foreach (i, c; uses[ii].children)
+        {
+          local_box[i] = interval_union(local_box[i], interval_apply(c, r));
+          global_box[i] = interval_union(global_box[i], interval_apply(c, g));
+        }
+      }
+      // size of current array block
+      auto bsz0 = local_box[0].get_size();
+      auto bsz1 = local_box[1].get_size();
+      // global index of current array
+      auto gi0 = format("(%s) + (%s)", global_box[0].get_min(), li0);
+      auto gi1 = format("(%s) + (%s)", global_box[1].get_min(), li1);
+      // size of current global array
+      auto gsz0 = symtable[v].box[0].get_max();
+      // global memory array name
+      auto gma = v;
+      // shared memory array name
+      auto sma = generate_shared_memory_variable(v);
+      s ~= format(template_shared_memory_data_init,
+                  li1, li1, bsz1, li1,
+                  li0, li0, bsz0, li0, lsz0,
+                  li0, tid0, bsz0,
+                  sma, li1, bsz0, li0, tid0,
+                  gma, gi1, gsz0, gi0, tid0);
+      parameters ~= Argument(sma, "", "__local", format("(%s) * (%s)", bsz0, bsz1), gma);
+    }
   }
 
   auto generate_horizontal_range (ParseTree t)
@@ -204,22 +276,22 @@ struct Program
     case "CLOP.UnaryExpr":
       {
         // this is a primary expression
-        string s = translate( t.children[0] );
+        string s = translate(t.children[0]);
         // this can be array index or function call
-        if ( t.children.length == 2 )
+        if (t.children.length == 2)
         {
-          if ( "CLOP.ArrayIndex" == t.children[1].name &&
-               symtable.get( s, Symbol() ) != Symbol() &&
-               symtable[s].shadow != null )
+          // if ( "CLOP.ArrayIndex" == t.children[1].name &&
+          //      symtable.get( s, Symbol() ) != Symbol() &&
+          //      symtable[s].shadow != null )
+          // {
+          //   use_shadow = true;
+          //   s = symtable[s].shadow ~
+          //       patch_index_expression_for_shared_memory( s, t.children[1] );
+          //   use_shadow = false;
+          // }
+          // else
           {
-            use_shadow = true;
-            s = symtable[s].shadow ~
-                patch_index_expression_for_shared_memory( s, t.children[1] );
-            use_shadow = false;
-          }
-          else
-          {
-            s ~= translate( t.children[1] );
+            s ~= translate(t.children[1]);
           }
         }
         return s;
@@ -379,6 +451,10 @@ struct Program
     case "CLOP.FloatLiteral":
       {
         return t.matches[0];
+      }
+    case "CLOP.InternalNode":
+      {
+        return "";
       }
     default: return t.name;
     }

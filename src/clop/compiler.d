@@ -32,6 +32,7 @@ struct Compiler
 
   string errors;
   string pattern;
+  string external;
   string block_size;
 
   bool global_scope = false;
@@ -43,6 +44,7 @@ struct Compiler
   this(immutable string expr)
   {
     errors = "";
+    external = "";
     range = Box();
     AST   = CLOP(expr);
     trans = Set!Transformation();
@@ -77,7 +79,7 @@ struct Compiler
         unit ~= dump_symtable();
       }
       auto diagnostics = format("pragma (msg, \"%s\");\n", errors);
-      auto code = diagnostics ~ params ~ format(template_clop_unit, kernel, unit);
+      auto code = diagnostics ~ params ~ format(template_clop_unit, external, kernel, unit);
       return code;
     }
   }
@@ -96,6 +98,11 @@ struct Compiler
         ulong i = 0;
         if (t.children[i].name == "CLOP.ExternalDeclarations")
         {
+          auto x = t.children[i];
+          external = "q{\n";
+          foreach (m; x.matches)
+            external ~= " " ~ m;
+          external ~= "\n}";
           analyze(t.children[i++]);
         }
         if (t.children[i].name == "CLOP.SyncPattern")
@@ -413,6 +420,11 @@ struct Compiler
     ParseTree[] decl;
     auto thread_index = "tx";
     auto sync_diagonal = "diagonal";
+    if (symtable.get(sync_diagonal, Symbol()) == Symbol())
+    {
+      symtable[sync_diagonal] = Symbol(sync_diagonal, "int", ParseTree(), false, false, [], [], null);
+      parameters ~= [Argument(sync_diagonal, "int")];
+    }
     decl ~= CLOP.decimateTree(CLOP.Declaration(format("int %s = get_global_id(0);", thread_index)));
     decl ~= CLOP.decimateTree(CLOP.Declaration(format("int %s = %s + 1;", range.symbols[0], thread_index)));
     decl ~= CLOP.decimateTree(CLOP.Declaration(format("int %s = %s - %s - 1;", range.symbols[1], sync_diagonal, thread_index)));

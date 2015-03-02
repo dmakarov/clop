@@ -18,12 +18,12 @@ struct Symbol
   string      shadow;
   Interval[]  box;
 
-  this( this )
+  this(this)
   {
     uses = uses.dup;
     defs = defs.dup;
   }
-  
+
   string toString()
   {
     return format( "name %10s, type %10s, local %5s, array %5s, shadow %s",
