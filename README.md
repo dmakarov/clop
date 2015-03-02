@@ -2,7 +2,9 @@ CLOP is a DSL to write OpenCL kernels in a higher level of abstraction and imple
 optimizations for them.
 
 To compile an example
--   install [LDC](https://github.com/ldc-developers/ldc) and [DUB](https://github.com/D-Programming-Language/dub).
+
+-   install [LDC](https://github.com/ldc-developers/ldc) and
+    [DUB](https://github.com/D-Programming-Language/dub).
 -   invoke dub for a specific sample application, e.g
 
     `dub --compiler=ldc2 :nw -- 32 10`
