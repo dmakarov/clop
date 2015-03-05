@@ -6,68 +6,78 @@ public import pegged.peg;
 mixin(grammar(q{
  CLOP:
 
- TranslationUnit        <  ExternalDeclarations? (SyncPattern :Spacing)? RangeDecl :Spacing CompoundStatement (:Spacing Transformations)?
- ExternalDeclarations   <  ExternalDeclaration (:Spacing ExternalDeclaration)*
+ TranslationUnit        <- ExternalDeclarations? KernelBlock
+ KernelBlock            <- (SyncPattern :Spacing)? RangeDecl :Spacing CompoundStatement (:Spacing Transformations)?
+ ExternalDeclarations   <- ExternalDeclaration (:Spacing ExternalDeclaration)*
  ExternalDeclaration    <  FunctionDefinition / Declaration
  FunctionDefinition     <  TypeSpecifier Declarator CompoundStatement
  SyncPattern            <  Identifier
  RangeDecl              <  "NDRange" '(' RangeList ')'
  RangeList              <  RangeSpec (',' RangeSpec)*
- RangeSpec              <  Identifier ':' Expression ".." Expression
+ RangeSpec              <  Identifier ':' ConditionalExpr ".." ConditionalExpr
  Transformations        <  "apply" '(' TransList ')'
  TransList              <  TransSpec (',' TransSpec)*
- TransSpec              <  Identifier ('(' ')' / '(' ArgumentList ')')
+ TransSpec              <  Identifier ('(' ')' / '(' ArgumentExprList ')')
 
 # CLOP_Decl:
- DeclarationList        <  Declaration (:Spacing Declaration)*
  Declaration            <  TypeSpecifier InitDeclaratorList? ';'
- Declarator             <  (Identifier / '(' Declarator ')') ('[' ']' / '(' ')' / '[' ConstantExpression ']' / '(' ParameterList ')' / '(' IdentifierList ')')*
+ Declarator             <  (Identifier / '(' Declarator ')')
+                           ('[' ']' / '(' ')' / '[' ConditionalExpr ']' / '(' ParameterList ')' / '(' IdentifierList ')')*
  TypeSpecifier          <- "void" / "char" / "short" / "int" / "long" / "float" / "double" / StructSpecifier
  StructSpecifier        <  "struct" (Identifier ('{' StructDeclarationList '}')? / '{' StructDeclarationList '}')
  StructDeclarationList  <  StructDeclaration (:Spacing StructDeclaration)*
  StructDeclaration      <  TypeSpecifier StructDeclaratorList ';'
  StructDeclaratorList   <  StructDeclarator (',' StructDeclarator)*
- StructDeclarator       <  (Declarator ConstantExpression? / ConstantExpression)
+ StructDeclarator       <  (Declarator ConditionalExpr? / ConditionalExpr)
  InitDeclaratorList     <  InitDeclarator (',' InitDeclarator)*
  InitDeclarator         <  Declarator ('=' Initializer)?
- Initializer            <  AssignExpr / '{' InitializerList ','? '}'
  InitializerList        <  Initializer (',' Initializer)*
+ Initializer            <  AssignmentExpr / '{' InitializerList ','? '}'
  ParameterList          <  ParameterDeclaration (',' ParameterDeclaration)*
  ParameterDeclaration   <  TypeSpecifier Declarator
+ TypeName               <  TypeSpecifier ('[' ']' / '[' ConditionalExpr ']') ('[' ']' / '[' ConditionalExpr ']')*
 
 # CLOP_Stmt:
- StatementList          <  Statement (:Spacing Statement)*
- CompoundStatement      <  '{' '}' / '{' DeclarationList '}' / '{' StatementList '}' / '{' DeclarationList StatementList '}'
- Statement              <  CompoundStatement / ExpressionStatement / IfStatement / IterationStatement / ReturnStatement
- ExpressionStatement    <  AssignExpr? ';'
- IfStatement            <  "if" '(' EqualityExpression ')' Statement ("else" Statement)?
- WhileStatement         <  "while" '(' EqualityExpression ')' Statement
- ForStatement           <  "for" '(' AssignExpr? ';' EqualityExpression? ';' AssignExpr? ')' Statement
+ StatementList          <- Statement (:Spacing Statement)*
+ Statement              <  CompoundStatement / ExpressionStatement / IfStatement / IterationStatement / ReturnStatement / Declaration
+ CompoundStatement      <  '{' StatementList? '}'
+ ExpressionStatement    <  Expression ';'
+ IfStatement            <  "if" '(' Expression ')' Statement ("else" Statement)?
  IterationStatement     <  WhileStatement / ForStatement
- ReturnStatement        <  "return" ConditionalExpression ';'
+ WhileStatement         <  "while" '(' Expression ')' Statement
+ ForStatement           <  "for" '(' Expression? ';' Expression? ';' Expression? ')' Statement
+ ReturnStatement        <  "return" Expression? :';'
 
 # CLOP_Expr:
- ConditionalExpression  <  LogicalORExpression ('?' Expression ':' ConditionalExpression)?
- LogicalORExpression    <  LogicalANDExpression ("||" LogicalORExpression)*
- LogicalANDExpression   <  InclusiveORExpression ("&&" LogicalANDExpression)*
- InclusiveORExpression  <  ExclusiveORExpression ('|' InclusiveORExpression)*
- ExclusiveORExpression  <  ANDExpression ('^' ExclusiveORExpression)*
- ANDExpression          <  EqualityExpression ('&' ANDExpression)*
- EqualityExpression     <  RelationalExpression (EqualityOperator EqualityExpression)*
- EqualityOperator       <- "==" / "!="
- RelationalExpression   <  Expression (RelationalOperator RelationalExpression)*
- RelationalOperator     <- "<=" / ">=" / "<" / ">"
- Expression             <  Factor AddExpr*
- Factor                 <  UnaryExpr MulExpr*
- AddExpr                <  [-+] Factor
- UnaryExpr              <  PrimaryExpr (ArrayIndex / FunctionCall)?
- MulExpr                <  [*/] UnaryExpr
- AssignExpr             <  UnaryExpr '=' AssignExpr / ConditionalExpression
- ArrayIndex             <  '[' ArgumentList ']'
- FunctionCall           <  '(' ')' / '(' ArgumentList ')'
- ArgumentList           <  Expression (',' Expression)*
  PrimaryExpr            <  Identifier / FloatLiteral / IntegerLiteral / '(' Expression ')'
- ConstantExpression     <  ConditionalExpression
+ PostfixExpr            <  PrimaryExpr ( '[' Expression ']'
+                                       / '(' ')'
+                                       / '(' ArgumentExprList ')'
+                                       / '.' Identifier
+                                       / "++"
+                                       / "--" )*
+ ArgumentExprList       <  AssignmentExpr (',' AssignmentExpr)*
+ UnaryExpr              <  PostfixExpr
+                         / IncrementExpr
+                         / DecrementExpr
+                         / [-+~!] CastExpr
+ IncrementExpr          < "++" UnaryExpr
+ DecrementExpr          < "--" UnaryExpr
+ CastExpr               <  UnaryExpr / '(' TypeName ')' CastExpr
+ MultiplicativeExpr     <  CastExpr ([*%/] MultiplicativeExpr)*
+ AdditiveExpr           <  MultiplicativeExpr ([-+] AdditiveExpr)*
+ ShiftExpr              <  AdditiveExpr (("<<" / ">>") ShiftExpr)*
+ RelationalExpr         <  ShiftExpr (("<=" / ">=" / "<" / ">") RelationalExpr)*
+ EqualityExpr           <  RelationalExpr (("==" / "!=") EqualityExpr)*
+ ANDExpr                <  EqualityExpr ('&' ANDExpr)*
+ ExclusiveORExpr        <  ANDExpr ('^' ExclusiveORExpr)*
+ InclusiveORExpr        <  ExclusiveORExpr ('|' InclusiveORExpr)*
+ LogicalANDExpr         <  InclusiveORExpr ("&&" LogicalANDExpr)*
+ LogicalORExpr          <  LogicalANDExpr ("||" LogicalORExpr)*
+ ConditionalExpr        <  LogicalORExpr ('?' Expression ':' ConditionalExpr)?
+ AssignmentExpr         <  UnaryExpr AssignmentOperator AssignmentExpr / ConditionalExpr
+ AssignmentOperator     <- "=" / "*=" / "/=" / "%=" / "+=" / "-=" / "<<=" / ">>=" / "&=" / "^=" / "|="
+ Expression             <  AssignmentExpr (',' AssignmentExpr)*
 
 # CLOP_Term:
  IdentifierList         <  Identifier (',' Identifier)*

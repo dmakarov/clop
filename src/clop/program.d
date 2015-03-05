@@ -1,11 +1,15 @@
 module clop.program;
 
+import std.algorithm : reduce;
+import std.container;
 import std.string;
 
 import pegged.grammar;
 
 import clop.analysis;
+import clop.structs;
 import clop.symbol;
+import clop.templates;
 import clop.transform;
 
 /++
@@ -19,9 +23,9 @@ struct Program
    +/
   string generate_code ()
   {
-    auto t = optimize(AST);
-    auto c = translate(t);
-    auto k = generate_kernel_name();
+    auto t = optimize(AST); // apply the optimizing transformations on the AST
+    auto c = translate(t);  // generate OpenCL kernel source code from the AST
+    auto k = generate_kernel_name(); // we need to give the kernel a name
     return "\"__kernel void " ~ k ~ "(\" ~ kernel_params ~ \")\" ~\nq{\n  " ~ c ~ "}";
   }
 
@@ -33,6 +37,7 @@ struct Program
   Box range;
   string pattern;
 
+  Argument[] parameters;
   string kernel;
   bool use_shadow = false;
 
@@ -58,6 +63,151 @@ struct Program
   auto get_applied_transformations ()
   {
     return reduce!((a, b) => a ~ "_" ~ b)("", map!(a => a.toString)(trans));
+  }
+
+  auto generate_shared_memory_variable(string v)
+  {
+    return v ~ "_in_shared_memory";
+  }
+
+  auto generate_kernel_name ()
+  {
+    auto suffix = get_applied_transformations();
+    return format ("clop_kernel_main_%s_%s", pattern, suffix);
+  }
+
+  auto apply_rectangular_blocking(ParseTree t)
+  {
+    ParseTree stmts;
+    if (t.name != "CLOP.CompoundStatement")
+    {
+      return t;
+    }
+    if (t.children.length == 1 && t.children[0].name == "CLOP.StatementList")
+    {
+      stmts = t.children[0];
+    }
+    else if (t.children.length == 2 && t.children[1].name == "CLOP.StatementList")
+    {
+      stmts = t.children[1];
+    }
+    else
+    {
+      return t;
+    }
+    ParseTree n;
+    {
+      ulong i = 0;
+      do
+      {
+        n = stmts.children[i++];
+      } while (n.name != "CLOP.InternalNode" && i < stmts.children.length);
+      n = i < stmts.children.length ? stmts.children[i] : stmts.children[0];
+    }
+
+
+    auto r = Box([], []);
+    auto g = Box([], []);
+    string[3] bix;
+    foreach (c; 0 .. range.symbols.length)
+    {
+      auto v = range.symbols[c]; // variable name in NDRange specification
+      r.symbols ~= [v];
+      r.s2i[v] = c;
+      auto m = "0";
+      auto x = "8"; // FIXME block_size;
+      r.intervals ~= [
+                      Interval(
+                               ParseTree("CLOP.IntegerLiteral", true, [m], "", 0, 0, []),
+                               ParseTree("CLOP.IntegerLiteral", true, [x], "", 0, 0, [])
+                              )
+                      ];
+      // n = range.intervals[c].min + b%d * block_size;
+      // x = n + block_size;
+      bix[c] = format("b%d", c);
+      auto y = ParseTree("CLOP.Identifier", true, [bix[c]], "", 0, 0, []);
+      auto w = ParseTree("CLOP.IntegerLiteral", true, [x], "", 0, 0, []);
+      auto f = create_mul_expr(y, w, "*");
+      auto a = create_add_expr(range.intervals[c].min, f, "+");
+      g.intervals ~= [Interval(a, create_add_expr(a, w, "+"))];
+      g.symbols ~= [v];
+      g.s2i[v] = c;
+    }
+
+
+    auto iv = "iv";
+    // block or work group id
+    auto bid0 = "bid0";
+    // thread or work item id
+    auto tid0 = "tid0";
+    // local index variables
+    auto li0 = "li0";
+    auto li1 = "li1";
+    // size of local index space
+    auto block_size = "8";
+    auto lsz0 = block_size;
+    auto lsz1 = block_size;
+
+    // collect all array variables we want to put in shared memory.
+    auto shadowed = SList!string();
+
+    foreach (v; symtable)
+      v.is_array && v.shadow != null && shadowed.insert(v.name);
+
+    foreach (v; shadowed)
+    {
+      Interval[3] local_box;
+      Interval[3] global_box;
+      auto uses = symtable[v].uses;
+      foreach (i, c; uses[0].children)
+      {
+        local_box[i] = interval_apply(c, r);
+        global_box[i] = interval_apply(c, g);
+      }
+      for (auto ii = 1; ii < uses.length; ++ii)
+      {
+        foreach (i, c; uses[ii].children)
+        {
+          local_box[i] = interval_union(local_box[i], interval_apply(c, r));
+          global_box[i] = interval_union(global_box[i], interval_apply(c, g));
+        }
+      }
+      // size of current array block
+      auto bsz0 = local_box[0].get_size();
+      auto bsz1 = local_box[1].get_size();
+      // global index of current array
+      auto gi0 = format("(%s) + (%s)", global_box[0].get_min(), li0);
+      auto gi1 = format("(%s) + (%s)", global_box[1].get_min(), li1);
+      // size of current global array
+      auto gsz0 = symtable[v].box[0].get_max();
+      // global memory array name
+      auto gma = v;
+      // shared memory array name
+      auto sma = generate_shared_memory_variable(v);
+      auto s = format(template_shared_memory_data_init,
+                      li1, li1, bsz1, li1,
+                      li0, li0, bsz0, li0, lsz0,
+                      li0, tid0, bsz0,
+                      sma, li1, bsz0, li0, tid0,
+                      gma, gi1, gsz0, gi0, tid0);
+      parameters ~= Argument(sma, "", "__local", format("(%s) * (%s)", bsz0, bsz1), gma);
+    }
+    return t;
+  }
+
+  auto generate_horizontal_range (ParseTree t)
+  {
+    return "";
+  }
+
+  auto generate_stencil_range (ParseTree t)
+  {
+    return "";
+  }
+
+  auto generate_ndrange (ParseTree t)
+  {
+    return "";
   }
 
   auto patch_index_expression_for_shared_memory (string s, ParseTree t)
@@ -108,125 +258,16 @@ struct Program
     return format( "[%s]", x );
   }
 
-  auto generate_shared_memory_variable(string v)
-  {
-    return v ~ "_in_shared_memory";
-  }
-
-  auto generate_kernel_name ()
-  {
-    auto suffix = get_applied_transformations();
-    return format ("clop_kernel_main_%s_%s", pattern, suffix);
-  }
-
-  auto apply_rectangular_blocking(ParseTree t)
-  {
-    ParseTree stmts;
-    if (t.name != "CLOP.CompoundStatement")
-    {
-      return t;
-    }
-    if (t.children.length == 1 && t.children[0].name == "CLOP.StatementList")
-    {
-      stmts = t.children[0];
-    }
-    else if (t.children.length == 2 && t.children[1].name == "CLOP.StatementList")
-    {
-      stmts = t.children[1];
-    }
-    else
-    {
-      return t;
-    }
-    ParseTree n;
-    ulong i = 0;
-    do n = stmts.children[i++];
-    while (n.name != "CLOP.InternalNode" && i < stmts.children.length);
-    if (i == stmts.children.length)
-    {
-      i = 0;
-    }
-    n = stmts.children[i];
-
-    // collect all array variables we want to put in shared memory.
-    auto shadowed = SList!string();
-
-    foreach (v; symtable)
-      if (v.is_array && v.shadow != null)
-        shadowed.insert(v.name);
-
-    foreach (v; shadowed)
-    {
-      Interval[3] local_box;
-      Interval[3] global_box;
-      auto uses = symtable[v].uses;
-      foreach (i, c; uses[0].children)
-      {
-        local_box[i] = interval_apply(c, r);
-        global_box[i] = interval_apply(c, g);
-      }
-      for (auto ii = 1; ii < uses.length; ++ii)
-      {
-        foreach (i, c; uses[ii].children)
-        {
-          local_box[i] = interval_union(local_box[i], interval_apply(c, r));
-          global_box[i] = interval_union(global_box[i], interval_apply(c, g));
-        }
-      }
-      // size of current array block
-      auto bsz0 = local_box[0].get_size();
-      auto bsz1 = local_box[1].get_size();
-      // global index of current array
-      auto gi0 = format("(%s) + (%s)", global_box[0].get_min(), li0);
-      auto gi1 = format("(%s) + (%s)", global_box[1].get_min(), li1);
-      // size of current global array
-      auto gsz0 = symtable[v].box[0].get_max();
-      // global memory array name
-      auto gma = v;
-      // shared memory array name
-      auto sma = generate_shared_memory_variable(v);
-      s ~= format(template_shared_memory_data_init,
-                  li1, li1, bsz1, li1,
-                  li0, li0, bsz0, li0, lsz0,
-                  li0, tid0, bsz0,
-                  sma, li1, bsz0, li0, tid0,
-                  gma, gi1, gsz0, gi0, tid0);
-      parameters ~= Argument(sma, "", "__local", format("(%s) * (%s)", bsz0, bsz1), gma);
-    }
-  }
-
-  auto generate_horizontal_range (ParseTree t)
-  {
-    return "";
-  }
-
-  auto generate_stencil_range (ParseTree t)
-  {
-    return "";
-  }
-
-  auto generate_ndrange (ParseTree t)
-  {
-    return "";
-  }
-
-  string translate (ParseTree t)
+  string translate(ParseTree t)
   {
     switch (t.name)
     {
-    case "CLOP.DeclarationList":
-      {
-        string s = "";
-        foreach ( c; t.children )
-          s ~= "  " ~ translate( c ) ~ "\n";
-        return s;
-      }
     case "CLOP.Declaration":
       {
         string s = translate( t.children[0] );
         if ( t.children.length > 1 )
           s ~= " " ~ translate( t.children[1] );
-        return s ~ ";";
+        return s ~ ";\n";
       }
     case "CLOP.Declarator":
       {
@@ -268,10 +309,73 @@ struct Program
       {
         return translate( t.children[0] );
       }
+    case "CLOP.StatementList":
+      {
+        return reduce!((a, b) => a ~ translate(b))("", t.children);
+      }
+    case "CLOP.Statement":
+      {
+        return translate(t.children[0]);
+      }
+    case "CLOP.CompoundStatement":
+      {
+        return t.children.length == 1 ? "{\n" ~ translate(t.children[0]) ~ "}\n" : "{}\n";
+      }
+    case "CLOP.ExpressionStatement":
+      {
+        return translate(t.children[0]) ~ ";\n";
+      }
+    case "CLOP.IfStatement":
+      {
+        auto s = "if (" ~ translate(t.children[0]) ~ ")\n  " ~ translate(t.children[1]);
+        if (t.children.length == 3)
+          s ~= "\nelse\n  " ~ translate(t.children[2]);
+        return s;
+      }
+    case "CLOP.ReturnStatement":
+      {
+        return t.children.length == 1 ? "return " ~ translate(t.children[0]) ~ ";\n" : "return;\n";
+      }
     case "CLOP.PrimaryExpr":
       {
-        string s = translate( t.children[0] );
+        auto s = translate(t.children[0]);
         return "(" == t.matches[0] ? "(" ~ s ~ ")" : s;
+      }
+    case "CLOP.PostfixExpr":
+      {
+        auto s = translate(t.children[0]);
+        if (t.children.length == 2)
+        {
+          if (t.children[1].name == "CLOP.Expression")
+          {
+            // FIXME must adjust index expression handling.
+            s ~= "[" ~ translate(t.children[1]) ~ "]";
+          }
+          else if (t.children[1].name == "CLOP.ArgumentExprList")
+          {
+            s ~= "(" ~ translate(t.children[1]) ~ ")";
+          }
+          else
+          {
+            s ~= "." ~ translate(t.children[1]);
+          }
+        }
+        else
+        {
+          if (")" == t.matches[$ - 1])
+          {
+            s ~= "()";
+          }
+          else if ("++" == t.matches[$ - 1])
+          {
+            s ~= "++";
+          }
+          else if ("--" == t.matches[$ - 1])
+          {
+            s ~= "--";
+          }
+        }
+        return s;
       }
     case "CLOP.UnaryExpr":
       {
@@ -296,36 +400,14 @@ struct Program
         }
         return s;
       }
-    case "CLOP.ArrayIndex":
+    case "CLOP.ArgumentExprList":
       {
-        return "[" ~ translate( t.children[0] ) ~ "]";
-      }
-    case "CLOP.FunctionCall":
-      {
-        if ( t.children.length > 0 )
-        {
-          return "(" ~ translate( t.children[0] ) ~ ")";
-        }
-        return "()";
-      }
-    case "CLOP.ArgumentList":
-      {
-        string s = translate( t.children[0] );
-        for ( auto c = 1; c < t.children.length; ++c )
-          s ~= "," ~ translate( t.children[c] );
-        return s;
+        return reduce!((a, b) => a ~ ", " ~ translate(b))(translate(t.children[0]), t.children[1 .. $]);
       }
     case "CLOP.MulExpr":
     case "CLOP.AddExpr":
       {
         return t.matches[0] ~ translate( t.children[0] );
-      }
-    case "CLOP.Factor":
-      {
-        string s = translate( t.children[0] );
-        for ( auto c = 1; c < t.children.length; ++c )
-          s ~= translate( t.children[c] );
-        return s;
       }
     case "CLOP.Expression":
       {
@@ -334,17 +416,17 @@ struct Program
           s ~= translate( t.children[c] );
         return s;
       }
-    case "CLOP.AssignExpr":
+    case "CLOP.AssignmentExpr":
       {
-        if ( t.children.length == 2 )
+        if (t.children.length == 3)
         {
-          string lhs = translate( t.children[0] );
-          string rhs = translate( t.children[1] );
-          return lhs ~ " = " ~ rhs;
+          string lhs = translate(t.children[0]);
+          string rhs = translate(t.children[2]);
+          return lhs ~ t.children[1].matches[0] ~ rhs;
         }
         else
         {
-          return translate( t.children[0] );
+          return translate(t.children[0]);
         }
       }
     case "CLOP.RelationalExpression":
@@ -356,86 +438,33 @@ struct Program
                " " ~ translate( t.children[i + 1] );
         return s;
       }
-    case "CLOP.ANDExpression":
+    case "CLOP.ANDExpr":
       {
-        string s = translate( t.children[0] );
-        foreach ( i; 1 .. t.children.length )
-          s ~= "&" ~ translate( t.children[i] );
-        return s;
+        return reduce!((a, b) => a ~ " & " ~ translate(b))(translate(t.children[0]), t.children[1 .. $]);
       }
-    case "CLOP.ExclusiveORExpression":
+    case "CLOP.ExclusiveORExpr":
       {
-        string s = translate( t.children[0] );
-        foreach ( i; 1 .. t.children.length )
-          s ~= "^" ~ translate( t.children[i] );
-        return s;
+        return reduce!((a, b) => a ~ " ^ " ~ translate(b))(translate(t.children[0]), t.children[1 .. $]);
       }
-    case "CLOP.InclusiveORExpression":
+    case "CLOP.InclusiveORExpr":
       {
-        string s = translate( t.children[0] );
-        foreach ( i; 1 .. t.children.length )
-          s ~= "|" ~ translate( t.children[i] );
-        return s;
+        return reduce!((a, b) => a ~ " | " ~ translate(b))(translate(t.children[0]), t.children[1 .. $]);
       }
-    case "CLOP.LogicalANDExpression":
+    case "CLOP.LogicalANDExpr":
       {
-        string s = translate( t.children[0] );
-        foreach ( i; 1 .. t.children.length )
-          s ~= "&&" ~ translate( t.children[i] );
-        return s;
+        return reduce!((a, b) => a ~ " && " ~ translate(b))(translate(t.children[0]), t.children[1 .. $]);
       }
-    case "CLOP.LogicalORExpression":
+    case "CLOP.LogicalORExpr":
       {
-        string s = translate( t.children[0] );
-        foreach ( i; 1 .. t.children.length )
-          s ~= "||" ~ translate( t.children[i] );
-        return s;
+        return reduce!((a, b) => a ~ " || " ~ translate(b))(translate(t.children[0]), t.children[1 .. $]);
       }
-    case "CLOP.ConditionalExpression":
+    case "CLOP.ConditionalExpr":
       {
-        if ( t.children.length == 3 )
-        {
-          string c = translate( t.children[0] );
-          string a = translate( t.children[1] );
-          string b = translate( t.children[2] );
-          return "(" ~ c ~ " ? " ~ a ~ " : " ~ b ~ ")";
-        }
-        else
-        {
-          return translate( t.children[0] );
-        }
-      }
-    case "CLOP.CompoundStatement":
-      {
-        string s = "{\n";
-        foreach ( c; t.children ) s ~= translate( c );
-        return s ~ "}\n";
-      }
-    case "CLOP.ExpressionStatement":
-      {
-        string s = ( t.children.length > 0 )
-                 ? translate( t.children[0] ) ~ ";" : ";";
-        return s;
-      }
-    case "CLOP.ReturnStatement":
-      {
-        return "return " ~ translate( t.children[0] ) ~ ";";
-      }
-    case "CLOP.Statement":
-      {
-        return translate( t.children[0] );
-      }
-    case "CLOP.StatementList":
-      {
-        string s = "";
-        foreach ( c; t.children ) s ~= "  " ~ translate( c ) ~ "\n";
-        return s;
-      }
-    case "CLOP.IfStatement":
-      {
-        string s = "if (" ~ translate(t.children[0]) ~ ")\n  " ~ translate(t.children[1]);
+        auto s = translate(t.children[0]);
         if (t.children.length == 3)
-          s ~= "\nelse\n  " ~ translate(t.children[2]);
+        {
+          s ~= " ? " ~ translate(t.children[1]) ~ " : " ~ translate(t.children[2]);
+        }
         return s;
       }
     case "CLOP.Identifier":
