@@ -1,5 +1,4 @@
-CLOP -- a DSL to write optimized OpenCL kernels
-===============================================
+# CLOP -- a DSL for optimized OpenCL kernels
 
 [![Build Status](https://travis-ci.org/dmakarov/clop.png)](https://travis-ci.org/dmakarov/clop)
 
