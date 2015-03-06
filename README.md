@@ -1,3 +1,8 @@
+CLOP -- a DSL to write optimized OpenCL kernels
+===============================================
+
+[![Build Status](https://travis-ci.org/dmakarov/clop.png)](https://travis-ci.org/dmakarov/clop)
+
 CLOP is a DSL to write OpenCL kernels in a higher level of abstraction and implement
 optimizations for them.
 
