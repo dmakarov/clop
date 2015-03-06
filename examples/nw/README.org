@@ -1,5 +1,3 @@
--*- org -*-
-
 * General information
   This program generate two sequences randomly. Please specify your own
   sequences for different uses.  At the current stage, the program only supports

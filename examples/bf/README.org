@@ -1,5 +1,3 @@
--*- org -*-
-
 * General information
 
 * Usage
