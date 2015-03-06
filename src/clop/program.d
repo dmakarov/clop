@@ -429,13 +429,12 @@ struct Program
           return translate(t.children[0]);
         }
       }
-    case "CLOP.RelationalExpression":
-    case "CLOP.EqualityExpression":
+    case "CLOP.RelationalExpr":
+    case "CLOP.EqualityExpr":
       {
-        string s = translate( t.children[0] );
-        for ( auto i = 1; i < t.children.length; i += 2 )
-          s ~= " " ~ t.children[i].matches[0] ~
-               " " ~ translate( t.children[i + 1] );
+        auto s = translate(t.children[0]);
+        for (auto i = 1; i < t.children.length; i += 2)
+          s ~= " " ~ t.children[i].matches[0] ~ " " ~ translate(t.children[i + 1]);
         return s;
       }
     case "CLOP.ANDExpr":

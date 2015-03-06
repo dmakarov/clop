@@ -67,8 +67,10 @@ mixin(grammar(q{
  MultiplicativeExpr     <  CastExpr ([*%/] MultiplicativeExpr)*
  AdditiveExpr           <  MultiplicativeExpr ([-+] AdditiveExpr)*
  ShiftExpr              <  AdditiveExpr (("<<" / ">>") ShiftExpr)*
- RelationalExpr         <  ShiftExpr (("<=" / ">=" / "<" / ">") RelationalExpr)*
- EqualityExpr           <  RelationalExpr (("==" / "!=") EqualityExpr)*
+ RelationalExpr         <  ShiftExpr (RelationalOperator RelationalExpr)*
+ RelationalOperator     <- "<=" / ">=" / "<" / ">"
+ EqualityExpr           <  RelationalExpr (EqualityOperator EqualityExpr)*
+ EqualityOperator       <- "==" / "!="
  ANDExpr                <  EqualityExpr ('&' ANDExpr)*
  ExclusiveORExpr        <  ANDExpr ('^' ExclusiveORExpr)*
  InclusiveORExpr        <  ExclusiveORExpr ('|' InclusiveORExpr)*
