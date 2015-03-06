@@ -26,7 +26,7 @@ struct Program
     auto t = optimize(AST); // apply the optimizing transformations on the AST
     auto c = translate(t);  // generate OpenCL kernel source code from the AST
     auto k = generate_kernel_name(); // we need to give the kernel a name
-    return "\"__kernel void " ~ k ~ "(\" ~ kernel_params ~ \")\" ~\nq{\n  " ~ c ~ "}";
+    return "\"__kernel void " ~ k ~ "(\" ~ kernel_params ~ \")\" ~\nq{\n" ~ c ~ "}";
   }
 
   private:
@@ -39,6 +39,7 @@ struct Program
 
   Argument[] parameters;
   string kernel;
+  string indent = "  ";
   bool use_shadow = false;
 
   ParseTree optimize(ParseTree t)
@@ -264,7 +265,7 @@ struct Program
     {
     case "CLOP.Declaration":
       {
-        string s = translate( t.children[0] );
+        auto s = indent ~ translate( t.children[0] );
         if ( t.children.length > 1 )
           s ~= " " ~ translate( t.children[1] );
         return s ~ ";\n";
@@ -319,22 +320,25 @@ struct Program
       }
     case "CLOP.CompoundStatement":
       {
-        return t.children.length == 1 ? "{\n" ~ translate(t.children[0]) ~ "}\n" : "{}\n";
+        indent ~= "  ";
+        auto s = translate(t.children[0]);
+        indent = indent[0 .. $ - 2];
+        return t.children.length == 1 ? indent ~ "{\n" ~ s ~ indent ~ "}\n" : "{}\n";
       }
     case "CLOP.ExpressionStatement":
       {
-        return translate(t.children[0]) ~ ";\n";
+        return indent ~ translate(t.children[0]) ~ ";\n";
       }
     case "CLOP.IfStatement":
       {
-        auto s = "if (" ~ translate(t.children[0]) ~ ")\n  " ~ translate(t.children[1]);
+        auto s = indent ~ "if (" ~ translate(t.children[0]) ~ ")\n" ~ translate(t.children[1]);
         if (t.children.length == 3)
-          s ~= "\nelse\n  " ~ translate(t.children[2]);
+          s ~= indent ~ "else\n" ~ translate(t.children[2]);
         return s;
       }
     case "CLOP.ReturnStatement":
       {
-        return t.children.length == 1 ? "return " ~ translate(t.children[0]) ~ ";\n" : "return;\n";
+        return indent ~ (t.children.length == 1 ? "return " ~ translate(t.children[0]) ~ ";\n" : "return;\n");
       }
     case "CLOP.PrimaryExpr":
       {
@@ -350,6 +354,16 @@ struct Program
           {
             // FIXME must adjust index expression handling.
             s ~= "[" ~ translate(t.children[1]) ~ "]";
+          // if ( "CLOP.ArrayIndex" == t.children[1].name &&
+          //      symtable.get( s, Symbol() ) != Symbol() &&
+          //      symtable[s].shadow != null )
+          // {
+          //   use_shadow = true;
+          //   s = symtable[s].shadow ~
+          //       patch_index_expression_for_shared_memory( s, t.children[1] );
+          //   use_shadow = false;
+          // }
+          // else
           }
           else if (t.children[1].name == "CLOP.ArgumentExprList")
           {
@@ -383,37 +397,21 @@ struct Program
       }
     case "CLOP.UnaryExpr":
       {
-        // this is a primary expression
-        string s = translate(t.children[0]);
-        // this can be array index or function call
-        if (t.children.length == 2)
-        {
-          // if ( "CLOP.ArrayIndex" == t.children[1].name &&
-          //      symtable.get( s, Symbol() ) != Symbol() &&
-          //      symtable[s].shadow != null )
-          // {
-          //   use_shadow = true;
-          //   s = symtable[s].shadow ~
-          //       patch_index_expression_for_shared_memory( s, t.children[1] );
-          //   use_shadow = false;
-          // }
-          // else
-          {
-            s ~= translate(t.children[1]);
-          }
-        }
-        return s;
+        return t.children.length == 1 ? translate(t.children[0])
+          : t.children[0].matches[0] ~ translate(t.children[1]);
+      }
+    case "CLOP.IncrementExpr":
+      {
+        return "++" ~ translate(t.children[0]);
+      }
+    case "CLOP.DecrementExpr":
+      {
+        return "--" ~ translate(t.children[0]);
       }
     case "CLOP.CastExpr":
       {
-        if (t.children.length == 1)
-        {
-          return translate(t.children[0]);
-        }
-        else
-        {
-          return "(" ~ translate(t.children[0]) ~ ")" ~ translate(t.children[1]);
-        }
+        return t.children.length == 1 ? translate(t.children[0])
+          : "(" ~ translate(t.children[0]) ~ ")" ~ translate(t.children[1]);
       }
     case "CLOP.MultiplicativeExpr", "CLOP.AdditiveExpr", "CLOP.ShiftExpr":
     case "CLOP.RelationalExpr", "CLOP.EqualityExpr":
@@ -458,7 +456,7 @@ struct Program
         {
           string lhs = translate(t.children[0]);
           string rhs = translate(t.children[2]);
-          return lhs ~ t.children[1].matches[0] ~ rhs;
+          return lhs ~ " " ~ t.children[1].matches[0] ~ " " ~ rhs;
         }
         else
         {
@@ -467,10 +465,7 @@ struct Program
       }
     case "CLOP.Expression":
       {
-        auto s = translate( t.children[0] );
-        for ( auto c = 1; c < t.children.length; ++c )
-          s ~= translate( t.children[c] );
-        return s;
+        return reduce!((a, b) => a ~ ", " ~ translate(b))(translate(t.children[0]), t.children[1 .. $]);
       }
     case "CLOP.Identifier":
       {
