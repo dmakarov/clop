@@ -377,6 +377,10 @@ struct Program
         }
         return s;
       }
+    case "CLOP.ArgumentExprList":
+      {
+        return reduce!((a, b) => a ~ ", " ~ translate(b))(translate(t.children[0]), t.children[1 .. $]);
+      }
     case "CLOP.UnaryExpr":
       {
         // this is a primary expression
@@ -400,37 +404,19 @@ struct Program
         }
         return s;
       }
-    case "CLOP.ArgumentExprList":
+    case "CLOP.CastExpr":
       {
-        return reduce!((a, b) => a ~ ", " ~ translate(b))(translate(t.children[0]), t.children[1 .. $]);
-      }
-    case "CLOP.MulExpr":
-    case "CLOP.AddExpr":
-      {
-        return t.matches[0] ~ translate( t.children[0] );
-      }
-    case "CLOP.Expression":
-      {
-        string s = translate( t.children[0] );
-        for ( auto c = 1; c < t.children.length; ++c )
-          s ~= translate( t.children[c] );
-        return s;
-      }
-    case "CLOP.AssignmentExpr":
-      {
-        if (t.children.length == 3)
-        {
-          string lhs = translate(t.children[0]);
-          string rhs = translate(t.children[2]);
-          return lhs ~ t.children[1].matches[0] ~ rhs;
-        }
-        else
+        if (t.children.length == 1)
         {
           return translate(t.children[0]);
         }
+        else
+        {
+          return "(" ~ translate(t.children[0]) ~ ")" ~ translate(t.children[1]);
+        }
       }
-    case "CLOP.RelationalExpr":
-    case "CLOP.EqualityExpr":
+    case "CLOP.MultiplicativeExpr", "CLOP.AdditiveExpr", "CLOP.ShiftExpr":
+    case "CLOP.RelationalExpr", "CLOP.EqualityExpr":
       {
         auto s = translate(t.children[0]);
         for (auto i = 1; i < t.children.length; i += 2)
@@ -464,6 +450,26 @@ struct Program
         {
           s ~= " ? " ~ translate(t.children[1]) ~ " : " ~ translate(t.children[2]);
         }
+        return s;
+      }
+    case "CLOP.AssignmentExpr":
+      {
+        if (t.children.length == 3)
+        {
+          string lhs = translate(t.children[0]);
+          string rhs = translate(t.children[2]);
+          return lhs ~ t.children[1].matches[0] ~ rhs;
+        }
+        else
+        {
+          return translate(t.children[0]);
+        }
+      }
+    case "CLOP.Expression":
+      {
+        auto s = translate( t.children[0] );
+        for ( auto c = 1; c < t.children.length; ++c )
+          s ~= translate( t.children[c] );
         return s;
       }
     case "CLOP.Identifier":

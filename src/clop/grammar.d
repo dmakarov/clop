@@ -60,13 +60,17 @@ mixin(grammar(q{
  UnaryExpr              <  PostfixExpr
                          / IncrementExpr
                          / DecrementExpr
-                         / [-+~!] CastExpr
+                         / UnaryOperator CastExpr
+ UnaryOperator          <- [-+~!]
  IncrementExpr          < "++" UnaryExpr
  DecrementExpr          < "--" UnaryExpr
  CastExpr               <  UnaryExpr / '(' TypeName ')' CastExpr
- MultiplicativeExpr     <  CastExpr ([*%/] MultiplicativeExpr)*
- AdditiveExpr           <  MultiplicativeExpr ([-+] AdditiveExpr)*
- ShiftExpr              <  AdditiveExpr (("<<" / ">>") ShiftExpr)*
+ MultiplicativeExpr     <  CastExpr (MultiplicativeOperator MultiplicativeExpr)*
+ MultiplicativeOperator <- [*%/]
+ AdditiveExpr           <  MultiplicativeExpr (AdditiveOperator AdditiveExpr)*
+ AdditiveOperator       <- [-+]
+ ShiftExpr              <  AdditiveExpr (ShiftOperator ShiftExpr)*
+ ShiftOperator          <- "<<" / ">>"
  RelationalExpr         <  ShiftExpr (RelationalOperator RelationalExpr)*
  RelationalOperator     <- "<=" / ">=" / "<" / ">"
  EqualityExpr           <  RelationalExpr (EqualityOperator EqualityExpr)*
