@@ -1,3 +1,27 @@
+/*
+  The MIT License (MIT)
+  =====================
+
+  Copyright (c) 2015 Dmitri Makarov <dmakarov@alumni.stanford.edu>
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+*/
 module clop.program;
 
 import std.algorithm : reduce;
@@ -211,6 +235,16 @@ struct Program
     return "";
   }
 
+          // if ( "CLOP.ArrayIndex" == t.children[1].name &&
+          //      symtable.get( s, Symbol() ) != Symbol() &&
+          //      symtable[s].shadow != null )
+          // {
+          //   use_shadow = true;
+          //   s = symtable[s].shadow ~
+          //       patch_index_expression_for_shared_memory( s, t.children[1] );
+          //   use_shadow = false;
+          // }
+          // else
   auto patch_index_expression_for_shared_memory (string s, ParseTree t)
   {
     auto r = Box( [], [] );
@@ -259,6 +293,33 @@ struct Program
     return format( "[%s]", x );
   }
 
+  /++
+   FIXME THIS IS INCORRECT. RANGE is the domain on which a kernel is
+   executed. From this we infer the domain of an array by evaluating
+   all array's indexing expressions.  This isn't done here. Associate
+   global range with each array variable during the analysis stage and
+   then use the information here to translate index expressions.
+   +/
+  string translate_index_expression(ParseTree t)
+  {
+    if (t.children.length == 1)
+    {
+      return translate(t);
+    }
+    if (t.children.length != range.get_dimensionality())
+    {
+      return translate(t);
+    }
+    auto s = "(" ~ translate(t.children[0]) ~ ")";
+    auto m = "(" ~ range.intervals[0].get_size() ~ ")";
+    foreach (i, c; t.children[1 .. $])
+    {
+      s ~= " + " ~ m ~ " * (" ~ translate(c) ~ ")";
+      m ~= " * (" ~ range.intervals[i + 1].get_size() ~ ")";
+    }
+    return s;
+  }
+
   string translate(ParseTree t)
   {
     switch (t.name)
@@ -283,10 +344,7 @@ struct Program
       }
     case "CLOP.ParameterList":
       {
-        string s = translate( t.children[0] );
-        foreach ( i; 1 .. t.children.length )
-          s ~= ", " ~ translate( t.children[i] );
-        return s;
+        return reduce!((a, b) => a ~ ", " ~ translate(b))(translate(t.children[0]), t.children[1 .. $]);
       }
     case "CLOP.ParameterDeclaration":
       {
@@ -352,18 +410,7 @@ struct Program
         {
           if (t.children[1].name == "CLOP.Expression")
           {
-            // FIXME must adjust index expression handling.
-            s ~= "[" ~ translate(t.children[1]) ~ "]";
-          // if ( "CLOP.ArrayIndex" == t.children[1].name &&
-          //      symtable.get( s, Symbol() ) != Symbol() &&
-          //      symtable[s].shadow != null )
-          // {
-          //   use_shadow = true;
-          //   s = symtable[s].shadow ~
-          //       patch_index_expression_for_shared_memory( s, t.children[1] );
-          //   use_shadow = false;
-          // }
-          // else
+            s ~= "[" ~ translate_index_expression(t.children[1]) ~ "]";
           }
           else if (t.children[1].name == "CLOP.ArgumentExprList")
           {
