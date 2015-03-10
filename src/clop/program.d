@@ -159,7 +159,7 @@ struct Program
       g.s2i[v] = c;
     }
 
-
+    debug(NEVER) {
     auto iv = "iv";
     // block or work group id
     auto bid0 = "bid0";
@@ -216,6 +216,7 @@ struct Program
                       sma, li1, bsz0, li0, tid0,
                       gma, gi1, gsz0, gi0, tid0);
       parameters ~= Argument(sma, "", "__local", format("(%s) * (%s)", bsz0, bsz1), gma);
+    }
     }
     return t;
   }

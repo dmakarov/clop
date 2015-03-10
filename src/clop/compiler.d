@@ -80,7 +80,11 @@ struct Compiler
   {
     debug(DEBUG_GRAMMAR)
     {
-      return debug_tree(AST);
+      analyze(AST);
+      auto unit = dump_arraytab();
+      unit ~= dump_symtable();
+      return unit ~ AST.toString();
+      //debug_tree(AST);
     }
     else
     {
@@ -460,14 +464,15 @@ struct Compiler
     {
       if (v.is_array && v.shadow != null)
       {
-        Interval[3] box;
         auto uses = v.uses;
-        foreach (i, c; uses[0].children)
-          box[i] = interval_apply(c, range);
-        for (auto ii = 1; ii < uses.length; ++ii)
-          foreach (i, c; uses[ii].children)
-            box[i] = interval_union(box[i], interval_apply(c, range));
-        symtable[k].box ~= box;
+        auto box = range.map(uses[0]);
+        foreach (u; uses[1 .. $])
+        {
+          auto newbox = range.map(u);
+          foreach (i; 0 .. box.length)
+            box[i] = interval_union(box[i], newbox[i]);
+        }
+        symtable[k].box = box;
       }
     }
   }
@@ -874,13 +879,13 @@ struct Compiler
         foreach (a; v.defs)
         {
           s ~= "// " ~ to!string(a.matches) ~ "\n";
-          s ~= "// " ~ interval_apply(a, range).toString() ~ "\n";
+          s ~= "// " ~ to!string(map!(p => p.toString())(range.map(a))) ~ "\n";
         }
         s ~= "// uses " ~ ct_itoa(v.uses.length) ~ "\n";
         foreach (a; v.uses)
         {
           s ~= "// " ~ to!string(a.matches) ~ "\n";
-          s ~= "// " ~ interval_apply(a, range).toString() ~ "\n";
+          s ~= "// " ~ to!string(map!(p => p.toString())(range.map(a))) ~ "\n";
         }
         result ~= "// " ~ k ~ ":\n" ~ s;
       }

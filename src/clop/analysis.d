@@ -51,6 +51,66 @@ struct Box
     }
     return s;
   }
+
+  Interval[] map(ref ParseTree t)
+  {
+    if (t.name != "CLOP.Expression" || t.children.length != get_dimensionality())
+    {
+      return null;
+    }
+    Interval[] result;
+    foreach (i, c; t.children)
+    {
+      result ~= evaluate_expression(c, intervals[i]);
+    }
+    return result;
+  }
+
+ private:
+
+  Interval evaluate_expression(ref ParseTree t, Interval i)
+  {
+    switch (t.name)
+    {
+    case "CLOP.AssignmentExpr":
+      return t.children.length == 1 ? evaluate_expression(t.children[0], i) : evaluate_expression(t.children[2], i);
+    case "CLOP.ConditionalExpr":
+    case "CLOP.LogicalORExpr":
+    case "CLOP.LogicalANDExpr":
+    case "CLOP.InclusiveORExpr":
+    case "CLOP.ExclusiveORExpr":
+    case "CLOP.ANDExpr":
+    case "CLOP.EqualityExpr":
+    case "CLOP.RelationalExpr":
+    case "CLOP.ShiftExpr":
+    case "CLOP.CastExpr":
+    case "CLOP.PrimaryExpr":
+      return evaluate_expression(t.children[0], i);
+    case "CLOP.AdditiveExpr":
+    case "CLOP.MultiplicativeExpr":
+      auto r = evaluate_expression(t.children[0], i);
+      if (t.children.length == 1)
+        return r;
+      return interval_arithmetic_operation(r, t.children[1].matches[0], evaluate_expression(t.children[2], i));
+    case "CLOP.UnaryExpr":
+      if (t.children.length == 1)
+        return evaluate_expression(t.children[0], i);
+      else // FIXME apply unary operator
+        return evaluate_expression(t.children[1], i);
+    case "CLOP.PostfixExpr":
+      return evaluate_expression(t.children[0], i);
+    case "CLOP.Identifier":
+      auto x = s2i.get(t.matches[0], 0xffffffff);
+      if (x != 0xffffffff)
+        return intervals[x];
+      return Interval(t, t);
+    case "CLOP.FloatLiteral":
+    case "CLOP.IntegerLiteral":
+      return Interval(t, t);
+    default:
+      return Interval();
+    }
+  }
 }
 
 struct Interval
@@ -377,7 +437,7 @@ struct Interval
 }
 
 Interval
-interval_apply (ref ParseTree t, ref Box r)
+interval_apply(ref ParseTree t, ref Box r)
 {
   switch ( t.name )
   {
