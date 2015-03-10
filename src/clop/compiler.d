@@ -319,17 +319,18 @@ struct Compiler
       }
     case "CLOP.PostfixExpr":
       {
-        if (t.children[0].name != "CLOP.Identifier")
+        analyze(t.children[0]);
+        if (t.children.length == 1)
         {
-          analyze(t.children[0]);
           return;
         }
-        if (t.children.length == 1 || t.children[1].name != "CLOP.Expression")
+        analyze(t.children[1]);
+        if (t.children[1].name != "CLOP.Expression" || t.children[0].children[0].name != "CLOP.Identifier")
         {
           return;
         }
         // this is an identifier
-        string symbol = t.matches[0];
+        auto symbol = t.children[0].children[0].matches[0];
         // analyze index expression
         if (!symtable[symbol].is_array)
         {
@@ -366,6 +367,7 @@ struct Compiler
     case "CLOP.InclusiveORExpr":
     case "CLOP.LogicalANDExpr":
     case "CLOP.LogicalORExpr":
+    case "CLOP.ConditionalExpr":
     case "CLOP.Expression":
       {
         foreach (c; t.children)
@@ -396,7 +398,7 @@ struct Compiler
     case "CLOP.Identifier":
       {
         string s = t.matches[0];
-        if (symtable.get(s, Symbol()) == Symbol())
+        if (s !in symtable)
         {
           symtable[s] = Symbol(s, "", t, !global_scope, false, [], [], null);
           if (global_scope)
@@ -870,10 +872,16 @@ struct Compiler
       {
         string s = "// defs " ~ ct_itoa(v.defs.length) ~ "\n";
         foreach (a; v.defs)
+        {
+          s ~= "// " ~ to!string(a.matches) ~ "\n";
           s ~= "// " ~ interval_apply(a, range).toString() ~ "\n";
+        }
         s ~= "// uses " ~ ct_itoa(v.uses.length) ~ "\n";
         foreach (a; v.uses)
+        {
+          s ~= "// " ~ to!string(a.matches) ~ "\n";
           s ~= "// " ~ interval_apply(a, range).toString() ~ "\n";
+        }
         result ~= "// " ~ k ~ ":\n" ~ s;
       }
     }
@@ -925,50 +933,70 @@ struct Compiler
     switch (t.name)
     {
     case "CLOP":
-    case "CLOP.ArrayIndex":
-    case "CLOP.FunctionCall":
-    case "CLOP.PrimaryExpr":
-    case "CLOP.Factor":
-    case "CLOP.UnaryExpr":
-    case "CLOP.Expression":
-    case "CLOP.ArgumentList":
-    case "CLOP.MulExpr":
-    case "CLOP.AddExpr":
-    case "CLOP.AssignExpr":
-    case "CLOP.EqualityExpression":
-    case "CLOP.RelationalExpression":
-    case "CLOP.ANDExpression":
-    case "CLOP.ExclusiveORExpression":
-    case "CLOP.InclusiveORExpression":
-    case "CLOP.LogicalANDExpression":
-    case "CLOP.LogicalORExpression":
-    case "CLOP.ConditionalExpression":
-    case "CLOP.ExpressionStatement":
-    case "CLOP.ReturnStatement":
-    case "CLOP.Statement":
-    case "CLOP.StatementList":
-    case "CLOP.CompoundStatement":
+    case "CLOP.TranslationUnit":
+    case "CLOP.KernelBlock":
+    case "CLOP.ExternalDeclarations":
+    case "CLOP.ExternalDeclaration":
+    case "CLOP.FunctionDefinition":
     case "CLOP.SyncPattern":
-    case "CLOP.RangeSpec":
-    case "CLOP.RangeList":
     case "CLOP.RangeDecl":
+    case "CLOP.RangeList":
+    case "CLOP.RangeSpec":
     case "CLOP.Transformations":
     case "CLOP.TransList":
     case "CLOP.TransSpec":
-    case "CLOP.TypeSpecifier":
-    case "CLOP.ParameterDeclaration":
-    case "CLOP.ParameterList":
-    case "CLOP.Initializer":
-    case "CLOP.InitDeclarator":
-    case "CLOP.InitDeclaratorList":
-    case "CLOP.Declarator":
     case "CLOP.Declaration":
-    case "CLOP.DeclarationList":
-    case "CLOP.FunctionDefinition":
-    case "CLOP.ExternalDeclaration":
-    case "CLOP.ExternalDeclarations":
-    case "CLOP.TranslationUnit":
+    case "CLOP.Declarator":
+    case "CLOP.TypeSpecifier":
+    case "CLOP.StructSpecifier":
+    case "CLOP.StructDeclarationList":
+    case "CLOP.StructDeclaration":
+    case "CLOP.StructDeclaratorList":
+    case "CLOP.StructDeclarator":
+    case "CLOP.InitDeclaratorList":
+    case "CLOP.InitDeclarator":
+    case "CLOP.InitializerList":
+    case "CLOP.Initializer":
+    case "CLOP.ParameterList":
+    case "CLOP.ParameterDeclaration":
+    case "CLOP.TypeName":
+    case "CLOP.StatementList":
+    case "CLOP.Statement":
+    case "CLOP.CompoundStatement":
+    case "CLOP.ExpressionStatement":
+    case "CLOP.IfStatement":
+    case "CLOP.IterationStatement":
+    case "CLOP.WhileStatement":
+    case "CLOP.ForStatement":
+    case "CLOP.ReturnStatement":
+    case "CLOP.PrimaryExpr":
+    case "CLOP.PostfixExpr":
+    case "CLOP.ArgumentExprList":
+    case "CLOP.UnaryExpr":
+    case "CLOP.IncrementExpr":
+    case "CLOP.DecrementExpr":
+    case "CLOP.CastExpr":
+    case "CLOP.MultiplicativeExpr":
+    case "CLOP.AdditiveExpr":
+    case "CLOP.ShiftExpr":
+    case "CLOP.RelationalExpr":
+    case "CLOP.EqualityExpr":
+    case "CLOP.ANDExpr":
+    case "CLOP.ExclusiveORExpr":
+    case "CLOP.InclusiveORExpr":
+    case "CLOP.LogicalANDExpr":
+    case "CLOP.LogicalORExpr":
+    case "CLOP.ConditionalExpr":
+    case "CLOP.AssignmentExpr":
+    case "CLOP.Expression":
+    case "CLOP.IdentifierList":
         return debug_node(t);
+    case "CLOP.MultiplicativeOperator":
+    case "CLOP.AdditiveOperator":
+    case "CLOP.ShiftOperator":
+    case "CLOP.RelationalOperator":
+    case "CLOP.EqualityOperator":
+    case "CLOP.AssignmentOperator":
     case "CLOP.Identifier":
     case "CLOP.FloatLiteral":
     case "CLOP.IntegerLiteral":

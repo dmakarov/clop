@@ -294,28 +294,19 @@ struct Program
   }
 
   /++
-   FIXME THIS IS INCORRECT. RANGE is the domain on which a kernel is
-   executed. From this we infer the domain of an array by evaluating
-   all array's indexing expressions.  This isn't done here. Associate
-   global range with each array variable during the analysis stage and
-   then use the information here to translate index expressions.
    +/
-  string translate_index_expression(ParseTree t)
+  string translate_index_expression(string v, ParseTree t)
   {
-    if (t.children.length == 1)
-    {
-      return translate(t);
-    }
-    if (t.children.length != range.get_dimensionality())
+    if (t.children.length == 1 || t.children.length != range.get_dimensionality() || v !in symtable || symtable[v].box is null)
     {
       return translate(t);
     }
     auto s = "(" ~ translate(t.children[0]) ~ ")";
-    auto m = "(" ~ range.intervals[0].get_size() ~ ")";
+    auto m = "(" ~ symtable[v].box[0].get_size() ~ ")";
     foreach (i, c; t.children[1 .. $])
     {
       s ~= " + " ~ m ~ " * (" ~ translate(c) ~ ")";
-      m ~= " * (" ~ range.intervals[i + 1].get_size() ~ ")";
+      m ~= " * (" ~ symtable[v].box[i + 1].get_size() ~ ")";
     }
     return s;
   }
@@ -410,7 +401,14 @@ struct Program
         {
           if (t.children[1].name == "CLOP.Expression")
           {
-            s ~= "[" ~ translate_index_expression(t.children[1]) ~ "]";
+            if (t.children[0].name == "CLOP.PrimaryExpr" && t.children[0].children[0].name == "CLOP.Identifier")
+            {
+              s ~= "[" ~ translate_index_expression(t.children[0].children[0].matches[0], t.children[1]) ~ "]";
+            }
+            else
+            {
+              s ~= "[" ~ translate(t.children[1]) ~ "]";
+            }
           }
           else if (t.children[1].name == "CLOP.ArgumentExprList")
           {
