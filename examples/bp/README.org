@@ -1,0 +1,88 @@
+Backprop implements a single training step of a neural network consisting of
+three layers: inputs, hidden nodes, and a single output.  The number of outputs
+and hidden nodes are fixed. The number of inputs is specified as a command line
+option to the program.  The number of inputs must be divisible by the number of
+hidden nodes, which is fixed to 16.  The training consists of propagating the
+values from the inputs through the hidden nodes to the output node, computing
+the error of the output relative to the target output, and propagating the error
+back to inputs, adjusting the weights on the way.
+
+The values for inputs, initial weights, and the target output are generated as
+random numbers.  The inputs and the weights are positive floating point numbers
+in the range (0, 0.00001) so as not to saturate sigmoid function of the computed
+hidden outputs, when the number of inputs is very large, e.g. 8,388,608.
+
+Most of the benchmark functionality is encapsulated in BPNN structure. The
+functionality provided by the kernels is also implemented as methods of BPNN on
+host and used in stages where the amount of data to be processed is small,
+i.e. between the hidden and output layers. By definition the number of output
+layer inputs and weights on edges connecting the hidden and the output layers is
+16 in both cases.
+
+* Kernels
+** =bpnn_layerforward=
+*** Inputs
+    - x: an array of FP inputs to the hidden layer
+    - w: an array of FP weights for edges connecting inputs to the hidden layer
+      nodes
+    - n2: a scalar int the size of the hidden layer
+*** Outputs
+    - sums: an array of FP values, partial sums of weights multiplied by inputs
+*** Locals
+    - inputs: the elements of the hidden layer inputs that are used in the
+      work group. Each work group operates on a unique range of inputs
+    - summands: intermediate results of computing the sum of multiplications of
+      weights by inputs
+*** Work items
+    There is one work item per each pair of inputs and hidden nodes, i.e. the
+    number of work items is =input_n * hidden_n=.  The geometry of the ND range
+    is the number of hidden layer nodes in 0 dimension and the number of inputs
+    in the 1 dimension.
+*** Work groups
+    The work groups are square blocks with the side size equal to the number of
+    hidden nodes.  The number of workgroups is equal to the number of inputs
+    divided by the number of hidden nodes. The number of hidden nodes is fixed
+    to 16, so that there is 256 work items in each work group, which is maximum
+    for the most current GPUs.
+*** Explanation
+    Initially one work item in each work group loads into local array =inputs=
+    the values of the inputs from the range that is used by the this work group.
+    Each input will be used by 16 work items, so this reduces the number of
+    loads by 16 times.  When the inputs are preloaded, each work item computes
+    the product of an input with a unique weight, and stores the result in one of
+    the summands. At this point summands is a square matrix where each column
+    contains =j= products of =input_j= and =weight_j_k=, with k such that =1 < k
+    < hidden_n=. The only =for= loop in the kernel adds up all the rows of the
+    matrix =summands= element-wise. In the end the elements of the row 0 of
+    =summands= contain sums of the corresponding columns of the matrix. These
+    values are stored in the global array =sums= and used to compute the output
+    values of the hidden nodes later on the host.
+*** Discussion
+    The implemented algorithm is essentially vector matrix multiplication.
+
+** =bpnn_adjust_weights=
+*** Inputs
+    - deltas: are partial derivatives of the error with respect to the
+      weights. These values are computed on the host after the forward
+      propagation stage is done.
+    - o: the outputs of the nodes, for the input layer these are the inputs.
+    - weights: weights on the edges connecting inputs and the hidden layer nodes.
+    - changes: the update amount for each weight. Initially these are set to
+      zero, but if the algorithm runs for multiple iterations the changes of the
+      previous iteration are used to compute the updates to the weights in the
+      current iteration.
+*** Outputs
+    - weights: the kernel adjusts the weights adding the computed update values.
+    - changes: the computed update values are saved for the next iteration of
+      the algorithm.
+*** Work items
+    There is one work item per each weight, i.e. the number of work items is
+    =hidden_n * input_n=. The division to work groups is not important because
+    no local memory is used.
+*** Explanation
+    For each weight a work item computes the update value based on the update
+    value of the previous iteration of the algorithm, the corresponding input
+    value and the derivative of the error back-propagated from the output. The
+    computation consists of three loads and, three multiplies, two of which are
+    by constants, and two additions.  Finally, each work item store to values to
+    the global memory.  Each thread performs the same amount of work.
