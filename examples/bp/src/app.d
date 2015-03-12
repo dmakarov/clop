@@ -1,178 +1,139 @@
-#include <cmath>
-#include <sstream>
-#include <unistd.h> // for getopt
+/*
+  The MIT License (MIT)
+  =====================
 
-#include "CLHelper.h"
-#include "backprop.h"
+  Copyright (c) 2015 Dmitri Makarov <dmakarov@alumni.stanford.edu>
 
-//#define VALIDATION 1
-#ifndef _BACKPROP_H_
-#define _BACKPROP_H_
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
 
-#define FP float
-#define CL_FP cl_float
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
 
-#define BLOCK_SIZE 16
-#define ETA        0.3f
-#define MOMENTUM   0.3f
-#define ONEF       1.0f
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+*/
+module clop.examples.bp;
 
-#endif // _BACKPROP_H_
+import std.conv;
+import std.datetime;
+import std.getopt;
+import std.random;
+import std.stdio;
 
-#include "backprop.h"
+import derelict.opencl.cl;
 
-#pragma OPENCL EXTENSION cl_khr_fp64 : enable
+import clop.compiler;
 
-__kernel void
-bpnn_layerforward( __global FP *x, __global FP *w, __global FP *sums, __local FP *inputs, __local FP *summands, int n2 )
-{ // workgroups are organized so that get_group_id( 0 ) is always 1.
-  int gcl = get_group_id( 1 );
-  int row = get_local_id( 0 );
-  int col = get_local_id( 1 );
-  if ( row == 0 ) inputs[col] = x[n2 * gcl + col + 1];
-  barrier( CLK_LOCAL_MEM_FENCE );
-  int kk = row * n2 + col;
-  int index = ( n2 + 1 ) * n2 * gcl + ( n2 + 1 ) * row + col + n2 + 2;
-  summands[kk] = w[index] * inputs[row];
-  barrier( CLK_LOCAL_MEM_FENCE );
-  for ( int i = 1; i < n2; i = i * 2 )
-  {
-    if ( row % ( 2 * i ) == 0 ) summands[kk] += summands[( row + i ) * n2 + col];
-    barrier( CLK_LOCAL_MEM_FENCE );
-  }
-  if ( row == 0 ) sums[gcl * n2 + col] = summands[kk];
-}
 
-__kernel void
-bpnn_adjust_weights( __global FP* deltas, __global FP* o, __global FP* weights, __global FP* changes )
-{ // ii and jj have the same meaning as in host version of adjust_weights.
-  int ii = get_global_id( 1 ) + 1;
-  int jj = get_global_id( 0 ) + 1;
-  int index = ii * ( 1 + get_global_size( 0 ) ) + jj;
-  FP adjust = MOMENTUM * changes[index] + ( ONEF - MOMENTUM ) * ETA * o[ii] * deltas[jj]; 
-  weights[index] += adjust;
-  changes[index]  = adjust;
-}
+class Application {
 
-using std::stringstream;
+  alias CL_FP float;
+  static immutable int SEED = 1;
+  static immutable CL_FP ERROR = 0.0001f;
+  static immutable int BLOCK_SIZE = 16;
 
-struct Config {
-  static const int SEED = 1;
-  static const CL_FP ERROR;
-  Config() : size( -1 ), outfile( NULL ) { srandom( SEED ); }
-  string summary()
-  {
-    ss << "\"SEED='" << SEED << "',size='" << size << "',outfile='" << ( outfile ? outfile : "(null)" ) << "'\"";
-    return ss.str();
-  }
-  void output()
-  {
-    if ( NULL != outfile )
-    {
-      FILE *fp = fopen( outfile, "w" );
-      if ( NULL == fp )
-      {
-        fprintf( stderr, "ERROR: can't create file %s\n", outfile );
-        exit( EXIT_FAILURE );
-      }
-      fprintf( fp, "output error %.12f\nhidden error %.12f\n", out_err, hid_err );
-      fclose( fp );
-    }
-  }
-  int size;
-  CL_FP out_err, hid_err;
-  const char *outfile;
-  stringstream ss;
-};
+  size_t input_n;               // number of input units
+  size_t hidden_n;              // number of hidden units
+  size_t output_n;              // number of output units
+  size_t num_blocks;
+  CL_FP[] input_units;          // the input units
+  CL_FP[] hidden_units;         // the hidden units
+  CL_FP[] hidden_deltas;        // hidden unit errors
+  CL_FP[] output_units;         // the output units
+  CL_FP[] output_deltas;        // output unit errors
+  CL_FP[] partial_sum;
+  CL_FP[] target;               // target vector
+  NDArray!CL_FP input_weights;  // weights from input to hidden layer
+  NDArray!CL_FP input_changes;
+  NDArray!CL_FP hidden_weights; // weights from hidden to output layer
+  NDArray!CL_FP hidden_changes;
 
-const CL_FP Config::ERROR = 0.0001f;
-
-struct BPNN
-{
-  BPNN( int n_in, int n_hidden, int n_out )
+  /++
+   + Construct the application initializing all the data structures
+   +/
+  this(string[] args)
   {
     input_n        = n_in;
-    hidden_n       = n_hidden;
-    output_n       = n_out;
-    input_units    = alloc_1d( input_n + 1 );
-    input_weights  = alloc_2d( input_n + 1, hidden_n + 1 );
-    input_changes  = alloc_2d( input_n + 1, hidden_n + 1 );
-    hidden_units   = alloc_1d( hidden_n + 1 );
-    hidden_deltas  = alloc_1d( hidden_n + 1 );
-    hidden_weights = alloc_2d( hidden_n + 1, output_n + 1 );
-    hidden_changes = alloc_2d( hidden_n + 1, output_n + 1 );
-    output_units   = alloc_1d( output_n + 1 );
-    output_deltas  = alloc_1d( output_n + 1 );
-    target         = alloc_1d( output_n + 1 );
-    randomize_1d( input_units, input_n );
-    randomize_2d( input_weights, input_n, hidden_n );
-    randomize_2d( hidden_weights, hidden_n, output_n );
-    randomize_1d( target, output_n );
-    zero_2d( input_changes, input_n, hidden_n );
-    zero_2d( hidden_changes, hidden_n, output_n );
+    hidden_n       = BLOCK_SIZE;
+    output_n       = 1;
     num_blocks     = input_n / BLOCK_SIZE;
+    input_weights  = new NDArray!CL_FP(input_n + 1, hidden_n + 1);
+    input_changes  = new NDArray!CL_FP(input_n + 1, hidden_n + 1);
+    hidden_weights = new NDArray!CL_FP(hidden_n + 1, output_n + 1);
+    hidden_changes = new NDArray!CL_FP(hidden_n + 1, output_n + 1);
+    input_units    = new CL_FP[input_n + 1];
+    hidden_units   = new CL_FP[hidden_n + 1];
+    hidden_deltas  = new CL_FP[hidden_n + 1];
+    output_units   = new CL_FP[output_n + 1];
+    output_deltas  = new CL_FP[output_n + 1];
     partial_sum    = new CL_FP[num_blocks * BLOCK_SIZE];
-  }
-  ~BPNN()
-  {
-    delete [] partial_sum;
-    free( input_units );
-    free( input_weights[0] );
-    free( input_weights );
-    free( input_changes[0] );
-    free( input_changes );
-    free( hidden_units );
-    free( hidden_deltas );
-    free( hidden_weights[0] );
-    free( hidden_weights );
-    free( hidden_changes[0] );
-    free( hidden_changes );
-    free( output_units );
-    free( output_deltas );
-    free( target );
-  }
-  CL_FP* alloc_1d( int n ) throw ( string )
-  {
-    CL_FP *new_t = (CL_FP*) malloc( n * sizeof(CL_FP) );
-    if ( NULL == new_t ) throw string( "BPNN::alloc_1d: couldn't allocate FPs" );
-    return new_t;
-  }
-  CL_FP** alloc_2d( int m, int n ) throw ( string )
-  {
-    CL_FP **new_t = (CL_FP**) malloc( m * sizeof(CL_FP*) );
-    if ( NULL == new_t ) throw string( "BPNN::alloc_2d: couldn't allocate ptrs" );
-    new_t[0] = (CL_FP*) malloc( m * n * sizeof(CL_FP) );
-    if ( NULL == new_t[0] ) throw string( "BPNN::alloc_2d: couldn't allocate FPs" );
-    for ( int ii = 1; ii < m; ++ii ) new_t[ii] = new_t[0] + ii * n;
-    return new_t;
-  }
-  void randomize_1d( CL_FP *w, int m )
-  {
-    for ( int ii = 0; ii <= m; ++ii )
-    {
-      CL_FP rr = random();
-      w[ii] = rr / RAND_MAX;
-    }
-  }
-  void randomize_2d( CL_FP **w, int m, int n )
-  {
-    for ( int ii = 0; ii <= m; ++ii )
-      for ( int jj = 0; jj <= n; ++jj )
-      {
-        CL_FP rr = 0.00001f * random();
-        w[ii][jj] = rr / RAND_MAX;
+    target         = new CL_FP[output_n + 1];
+    foreach (ref a; input_changes)
+      a = 0;
+    foreach (ref a; hidden_changes)
+      a = 0;
+    Mt19937 gen;
+    gen.seed( SEED );
+    foreach (ref a; input_units)
+      a = uniform(0.0, 1.0, gen);
+    foreach (ref a; target)
+      a = uniform(0.0, 1.0, gen);
+    foreach (ref a; input_weights)
+      a = 0.00001f * uniform(0.0, 1.0, gen);
+    foreach (ref a; hidden_weights)
+      a = 0.00001f * uniform(0.0, 1.0, gen);
+
+    char[] opencl_code = q{
+      #pragma OPENCL EXTENSION cl_khr_fp64 : enable
+
+      #define FP float
+
+      #define BLOCK_SIZE 16
+      #define ETA        0.3f
+      #define MOMENTUM   0.3f
+      #define ONEF       1.0f
+
+      __kernel void bpnn_layerforward(__global FP *x, __global FP *w, __global FP *sums, __local FP *inputs, __local FP *summands, int n2)
+      { // workgroups are organized so that get_group_id( 0 ) is always 1.
+        int gcl = get_group_id( 1 );
+        int row = get_local_id( 0 );
+        int col = get_local_id( 1 );
+        if ( row == 0 ) inputs[col] = x[n2 * gcl + col + 1];
+        barrier( CLK_LOCAL_MEM_FENCE );
+        int kk = row * n2 + col;
+        int index = ( n2 + 1 ) * n2 * gcl + ( n2 + 1 ) * row + col + n2 + 2;
+        summands[kk] = w[index] * inputs[row];
+        barrier( CLK_LOCAL_MEM_FENCE );
+        for ( int i = 1; i < n2; i = i * 2 )
+        {
+          if ( row % ( 2 * i ) == 0 ) summands[kk] += summands[( row + i ) * n2 + col];
+          barrier( CLK_LOCAL_MEM_FENCE );
+        }
+        if ( row == 0 ) sums[gcl * n2 + col] = summands[kk];
       }
+
+      __kernel void bpnn_adjust_weights(__global FP* deltas, __global FP* o, __global FP* weights, __global FP* changes)
+      { // ii and jj have the same meaning as in host version of adjust_weights.
+        int ii = get_global_id( 1 ) + 1;
+        int jj = get_global_id( 0 ) + 1;
+        int index = ii * ( 1 + get_global_size( 0 ) ) + jj;
+        FP adjust = MOMENTUM * changes[index] + ( ONEF - MOMENTUM ) * ETA * o[ii] * deltas[jj];
+        weights[index] += adjust;
+        changes[index]  = adjust;
+      }
+    }.dup;
   }
-  void zero_1d( CL_FP *w, int m )
-  {
-    for ( int ii = 0; ii <= m; ++ii ) w[ii] = 0.0;
-  }
-  void zero_2d( CL_FP **w, int m, int n )
-  {
-    for ( int ii = 0; ii <= m; ++ii )
-      for ( int jj = 0; jj <= n; ++jj )
-        w[ii][jj] = 0.0;
-  }
+
   void layerforward( CL_FP *l1, CL_FP *l2, CL_FP **conn, int n1, int n2 )
   {
     l1[0] = ONEF;                   // Set up thresholding unit
@@ -183,6 +144,7 @@ struct BPNN
       l2[j] = ONEF / ( ONEF + exp( -sum ) );
     }
   }
+
   // this version of layerforward performs additions in exactly the
   // same order as the kernel version does.
   void layerforward_parallel( CL_FP *l1, CL_FP *l2, CL_FP **conn, int n1, int n2 )
@@ -206,6 +168,7 @@ struct BPNN
     }
     delete [] work;
   }
+
   void output_error( CL_FP *err )
   {
     CL_FP errsum = 0.0;
@@ -217,6 +180,7 @@ struct BPNN
     }
     *err = errsum;
   }
+
   void hidden_error( CL_FP *err )
   {
     CL_FP errsum = 0.0;
@@ -229,6 +193,7 @@ struct BPNN
     }
     *err = errsum;
   }
+
   void adjust_weights( CL_FP *deltas, int ndelta, CL_FP *o, int no, CL_FP **weights, CL_FP **changes )
   {
     o[0] = ONEF;
@@ -239,7 +204,8 @@ struct BPNN
         weights[jj][ii] += changes[jj][ii];
       }
   }
-  bool train_kernel( CLHelper *cl, CL_FP *eo, CL_FP *eh )
+
+  bool opencl_train_kernel( CLHelper *cl, CL_FP *eo, CL_FP *eh )
   {
     bool valid = true;
     cl_mem d_input_units   = cl->createBuffer( CL_MEM_READ_WRITE, ( input_n + 1 )                    * sizeof(CL_FP), NULL );
@@ -267,7 +233,8 @@ struct BPNN
     layerforward( hidden_units, output_units, hidden_weights, hidden_n, output_n );
     output_error( eo );
     hidden_error( eh );
-#if VALIDATION
+    debug (VALIDATION)
+    {
     CL_FP h_eo, h_eh;
     CL_FP* backup_hidden_units = new CL_FP[hidden_n + 1];
     memcpy( backup_hidden_units, hidden_units, sizeof(CL_FP) * ( hidden_n + 1 ) );
@@ -296,7 +263,7 @@ struct BPNN
     for ( size_t i = 0; i <= input_n; ++i )
       for ( size_t j = 0; j <= hidden_n; ++j)
         backup_input_weights[i][j] = input_weights[i][j];
-#endif
+    }
     adjust_weights( output_deltas, output_n, hidden_units, hidden_n, hidden_weights, hidden_changes );
     cl_mem d_hidden_deltas = cl->createBuffer( CL_MEM_READ_WRITE, ( hidden_n + 1 )                   * sizeof(CL_FP), NULL );
     cl_mem d_input_changes = cl->createBuffer( CL_MEM_READ_WRITE, ( input_n + 1 ) * ( hidden_n + 1 ) * sizeof(CL_FP), NULL );
@@ -310,7 +277,8 @@ struct BPNN
     cl->enqueueNDRangeKernel( 1, 2, NULL, global_work, NULL, 0, NULL, NULL );
     cl->enqueueReadBuffer( d_input_weights, CL_TRUE, 0, ( input_n + 1 ) * ( hidden_n + 1 ) * sizeof(CL_FP), input_weights[0], 0, NULL, NULL );
     cl->enqueueReadBuffer( d_input_changes, CL_TRUE, 0, ( input_n + 1 ) * ( hidden_n + 1 ) * sizeof(CL_FP), input_changes[0], 0, NULL, NULL );
-#if VALIDATION
+    debug (VALIDATION)
+    {
     adjust_weights( hidden_deltas, hidden_n, input_units, input_n, backup_input_weights, backup_input_changes );
     for ( size_t i = 1; i <= input_n; ++i )
       for ( size_t j = 1; j <= hidden_n; ++j )
@@ -321,11 +289,7 @@ struct BPNN
           valid = false;
           break;
         }
-    free( backup_input_weights[0] );
-    free( backup_input_changes[0] );
-    free( backup_input_weights );
-    free( backup_input_changes );
-#endif
+    }
     cl->releaseMemObject( d_input_units );
     cl->releaseMemObject( d_input_weights );
     cl->releaseMemObject( d_hidden_deltas );
@@ -333,97 +297,136 @@ struct BPNN
     return valid;
   }
 
-  size_t input_n;              // number of input units
-  size_t hidden_n;             // number of hidden units
-  size_t output_n;             // number of output units
-  CL_FP *input_units;          // the input units
-  CL_FP **input_weights;       // weights from input to hidden layer
-  CL_FP **input_changes;
-  CL_FP *hidden_units;         // the hidden units
-  CL_FP *hidden_deltas;        // storage for hidden unit error
-  CL_FP **hidden_weights;      // weights from hidden to output layer
-  CL_FP **hidden_changes;
-  CL_FP *output_units;         // the output units
-  CL_FP *output_deltas;        // storage for output unit error
-  CL_FP *target;               // storage for target vector
-  CL_FP *partial_sum;
-  size_t num_blocks;
-};
-
-static bool
-backprop( CLHelper *cl, Config *cfg, double *prep ) throw ( string )
-{
-  double t1 = gettime();
-  BPNN *net = new BPNN( cfg->size, BLOCK_SIZE, 1 ); // ( 16, 1 can not be changed )
-  if ( NULL == net ) throw string( "backprop: couldn't allocate neural network" );
-  double t2 = gettime();
-  *prep += t2 - t1;
-  bool result = net->train_kernel( cl, &cfg->out_err, &cfg->hid_err );
-  delete net;
-  return result;
-}
-
-static void
-usage( char **argv )
-{
-  const char *help = "Usage: %s [-p <platform>] [-d <device>] [-o <outfile>] <size>\n"
-                     "\t<size>    - number of input elements, must be divisible by %d\n"
-                     "\t<outfile> - name of the output file\n";
-  fprintf( stderr, help, argv[0], BLOCK_SIZE );
-  exit( EXIT_FAILURE );
-}
-
-static void
-parse_command_line( int argc, char **argv, cl_uint *platform, cl_uint *device, Config *cfg )
-{
-  int ch;
-  while ( ( ch = getopt( argc, argv, "d:o:p:" ) ) != -1 )
+  bool clop_train_kernel(CLHelper *cl, CL_FP *eo, CL_FP *eh)
   {
-    switch ( ch )
+    bool valid = true;
+
+    mixin (compile(q{
+          NDRange(col : 0 .. hidden_n, row : 0 .. input_n) {
+            int gcl = get_group_id(1);
+            int row = get_local_id(0);
+            int col = get_local_id(1);
+            if (row == 0)
+            {
+              inputs[col] = x[n2 * gcl + col + 1];
+            }
+            barrier(CLK_LOCAL_MEM_FENCE);
+            int kk = row * n2 + col;
+            int index = (n2 + 1) * n2 * gcl + (n2 + 1) * row + col + n2 + 2;
+            summands[kk] = w[index] * inputs[row];
+            barrier(CLK_LOCAL_MEM_FENCE);
+            for (int i = 1; i < n2; i = i * 2)
+            {
+              if (row % (2 * i) == 0)
+              {
+                summands[kk] += summands[(row + i) * n2 + col];
+              }
+              barrier(CLK_LOCAL_MEM_FENCE);
+            }
+            if (row == 0)
+            {
+              sums[gcl * n2 + col] = summands[kk];
+            }
+          }
+        }));
+
+    for ( size_t j = 1; j <= hidden_n; ++j )
     {
-    case 'd': sscanf( optarg, "%d", device );     break;
-    case 'o': cfg->outfile = optarg;
-    case 'p': sscanf( optarg, "%d", platform );   break;
-    default:  usage( argv );
+      CL_FP sum = input_weights[0][j];
+      for ( size_t k = 0; k < num_blocks; ++k ) sum += partial_sum[k * hidden_n + j - 1];
+      hidden_units[j] = ONEF / ( ONEF + exp( -sum ) );
     }
+
+    layerforward( hidden_units, output_units, hidden_weights, hidden_n, output_n );
+    output_error( eo );
+    hidden_error( eh );
+    debug (VALIDATION)
+    {
+      CL_FP h_eo, h_eh;
+      CL_FP* backup_hidden_units = new CL_FP[hidden_n + 1];
+      memcpy( backup_hidden_units, hidden_units, sizeof(CL_FP) * ( hidden_n + 1 ) );
+      layerforward_parallel( input_units, hidden_units, input_weights, input_n, hidden_n );
+      layerforward( hidden_units, output_units, hidden_weights, hidden_n, output_n );
+      output_error( &h_eo );
+      hidden_error( &h_eh );
+      //    if ( fabs( h_eo - *eo ) > Config::ERROR || fabs( h_eh - *eh ) > Config::ERROR )
+      if ( h_eo != *eo || h_eh != *eh )
+      {
+        printf( "%.12f %.12f\n%.12f %.12f\n", *eo, *eh, h_eo, h_eh );
+        valid = false;
+      }
+      for ( size_t ii = 0; ii <= hidden_n; ++ii )
+        //      if ( fabs( backup_hidden_units[ii] - hidden_units[ii] ) > Config::ERROR )
+        if ( backup_hidden_units[ii] != hidden_units[ii] )
+        {
+          writefln( "%2lu %.12f %.12f\n", ii, backup_hidden_units[ii], hidden_units[ii] );
+          valid = false;
+          break;
+        }
+      delete [] backup_hidden_units;
+      float **backup_input_weights = alloc_2d( input_n + 1, hidden_n + 1 );
+      float **backup_input_changes = alloc_2d( input_n + 1, hidden_n + 1 );
+      zero_2d( input_changes, input_n, hidden_n );
+      for ( size_t i = 0; i <= input_n; ++i )
+        for ( size_t j = 0; j <= hidden_n; ++j)
+          backup_input_weights[i][j] = input_weights[i][j];
+    }
+    adjust_weights( output_deltas, output_n, hidden_units, hidden_n, hidden_weights, hidden_changes );
+
+    mixin (compile(q{
+          NDRange(jj : 1 .. hidden_n, ii : 1 .. input_n) {
+            FP adjust = MOMENTUM * changes[jj, ii] + (ONEF - MOMENTUM) * ETA * o[ii] * deltas[jj];
+            weights[jj, ii] += adjust;
+            changes[jj, ii]  = adjust;
+          }
+        }));
+
+    debug (VALIDATION)
+    {
+      adjust_weights( hidden_deltas, hidden_n, input_units, input_n, backup_input_weights, backup_input_changes );
+      for ( size_t i = 1; i <= input_n; ++i )
+        for ( size_t j = 1; j <= hidden_n; ++j )
+          if ( backup_input_weights[i][j] != input_weights[i][j] )
+          {
+            writefln( "%6lu:%2lu %.12f %.12f\n", i, j, backup_input_weights[i][j], input_weights[i][j] );
+            valid = false;
+            break;
+          }
+    }
+    return valid;
   }
-  if ( argc - optind < 1 ) usage( argv );
-  if ( ( cfg->size = atoi( argv[optind] ) ) % BLOCK_SIZE != 0 )
+
+  void run()
   {
-    fprintf( stderr, "ERROR: the number of input points (%d) must be divisible by %d\n", cfg->size, BLOCK_SIZE );
-    exit( EXIT_FAILURE );
+    opencl_train_kernel();
+    clop_train_kernel();
   }
 }
 
 int
-main( int argc, char **argv )
+main(string[] args)
 {
-  string kernel_file    = "Kernels.cl";
-  string kernel_names[] = { "bpnn_layerforward", "bpnn_adjust_weights" };
-  cl_uint platform      = 0;
-  cl_uint device        = 0;
-  bool passed           = false;
-  CLHelper *cl          = NULL;
-  Config cfg;
-
-  parse_command_line( argc, argv, &platform, &device, &cfg );
-  try
-  {
-    double prep = 0.0;
-    double t1 = gettime();
-    cl = new CLHelper( "backprop", platform, device, kernel_file, sizeof(kernel_names) / sizeof(string), kernel_names );
-    passed = backprop( cl, &cfg, &prep );
-    cl->release();
-    double t2 = gettime();
-    cl->statistics( t2 - t1, cfg.summary().c_str(), prep );
-    cfg.output();
-    delete cl;
-  }
-  catch ( std::string msg )
-  {
-    fprintf( stderr, "ERROR: exception caught in main function-> %s\n", msg.c_str() );
-    if ( NULL != cl ) delete cl;
-    return EXIT_FAILURE;
-  }
-  return passed ? EXIT_SUCCESS : EXIT_FAILURE;
+  auto platforms = runtime.get_platforms();
+  foreach (p; 0 .. platforms.length)
+    foreach (d; 0 .. platforms[p])
+    {
+      try
+      {
+        runtime.init(p, d);
+        writeln("==================================================");
+        auto app = new Application(args);
+        app.run();
+        writeln("==================================================");
+      }
+      catch (Exception msg)
+      {
+        writeln("BP: ", msg);
+        return -1;
+      }
+      finally
+      {
+        runtime.shutdown();
+      }
+    }
+  return 0;
 }

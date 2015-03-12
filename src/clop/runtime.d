@@ -23,7 +23,7 @@ struct Runtime
 
   /**
    */
-  void init( uint platform_id = 0, uint device_id = 0, bool verbose = true )
+  void init(size_t platform_id = 0, size_t device_id = 0, bool verbose = true)
   {
     if ( !has_platform_ids )
     {

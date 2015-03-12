@@ -15,6 +15,7 @@ import clop.compiler;
 class Application {
   static immutable int SEED  =  1;
   static immutable int CHARS = 24;
+  static immutable int BLOCK_SIZE = 16;
   static int[CHARS * CHARS] BLOSUM62 = [
    4, -1, -2, -2,  0, -1, -1,  0, -2, -1, -1, -1, -1, -2, -1,  1,  0, -3, -2,  0, -2, -1,  0, -4,
   -1,  5,  0, -2, -3,  1,  0, -2,  0, -3, -2,  2, -1, -3, -2, -1, -1, -3, -2, -3, -1,  0, -1, -4,
@@ -40,7 +41,6 @@ class Application {
   -1,  0,  0,  1, -3,  3,  4, -2,  0, -3, -3,  1, -1, -3, -1,  0, -1, -3, -2, -2,  1,  4, -1, -4,
    0, -1, -1, -1, -2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -2,  0,  0, -2, -1, -1, -1, -1, -1, -4,
   -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4,  1];
-  static immutable int BLOCK_SIZE = 16;
 
   int[] A; // reconstructed aligned sequence A
   int[] B; // reconstructed aligned sequence B
@@ -789,7 +789,7 @@ class Application {
       status = clReleaseKernel( kernel_noblocks );
       assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
     }
-    catch( Exception e )
+    catch (Exception e)
     {
       write( e );
       writeln();
@@ -1441,26 +1441,28 @@ class Application {
 }
 
 int
-main( string[] args )
+main(string[] args)
 {
-  uint[] platforms = runtime.get_platforms();
-  for ( uint p = 0; p < platforms.length; ++p )
-    foreach ( d; 0 .. platforms[p] )
+  auto platforms = runtime.get_platforms();
+  foreach (p; 0 .. platforms.length)
+    foreach (d; 0 .. platforms[p])
     {
       try
       {
-        runtime.init( p, d );
-        writeln( "==================================================" );
-        auto app = new Application( args );
+        runtime.init(p, d);
+        writeln("==================================================");
+        auto app = new Application(args);
         app.run();
-        writeln( "==================================================" );
-        runtime.shutdown();
+        writeln("==================================================");
       }
-      catch ( Exception msg )
+      catch (Exception msg)
       {
-        writeln( "NW: ", msg );
-        runtime.shutdown();
+        writeln("BP: ", msg);
         return -1;
+      }
+      finally
+      {
+        runtime.shutdown();
       }
     }
   return 0;
