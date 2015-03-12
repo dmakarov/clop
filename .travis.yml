@@ -8,4 +8,4 @@ before_install:
   - sudo apt-get install -qq fglrx=2:8.960-0ubuntu1 opencl-headers
 
 script:
-  - dub build --compiler=ldc2 --build=debug :nw
+  - dub build -v --compiler=ldc2 --build=debug :nw
