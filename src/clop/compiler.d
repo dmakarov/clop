@@ -90,6 +90,7 @@ struct Compiler
     {
       analyze(AST);
       compute_intervals();
+      collect_parameters();
       // before we generate optimized variants, we need to transform
       // the AST for a specific synchronization pattern.
       auto t = transform_by_pattern(KBT);
@@ -130,8 +131,11 @@ struct Compiler
           auto x = t.children[0];
           external = "q{\n";
           foreach (m; x.matches)
+          {
             external ~= " " ~ m;
+          }
           external ~= "\n}";
+          analyze(t.children[0]);
           analyze(t.children[1]);
         }
         else
@@ -151,8 +155,8 @@ struct Compiler
         {
           analyze(t.children[$ - 1]);
         }
-        global_scope = true;
         analyze(t.children[i++]);
+        global_scope = true;
         if (t.children[i].name == "CLOP.CompoundStatement")
         {
           KBT = t.children[i];
@@ -173,6 +177,8 @@ struct Compiler
       }
     case "CLOP.FunctionDefinition":
       {
+        // add function name to the symbol table
+        analyze(t.children[1]);
         break;
       }
     case "CLOP.RangeDecl":
@@ -223,12 +229,6 @@ struct Compiler
           foreach (c; t.children[1].children)
             params ~= c.matches[0];
         trans.insert(Transformation(t.matches[0], params));
-        break;
-      }
-    case "CLOP.DeclarationList":
-      {
-        foreach (c; t.children)
-          analyze(c);
         break;
       }
     case "CLOP.Declaration":
@@ -396,17 +396,17 @@ struct Compiler
     case "CLOP.IdentifierList":
       {
         foreach (c; t.children)
+        {
           analyze(c);
+        }
         break;
       }
     case "CLOP.Identifier":
       {
-        string s = t.matches[0];
+        auto s = t.matches[0];
         if (s !in symtable)
         {
           symtable[s] = Symbol(s, "", t, !global_scope, false, [], [], null);
-          if (global_scope)
-            parameters ~= [Argument(s, "", "", "")];
         }
         break;
       }
@@ -438,7 +438,7 @@ struct Compiler
     if (symtable.get(sync_diagonal, Symbol()) == Symbol())
     {
       symtable[sync_diagonal] = Symbol(sync_diagonal, "int", ParseTree(), false, false, [], [], null);
-      parameters ~= [Argument(sync_diagonal, "int")];
+      parameters ~= [Argument(sync_diagonal, "int", "", "", "", true)];
     }
     decl ~= CLOP.decimateTree(CLOP.Declaration(format("int %s = get_global_id(0);", thread_index)));
     decl ~= CLOP.decimateTree(CLOP.Declaration(format("int %s = %s + 1;", range.symbols[0], thread_index)));
@@ -458,6 +458,12 @@ struct Compiler
       variants ~= Program(symtable, [p], t.dup, range, pattern);
   }
 
+  /++
+   + @FIXME this doesn't work when not entire index space is used in
+   + index expressions.  A possible work-around to assume that arrays
+   + indexes always start at 0 and if the lower bound of a computed
+   + interval is greater than 0 it should be extended to 0.
+   +/
   void compute_intervals()
   {
     foreach (k, v; symtable)
@@ -475,6 +481,13 @@ struct Compiler
         symtable[k].box = box;
       }
     }
+  }
+
+  void collect_parameters()
+  {
+    foreach (s, v; symtable)
+      if (!v.is_local)
+        parameters ~= [Argument(s, "", "", "")];
   }
 
   bool can_transform_index_expression(ParseTree t)

@@ -26,8 +26,14 @@ struct Symbol
 
   string toString()
   {
-    return format( "name %10s, type %10s, local %5s, array %5s, shadow %s",
-                   name, (type == null ? "null" : type), is_local, is_array, (shadow == null ? "null" : shadow) );
+    return format( "name %10s, type %10s, %6s, %6s, #uses %2d, #defs %2d, shadow %s",
+                   name,
+                   (type == null ? "N/A" : type),
+                   (is_local ? "local" : "global"),
+                   (is_array ? "array" : "scalar"),
+                   (uses == null ? 0 : uses.length),
+                   (defs == null ? 0 : defs.length),
+                   (shadow == null ? "N/A" : shadow) );
   }
 }
 

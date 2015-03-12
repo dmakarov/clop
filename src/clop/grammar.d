@@ -46,7 +46,7 @@ mixin(grammar(q{
  IterationStatement     <  WhileStatement / ForStatement
  WhileStatement         <  "while" '(' Expression ')' Statement
  ForStatement           <  "for" '(' Expression? ';' Expression? ';' Expression? ')' Statement
- ReturnStatement        <  "return" Expression? :';'
+ ReturnStatement        <  "return" Expression? ';'
 
 # CLOP_Expr:
  PrimaryExpr            <  Identifier / FloatLiteral / IntegerLiteral / '(' Expression ')'
