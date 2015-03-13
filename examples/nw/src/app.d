@@ -1268,7 +1268,7 @@ class Application {
       }
       Antidiagonal NDRange( c : 1 .. cols, r : 1 .. rows ) {
         F[c, r] = max3( F[c - 1, r - 1] + S[c, r], F[c - 1, r] - penalty, F[c, r - 1] - penalty );
-      } apply( rectangular_blocking( 8, 8 ), prefetching() )
+      } apply( rectangular_blocking( 8, 8 ) )
     } ) );
   }
 
@@ -1285,7 +1285,7 @@ class Application {
       }
       Antidiagonal NDRange( c : 1 .. cols, r : 1 .. rows ) {
         F[c, r] = max3( F[c - 1, r - 1] + BLOSUM62[M[r] * CHARS + N[c]], F[c - 1, r] - penalty, F[c, r - 1] - penalty );
-      } apply( rectangular_blocking( 8, 8 ) )
+      } apply( rectangular_blocking( 8, 8 ), prefetching() )
     } ) );
   }
 
