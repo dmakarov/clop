@@ -296,7 +296,7 @@ class NDArray(T)
   private
   {
     T[]      data;
-    size_t[] dims; 
+    size_t[] dims;
   }
 
   this( size_t[] dims... )
