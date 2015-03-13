@@ -80,11 +80,7 @@ struct Compiler
   {
     debug(DEBUG_GRAMMAR)
     {
-      analyze(AST);
-      auto unit = dump_arraytab();
-      unit ~= dump_symtable();
-      return unit ~ AST.toString();
-      //debug_tree(AST);
+      debug_tree(AST);
     }
     else
     {
