@@ -65,7 +65,7 @@ struct Compiler
   bool use_shadow   = false;
   uint depth        = 0;
 
-  this(immutable string expr, string file, size_t line)
+  this(string expr, string file, size_t line)
   {
     source_file = file;
     source_line = line;
@@ -1166,7 +1166,7 @@ read_device_buffer(T)(string name)
  *             and from the OpenCL device used to execute the kernel.
  */
 string
-compile(immutable string expr, string file = __FILE__, size_t line = __LINE__)
+compile(string expr, string file = __FILE__, size_t line = __LINE__)
 {
   auto compiler = Compiler(expr, file, line);
   auto code = compiler.generate_code();
