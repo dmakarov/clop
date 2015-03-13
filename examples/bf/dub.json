@@ -1,12 +1,12 @@
 {
-    "name"         : “bf",
+    "name"         : "bf",
     "authors"      : ["Dmitri Makarov"],
-    "description"  : “Bellman-Ford algorithm implementation.",
+    "description"  : "Bellman-Ford algorithm implementation.",
     "targetType"   : "executable",
     "targetPath"   : "./bin",
     "dependencies" : {
-        "derelict_extras-opencl" : ">=1.2.0",
-        "pegged"                 : ">=0.0.0"
+        "derelict-cl" : "~>1.2.2",
+        "pegged"      : "~>0.1.0"
     },
     "importPaths"  : ["../../src"],
     "libs"         : ["clop"],

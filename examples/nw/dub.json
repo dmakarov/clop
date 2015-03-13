@@ -10,9 +10,9 @@
     "lflags-osx"    : ["-Llib", "-framework", "OpenCL"],
     "debugVersions" : ["DEBUG"],
     "dependencies"  : {
-        "derelict_extras-opencl" : ">=1.2.0",
-        "pegged"                 : ">=0.0.0",
-        "clop:runtime"           : "*"
+        "derelict-cl"  : "~>1.2.2",
+        "pegged"       : "~>0.1.0",
+        "clop:runtime" : "*"
     },
     "configurations": [
         {
