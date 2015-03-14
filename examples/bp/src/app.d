@@ -37,7 +37,7 @@ import clop.compiler;
 
 class Application {
 
-  alias CL_FP float;
+  alias float CL_FP;
   static immutable int SEED = 1;
   static immutable CL_FP ERROR = 0.0001f;
   static immutable int BLOCK_SIZE = 16;
