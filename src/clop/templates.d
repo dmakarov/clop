@@ -5,6 +5,7 @@ enum
 template_clop_unit = q{
   try
   {
+    %s
     char[] clop_opencl_program_source = (%s ~ %s).dup;
     %s
   }

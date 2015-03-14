@@ -91,22 +91,18 @@ struct Compiler
       // the AST for a specific synchronization pattern.
       auto t = transform_by_pattern(KBT);
       apply_transformations(t);
-      // FIXME! now we have the variants and we need to generate the
-      // code that invokes variants one after another and reports
-      // performance.
-      auto kernel = variants[0].generate_code();
-      auto params = set_params();
-      auto unit = format(template_create_opencl_kernel, generate_kernel_name());
-      unit ~= set_args("clop_opencl_kernel") ~ code_to_invoke_kernel() ~ code_to_read_data_from_device();
-      //debug (DISABLE_PERMANENTLY)
+      auto code = "";
+      debug (DISABLE_PERMANENTLY)
       {
-        unit ~= "\n// transformations <" ~ trans.toString ~ ">\n";
-        unit ~= dump_arraytab();
-        unit ~= dump_intervals();
-        unit ~= dump_symtable();
+        code ~= "\n// transformations <" ~ trans.toString ~ ">\n";
+        code ~= dump_arraytab();
+        code ~= dump_intervals();
+        code ~= dump_symtable();
       }
-      auto diagnostics = format("pragma (msg, \"%s\");\n", errors);
-      auto code = diagnostics ~ params ~ format(template_clop_unit, external, kernel, unit);
+      foreach (v; variants)
+      {
+        code ~= v.generate_code();
+      }
       return code;
     }
   }
@@ -451,7 +447,7 @@ struct Compiler
   void apply_transformations(ParseTree t)
   {
     foreach (p; trans)
-      variants ~= Program(symtable, [p], t.dup, range, pattern);
+      variants ~= Program(symtable, [p], parameters, t.dup, range, pattern, external);
   }
 
   /++
@@ -503,22 +499,6 @@ struct Compiler
         result = result && can_transform_index_expression(c);
       return result;
     }
-  }
-
-  string generate_kernel_name()
-  {
-    auto suffix = get_applied_transformations();
-    return format("clop_kernel_main_%s_%s", pattern, suffix);
-  }
-
-  string get_applied_transformations()
-  {
-    return trans.toString();
-  }
-
-  string select_array_for_shared_memory()
-  {
-    return "F";
   }
 
   auto generate_shared_memory_variable(string v)
@@ -779,94 +759,6 @@ struct Compiler
   bool is_local(string sym)
   {
     return symtable.get(sym, Symbol()).is_local;
-  }
-
-  string set_params()
-  {
-    string result = "string param;\n";
-    auto issued_declaration = false;
-    foreach(p; parameters)
-    {
-      if (p.type == "")
-      {
-        if (p.back == "")
-        {
-          result ~= format("param = mixin(set_kernel_param!(typeof(%s))(\"%s\",\"%s\"));\n", p.name, p.name, p.back);
-        }
-        else
-        {
-          result ~= format("param = mixin(set_kernel_param!(typeof(%s))(\"%s\",\"%s\"));\n", p.back, p.name, p.back);
-        }
-      }
-      else
-      {
-        result ~= format("param = \"%s %s\";\n", p.type, p.name);
-      }
-      if (issued_declaration)
-      {
-        result ~= "if (param != \"\") kernel_params ~= \", \" ~ param;\n";
-      }
-      else
-      {
-        result ~= "string kernel_params = param;\n";
-        issued_declaration = true;
-      }
-    }
-    return result;
-  }
-
-  string set_args(string kernel)
-  {
-    auto result = "";
-    foreach(i, p; parameters)
-    {
-      if (!p.skip)
-      {
-        if (p.back == "")
-        {
-          result ~= format("mixin(set_kernel_arg!(typeof(%s))(\"%s\",\"%d\",\"%s\",\"\",\"\"));\n", p.name, kernel, i, p.name);
-        }
-        else
-        {
-          result ~= format("mixin(set_kernel_arg!(typeof(%s))(\"%s\",\"%d\",\"null\",\"%s\",\"%s\"));\n", p.back, kernel, i, p.back, p.size);
-        }
-      }
-    }
-    return result;
-  }
-
-  string code_to_read_data_from_device()
-  {
-    string result = "";
-    foreach (k, v; symtable)
-    {
-      if (!v.is_local && v.type == "" && v.defs.length > 0)
-      {
-        result ~= "mixin(read_device_buffer!(typeof(" ~ k ~ "))(\"" ~ k ~ "\"));\n";
-      }
-    }
-    return result;
-  }
-
-  string code_to_invoke_kernel()
-  {
-    debug (DEBUG_GRAMMAR)
-    {
-      return "";
-    }
-    else
-    {
-      auto gsz0 = range.intervals[0].get_max();
-      auto bsz0 = block_size;
-      auto bsz1 = block_size;
-      auto name = "clop_opencl_kernel";
-      auto n = 0;
-      ulong argindex[2];
-      foreach (i, p; parameters)
-        if (p.skip)
-          argindex[n++] = i;
-      return format(template_antidiagonal_rectangular_blocks_invoke_kernel, gsz0, bsz0, bsz0, bsz0, name, argindex[0], name, argindex[1], name);
-    }
   }
 
   string dump_symtable()
@@ -1166,6 +1058,6 @@ compile(string expr, string file = __FILE__, size_t line = __LINE__)
 {
   auto compiler = Compiler(expr, file, line);
   auto code = compiler.generate_code();
-  //return "debug (DEBUG) writefln(\"CLOP MIXIN at %s:%s:\\n%sEND OF CLOP\", \"" ~ file ~ "\", " ~ to!string(line) ~ ", q{" ~ code ~ "});\n" ~ code;
-  return "debug (DEBUG) writefln(\"CLOP MIXIN at %s:%s:\\n%sEND OF CLOP\", \"" ~ file ~ "\", " ~ to!string(line) ~ ", `" ~ code ~ "`);\n";
+  return "debug (DEBUG) writefln(\"CLOP MIXIN at %s:%s:\\n%sEND OF CLOP\", \"" ~ file ~ "\", " ~ to!string(line) ~ ", q{" ~ code ~ "});\n" ~ code;
+  //return "debug (DEBUG) writefln(\"CLOP MIXIN at %s:%s:\\n%sEND OF CLOP\", \"" ~ file ~ "\", " ~ to!string(line) ~ ", `" ~ code ~ "`);\n";
 }

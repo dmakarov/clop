@@ -1,13 +1,41 @@
+/*
+  The MIT License (MIT)
+  =====================
+
+  Copyright (c) 2015 Dmitri Makarov <dmakarov@alumni.stanford.edu>
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+*/
 module clop.structs;
 
+/++
+ +
+ +/
 struct Set(T)
 {
-  private T[] items;
-  private size_t it;
+  private T[] items; // the collection
+  private size_t it; // iterator index
 
   @property
   bool empty()
   {
+    // it == items.length when we just finished iterating over all items
     return items.length == 0 || it == items.length;
   }
 
@@ -15,6 +43,10 @@ struct Set(T)
   ref T front()
   {
     assert(items.length > 0);
+    // reset the iterator to the first items, once the previous use of
+    // the iterator has reached the end.  if somebody breaks from a
+    // foreach before reaching the end of items, the next invocation
+    // of foreach on this set will start from where we left off.
     if (it == items.length)
       it = 0;
     return items[it];
@@ -43,14 +75,8 @@ struct Set(T)
   @property
   string toString()
   {
-    auto s = "";
-    if (items.length > 0)
-    {
-      s = items[0].toString;
-      for (auto i = 1; i < items.length; ++i)
-        s ~= "_" ~ items[i].toString;
-    }
-    return s;
+    import std.algorithm : map, reduce;
+    return reduce!((a, b) => a ~ "_" ~ b)("", map!(a => a.toString)(items));
   }
 }
 

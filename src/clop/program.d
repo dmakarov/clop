@@ -48,22 +48,30 @@ struct Program
   string generate_code ()
   {
     auto t = optimize(AST); // apply the optimizing transformations on the AST
-    auto c = translate(t);  // generate OpenCL kernel source code from the AST
-    auto k = generate_kernel_name(); // we need to give the kernel a name
-    return "\"__kernel void " ~ k ~ "(\" ~ kernel_params ~ \")\" ~\nq{\n" ~ c ~ "}";
+    auto kbody = translate(t);  // generate OpenCL kernel source code from the AST
+    auto kname = generate_kernel_name(); // we need to give the kernel a name
+    auto params = set_params();
+    auto kernel = "\"__kernel void " ~ kname ~ "(\" ~ kernel_params ~ \")\" ~\nq{\n" ~ kbody ~ "}";
+    auto boiler = format(template_create_opencl_kernel, generate_kernel_name());
+    boiler ~= set_args("clop_opencl_kernel") ~ code_to_invoke_kernel() ~ code_to_read_data_from_device();
+    auto diagnostics = format("pragma (msg, \"%s\");\n", errors);
+    return diagnostics ~ format(template_clop_unit, params, external, kernel, boiler);
   }
 
   private:
 
   Symbol[string] symtable;
   Transformation[] trans;
+  Argument[] parameters;
   ParseTree AST;
   Box range;
   string pattern;
+  string external;
+  string errors;
 
-  Argument[] parameters;
   string kernel;
   string indent = "  ";
+  string block_size = "8";
   bool use_shadow = false;
 
   ParseTree optimize(ParseTree t)
@@ -292,6 +300,94 @@ struct Program
         x = "0";
     }
     return format( "[%s]", x );
+  }
+
+  string set_params()
+  {
+    string result = "string param;\n";
+    auto issued_declaration = false;
+    foreach(p; parameters)
+    {
+      if (p.type == "")
+      {
+        if (p.back == "")
+        {
+          result ~= format("param = mixin(set_kernel_param!(typeof(%s))(\"%s\",\"%s\"));\n", p.name, p.name, p.back);
+        }
+        else
+        {
+          result ~= format("param = mixin(set_kernel_param!(typeof(%s))(\"%s\",\"%s\"));\n", p.back, p.name, p.back);
+        }
+      }
+      else
+      {
+        result ~= format("param = \"%s %s\";\n", p.type, p.name);
+      }
+      if (issued_declaration)
+      {
+        result ~= "if (param != \"\") kernel_params ~= \", \" ~ param;\n";
+      }
+      else
+      {
+        result ~= "string kernel_params = param;\n";
+        issued_declaration = true;
+      }
+    }
+    return result;
+  }
+
+  string set_args(string kernel)
+  {
+    auto result = "";
+    foreach(i, p; parameters)
+    {
+      if (!p.skip)
+      {
+        if (p.back == "")
+        {
+          result ~= format("mixin(set_kernel_arg!(typeof(%s))(\"%s\",\"%d\",\"%s\",\"\",\"\"));\n", p.name, kernel, i, p.name);
+        }
+        else
+        {
+          result ~= format("mixin(set_kernel_arg!(typeof(%s))(\"%s\",\"%d\",\"null\",\"%s\",\"%s\"));\n", p.back, kernel, i, p.back, p.size);
+        }
+      }
+    }
+    return result;
+  }
+
+  string code_to_read_data_from_device()
+  {
+    string result = "";
+    foreach (k, v; symtable)
+    {
+      if (!v.is_local && v.type == "" && v.defs.length > 0)
+      {
+        result ~= "mixin(read_device_buffer!(typeof(" ~ k ~ "))(\"" ~ k ~ "\"));\n";
+      }
+    }
+    return result;
+  }
+
+  string code_to_invoke_kernel()
+  {
+    debug (DEBUG_GRAMMAR)
+    {
+      return "";
+    }
+    else
+    {
+      auto gsz0 = range.intervals[0].get_max();
+      auto bsz0 = block_size;
+      auto bsz1 = block_size;
+      auto name = "clop_opencl_kernel";
+      auto n = 0;
+      ulong argindex[2];
+      foreach (i, p; parameters)
+        if (p.skip)
+          argindex[n++] = i;
+      return format(template_antidiagonal_rectangular_blocks_invoke_kernel, gsz0, bsz0, bsz0, bsz0, name, argindex[0], name, argindex[1], name);
+    }
   }
 
   /++
