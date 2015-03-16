@@ -7,3 +7,5 @@ examples/*/bin/
 
 .settings
 dub.selections.json
+FILES
+TAGS
