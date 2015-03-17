@@ -690,6 +690,8 @@ struct Compiler
  +  Free functions, not members of Compiler class.
  +/
 
+/++
+ +/
 string
 set_kernel_param(T)(string name, string back)
 {
@@ -717,6 +719,8 @@ set_kernel_param(T)(string name, string back)
   return code;
 }
 
+/++
+ +/
 string
 set_kernel_arg(T)(string kernel, string arg, string name, string back, string size)
 {
@@ -776,6 +780,8 @@ set_kernel_arg(T)(string kernel, string arg, string name, string back, string si
   return "debug (DEBUG) writefln(\"%s\", q{" ~ code ~ "});\n" ~ code;
 }
 
+/++
+ +/
 string
 read_device_buffer(T)(string name)
 {
@@ -789,22 +795,25 @@ read_device_buffer(T)(string name)
   return "debug (DEBUG) writefln(\"%s\", q{" ~ code ~ "});\n" ~ code;
 }
 
-/**
- * Main entry point to the compiler.
- * \param expr a string containing the source code of a CLOP fragment
- *             to be compiled into OpenCL kernel and the supporting
- *             OpenCL API calls.
- * \return     a string containing the valid D source code to be mixed
- *             in the invoking application code.  This code includes
- *             the generated OpenCL kernel code and everything needed
- *             to invoke the kernel along with the data movements to
- *             and from the OpenCL device used to execute the kernel.
- */
+/++
+ + Main entry point to the compiler.
+ + \param expr a string containing the source code of a CLOP fragment
+ +             to be compiled into OpenCL kernel and the supporting
+ +             OpenCL API calls.
+ + \return     a string containing the valid D source code to be mixed
+ +             in the invoking application code.  This code includes
+ +             the generated OpenCL kernel code and everything needed
+ +             to invoke the kernel along with the data movements to
+ +             and from the OpenCL device used to execute the kernel.
+ +/
 string
 compile(string expr, string file = __FILE__, size_t line = __LINE__)
 {
   auto compiler = Compiler(expr, file, line);
   auto code = compiler.generate_code();
-  return "debug (DEBUG) writefln(\"CLOP MIXIN at %s:%s:\\n%sEND OF CLOP\", \"" ~ file ~ "\", " ~ to!string(line) ~ ", q{" ~ code ~ "});\n" ~ code;
-  //return "debug (DEBUG) writefln(\"CLOP MIXIN at %s:%s:\\n%sEND OF CLOP\", \"" ~ file ~ "\", " ~ to!string(line) ~ ", `" ~ code ~ "`);\n";
+  auto flln = file ~ ":" ~ to!string(line);
+  auto head = "CLOP MIXIN at " ~ flln;
+  auto tail = "END OF CLOP " ~ flln;
+  auto dump = format("debug (DEBUG) writeln(\"%s:\\n\",`%s`,\"%s:\");\n", head, code, tail);
+  return dump ~ code;
 }
