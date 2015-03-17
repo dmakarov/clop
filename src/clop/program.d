@@ -25,6 +25,7 @@
 module clop.program;
 
 import std.algorithm : reduce;
+import std.conv;
 import std.container;
 import std.string;
 
@@ -229,7 +230,224 @@ struct Program
     return t;
   }
 
+  string generate_antidiagonal_range(ParseTree t)
+  {
+    auto s = "";
+    auto num_dimensions = t.children.length;
+    auto range_arg = new string[num_dimensions];
+    auto shadowed = SList!string();
+
+    foreach (v; symtable)
+      if (v.is_array && v.shadow != null)
+        shadowed.insert(v.name);
+
+    auto r = Box([], []);
+    auto g = Box([], []);
+    string[3] bix;
+    foreach (c, u; t.children)
+    {
+      auto v = u.matches[0];              // variable name in NDRange specification
+      r.symbols ~= [v];
+      r.s2i[v] = c;
+      auto n = "0";
+      auto x = block_size;
+      r.intervals ~= [
+                      Interval(
+                               ParseTree("CLOP.IntegerLiteral", true, [n], "", 0, 0, []),
+                               ParseTree("CLOP.IntegerLiteral", true, [x], "", 0, 0, [])
+                              )
+                      ];
+      // n = range.intervals[c].min + b%d * block_size;
+      // x = n + block_size;
+      bix[c] = format("b%d", c);
+      auto y = ParseTree("CLOP.Identifier", true, [bix[c]], "", 0, 0, []);
+      auto w = ParseTree("CLOP.IntegerLiteral", true, [x], "", 0, 0, []);
+      auto f = create_mul_expr(y, w, "*");
+      auto a = create_add_expr(range.intervals[c].min, f, "+");
+      g.intervals ~= [Interval(a, create_add_expr(a, w, "+"))];
+      g.symbols ~= [v];
+      g.s2i[v] = c;
+    }
+
+    if (true /*trans.contains("rectangular_blocking")*/)
+    {
+      auto iv = "iv";
+      // block or work group id
+      auto bid0 = "bid0";
+      // thread or work item id
+      auto tid0 = "tid0";
+      // local index variables
+      auto li0 = "li0";
+      auto li1 = "li1";
+      // size of local index space
+      auto lsz0 = block_size;
+      auto lsz1 = block_size;
+
+      s ~= format("  int %s = get_group_id(0);\n", bid0);
+      s ~= format("  int %s = get_local_id(0);\n", tid0);
+      auto factor = false;
+      foreach (c, u; t.children)
+      {
+        auto v = u.matches[0];        // variable name in NDRange specification
+        auto o = factor ? "-" : "+";  // arithmetic operation
+        factor = !factor;
+        range_arg[c] = v;
+        auto n = format("b%s0", v); // generated variable to pass the block index.
+        s ~= format("  int b%d = %s %s %s;\n", c, n, o, bid0);
+        parameters ~= [Argument(n, "int", "", "", "", true)];
+      }
+
+      auto recalculations = "";
+      auto safeguards = "";
+
+      foreach (v; shadowed)
+      {
+        auto uses = symtable[v].uses;
+        Interval[3] local_box;
+        Interval[3] global_box;
+        foreach (i, c; uses[0].children)
+        {
+          local_box[i] = interval_apply(c, r);
+          global_box[i] = interval_apply(c, g);
+        }
+        for (auto ii = 1; ii < uses.length; ++ii)
+        {
+          foreach (i, c; uses[ii].children)
+          {
+            local_box[i] = interval_union(local_box[i], interval_apply(c, r));
+            global_box[i] = interval_union(global_box[i], interval_apply(c, g));
+          }
+        }
+        // size of current array block
+        auto bsz0 = local_box[0].get_size();
+        auto bsz1 = local_box[1].get_size();
+        // global index of current array
+        auto gi0 = format("(%s) + (%s)", global_box[0].get_min(), li0);
+        auto gi1 = format("(%s) + (%s)", global_box[1].get_min(), li1);
+        // size of current global array
+        auto gsz0 = symtable[v].box[0].get_max();
+        // global memory array name
+        auto gma = v;
+        // shared memory array name
+        auto sma = generate_shared_memory_variable(v);
+        parameters ~= Argument(sma, "", "__local",format("(%s) * (%s)", bsz0, bsz1), gma);
+        s ~= format(template_shared_memory_data_init,
+                     li1, li1, bsz1, li1,
+                     li0, li0, bsz0, li0, lsz0,
+                     li0, tid0, bsz0,
+                     sma, li1, bsz0, li0, tid0,
+                     gma, gi1, gsz0, gi0, tid0);
+
+        // margin size
+        auto msz0 = bsz0 ~ "-" ~ lsz0;
+        auto msz1 = bsz1 ~ "-" ~ lsz1;
+
+        auto iv0 = v ~ "_" ~ generate_shared_memory_variable(range_arg[0]);
+        auto iv1 = v ~ "_" ~ generate_shared_memory_variable(range_arg[1]);
+        recalculations ~= format(template_shared_index_recalculation, iv0, msz0, tid0, iv, lsz0, iv, lsz0,  iv1, msz1, tid0, iv, lsz1, iv, lsz1);
+        if (safeguards != "") safeguards ~= " && ";
+        safeguards ~= format("(%s) < (%s) && (%s) >= (%s)", iv0, bsz0, iv1, msz1);
+      }
+      s ~= format(template_antidiagonal_loop_prefix, iv, iv, lsz1, lsz0, iv);
+      s ~= format("    int %s = (%s) + tid0 + ((%s) < (%s) ?   0  : (%s) - (%s) + 1);\n", t.children[0].matches[0], g.intervals[0].get_min(), iv, lsz0, iv, lsz0);
+      s ~= format("    int %s = (%s) - tid0 + ((%s) < (%s) ? (%s) : (%s)        - 1);\n", t.children[1].matches[0], g.intervals[1].get_min(), iv, lsz1, iv, lsz1);
+      s ~= recalculations;
+      s ~= format("\n    if (%s)\n", safeguards);
+    }
+    else
+    {
+      s ~= "  int tid0 = get_global_id(0);\n";
+      auto internal = false;
+      for (auto c = 0; c < t.children.length; ++c)
+      {
+        ParseTree u = t.children[c];
+        s ~= (internal)
+             ? "  int " ~ u.matches[0] ~ " = c0 + tid0;\n"
+             : "  int " ~ u.matches[0] ~ " = r0 - tid1;\n";
+        internal = true;
+      }
+    }
+    return s;
+  }
+
+  string finish_antidiagonal_range(ParseTree t)
+  {
+    auto s = "";
+    auto shadowed = SList!string();
+
+    foreach (v; symtable)
+      if (v.is_array && v.shadow != null)
+      {
+        auto defs = v.defs;
+        if (defs.length > 0)
+          shadowed.insert(v.name);
+      }
+
+    if (true /*trans.contains("rectangular_blocking")*/)
+    {
+      s ~= template_antidiagonal_loop_suffix;
+      string[3] bix;
+      auto r = Box([], []);
+      foreach (c, u; range.symbols)
+      {
+        bix[c] = format("b%d", c);
+        r.symbols ~= [u];
+        r.s2i[u] = c;
+        auto n = "0";
+        auto x = block_size;
+        r.intervals ~= [
+                        Interval(ParseTree("CLOP.IntegerLiteral", true, [n], "", 0, 0, []), ParseTree("CLOP.IntegerLiteral", true, [x], "", 0, 0, []))];
+      }
+      foreach (v; shadowed)
+      {
+        auto uses = symtable[v].uses;
+        Interval[3] local_box;
+        foreach (i, c; uses[0].children)
+        {
+          local_box[i] = interval_apply(c, r);
+        }
+        for (auto ii = 1; ii < uses.length; ++ii)
+          foreach (i, c; uses[ii].children)
+          {
+            local_box[i] = interval_union(local_box[i], interval_apply(c, r));
+          }
+        // thread or work item id
+        auto tid0 = "tid0";
+        // local index variables
+        auto li0 = "li0";
+        auto li1 = "li1";
+        // size of local index space
+        auto lsz0 = block_size;
+        auto lsz1 = block_size;
+        // size of current array block
+        auto bsz0 = local_box[0].get_size();
+        auto bsz1 = local_box[1].get_size();
+        // global index of current array
+        auto gi0 = format("(%s) * (%s) + (%s)", bix[0], lsz0, li0);
+        auto gi1 = format("(%s) * (%s) + (%s)", bix[1], lsz1, li1);
+        // size of current global array
+        auto gsz0 = symtable[v].box[0].get_max();
+        // global memory array name
+        auto gma = v;
+        // shared memory array name
+        auto sma = generate_shared_memory_variable(v);
+        s ~= format(template_shared_memory_fini,
+                     li1, li1, bsz1, li1,
+                     li0, li0, bsz0, li0, lsz0,
+                     li0, tid0, bsz0,
+                     gma, gi1, gsz0, gi0, tid0,
+                     sma, li1, bsz0, li0, tid0);
+      }
+    }
+    return s;
+  }
+
   auto generate_horizontal_range (ParseTree t)
+  {
+    return "";
+  }
+
+  auto finish_horizontal_range(ParseTree t)
   {
     return "";
   }
@@ -239,7 +457,31 @@ struct Program
     return "";
   }
 
+  auto finish_stencil_range(ParseTree t)
+  {
+    return "";
+  }
+
   auto generate_ndrange (ParseTree t)
+  {
+    return "";
+  }
+
+  string generate_ndrange(ParseTree t)
+  {
+    string s = "";
+    ulong n = t.children.length;
+    for (auto c = 0; c < n; ++c)
+    {
+      ParseTree u = t.children[c];
+      string name = u.matches[0];
+      symtable[name] = Symbol(name, "int", t, null, null, null, null, true, false, false);
+      s ~= "  int " ~ name ~ " = get_global_id(" ~ to!string(n - 1 - c) ~ ");\n";
+    }
+    return s;
+  }
+
+  string finish_ndrange(ParseTree t)
   {
     return "";
   }
@@ -612,9 +854,7 @@ struct Program
     case "CLOP.Identifier":
       {
         string s = t.matches[0];
-        if ( use_shadow &&
-             symtable.get( s, Symbol() ) != Symbol() &&
-             symtable[s].shadow != null )
+        if (use_shadow && s in symtable && symtable[s].shadow != null)
           return symtable[s].shadow;
         return s;
       }
