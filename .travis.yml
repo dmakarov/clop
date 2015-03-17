@@ -8,7 +8,7 @@ before_install:
   - sudo apt-get install -qq fglrx=2:8.960-0ubuntu1 opencl-headers
 
 script:
-  - dub build --compiler=ldc2 --build=debug :nw -- 32 10
+  - dub --compiler=ldc2 --build=debug :nw -- 32 10
 
 # Local Variables:
 # compile-command: "dub --compiler=ldc2 --build=debug :nw -- 32 10"
