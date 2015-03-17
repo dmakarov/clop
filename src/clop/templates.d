@@ -34,25 +34,13 @@ template_create_opencl_kernel = q{
 },
 
 template_antidiagonal_invoke_kernel = q{
-  uint clop_c0 = %s;
-  runtime.status = clSetKernelArg( clop_opencl_kernel, clop_opencl_kernel_arg + 1, cl_int.sizeof, &clop_c0 );
-  assert( runtime.status == CL_SUCCESS, "clSetKernelArg failed." );
-  uint clop_r0;
-  for ( clop_r0 = %s; clop_r0 < %s; ++clop_r0 )
+  foreach (i; 2 .. 2 * %s - 1)
   {
-    size_t global = clop_r0;
-    runtime.status = clSetKernelArg( clop_opencl_kernel, clop_opencl_kernel_arg, cl_int.sizeof, &clop_r0 );
-    assert( runtime.status == CL_SUCCESS, "clSetKernelArg failed." );
-    runtime.status = clEnqueueNDRangeKernel( runtime.queue, clop_opencl_kernel, 1, null, &global, null, 0, null, null );
-    assert( runtime.status == CL_SUCCESS, "clEnqueueNDRangeKernel failed." );
-  }
-  for ( clop_c0 = %s + 1, clop_r0 -= 1; clop_c0 < %s; ++clop_c0 )
-  {
-    size_t global = clop_r0 - clop_c0 + 1;
-    runtime.status = clSetKernelArg( clop_opencl_kernel, 5, cl_int.sizeof, &clop_c0 );
-    assert( runtime.status == CL_SUCCESS, "clSetKernelArg failed." );
-    runtime.status = clEnqueueNDRangeKernel( runtime.queue, clop_opencl_kernel, 1, null, &global, null, 0, null, null );
-    assert( runtime.status == CL_SUCCESS, "clEnqueueNDRangeKernel failed." );
+    size_t global = (i < %s) ? i - 1 : 2 * %s - i - 1;
+    runtime.status = clSetKernelArg(%s, %s, cl_int.sizeof, &i);
+    assert(runtime.status == CL_SUCCESS, "clSetKernelArg " ~ cl_strerror(runtime.status));
+    runtime.status = clEnqueueNDRangeKernel(runtime.queue, %s, 1, null, &global, null, 0, null, null);
+    assert(runtime.status == CL_SUCCESS, "clEnqueueNDRangeKernel " ~ cl_strerror(runtime.status));
   }
 },
 

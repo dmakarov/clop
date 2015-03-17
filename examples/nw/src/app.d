@@ -1,27 +1,27 @@
 /*
-  The MIT License (MIT)
-  =====================
-
-  Copyright (c) 2015 Dmitri Makarov <dmakarov@alumni.stanford.edu>
-
-  Permission is hereby granted, free of charge, to any person obtaining a copy
-  of this software and associated documentation files (the "Software"), to deal
-  in the Software without restriction, including without limitation the rights
-  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-  copies of the Software, and to permit persons to whom the Software is
-  furnished to do so, subject to the following conditions:
-
-  The above copyright notice and this permission notice shall be included in all
-  copies or substantial portions of the Software.
-
-  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-  SOFTWARE.
-*/
+ *  The MIT License (MIT)
+ *  =====================
+ *
+ *  Copyright (c) 2015 Dmitri Makarov <dmakarov@alumni.stanford.edu>
+ *
+ *  Permission is hereby granted, free of charge, to any person obtaining a copy
+ *  of this software and associated documentation files (the "Software"), to deal
+ *  in the Software without restriction, including without limitation the rights
+ *  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ *  copies of the Software, and to permit persons to whom the Software is
+ *  furnished to do so, subject to the following conditions:
+ *
+ *  The above copyright notice and this permission notice shall be included in all
+ *  copies or substantial portions of the Software.
+ *
+ *  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ *  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ *  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ *  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ *  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ *  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *  SOFTWARE.
+ */
 module clop.examples.nw;
 
 import std.conv;
@@ -34,8 +34,8 @@ import derelict.opencl.cl;
 
 import clop.compiler;
 
-/**
- */
+/++
+ +/
 class Application {
   static immutable int SEED  =  1;
   static immutable int CHARS = 24;
@@ -90,61 +90,60 @@ class Application {
   cl_kernel kernel_diamonds_indirectS;
 
 
-  /**
-   */
-  this( string[] args )
+  /++
+   +/
+  this(string[] args)
   {
-    getopt( args, "output|o", &outfile );
-    if ( args.length != 3 )
+    getopt(args, "output|o", &outfile);
+    if (args.length != 3)
     {
-      throw new Exception( "ERROR: invalid args # " ~ to!(string)(args.length - 1) );
+      throw new Exception("ERROR: invalid args # " ~ to!(string)(args.length - 1));
     }
-    rows    = to!(int)( args[1] ) + 1;
-    cols    = to!(int)( args[1] ) + 1;
-    penalty = to!(int)( args[2] );
-    if ( ( rows - 1 ) % 16 != 0 )
+    rows    = to!(int)(args[1]) + 1;
+    cols    = to!(int)(args[1]) + 1;
+    penalty = to!(int)(args[2]);
+    if ((rows - 1) % 16 != 0)
     {
       auto r = to!(string)(rows - 1);
       auto b = to!(string)(BLOCK_SIZE);
-      throw new Exception( "ERROR: rows # (" ~ r ~ ") must be a multiple of " ~ b );
+      throw new Exception("ERROR: rows # (" ~ r ~ ") must be a multiple of " ~ b);
     }
-    S = new int[rows * cols]; assert( null != S, "Can't allocate array S" );
-    //F = new int[rows * cols]; assert( null != F, "Can't allocate array F" );
-    F = new NDArray!int( cols, rows );
+    S = new int[rows * cols]; assert(S !is null, "Can't allocate array S");
+    //F = new int[rows * cols]; assert(F !is null, "Can't allocate array F");
+    F = new NDArray!int(cols, rows); assert(F !is null, "Can't allocate array F");
 
-    G = new int[rows * cols]; assert( null != G, "Can't allocate array G" );
-    M = new int[rows];        assert( null != M, "Can't allocate array M" );
-    N = new int[cols];        assert( null != N, "Can't allocate array N" );
-    A = new int[rows];        assert( null != A, "Can't allocate array A" );
-    B = new int[cols];        assert( null != B, "Can't allocate array B" );
+    G = new int[rows * cols]; assert(G !is null, "Can't allocate array G");
+    M = new int[rows];        assert(M !is null, "Can't allocate array M");
+    N = new int[cols];        assert(N !is null, "Can't allocate array N");
+    A = new int[rows];        assert(A !is null, "Can't allocate array A");
+    B = new int[cols];        assert(B !is null, "Can't allocate array B");
 
 
-    debug ( DEBUG )
+    debug (DEBUG)
     {
-      I = new int[rows * cols]; assert( null != I, "Can't allocate array I" );
-      O = new int[rows * cols]; assert( null != O, "Can't allocate array O" );
-      Z = new int[(BLOCK_SIZE + 1) * (BLOCK_SIZE + 2)]; assert( null != Z, "Can't allocate array Z" );
+      I = new int[rows * cols]; assert(I !is null, "Can't allocate array I");
+      O = new int[rows * cols]; assert(O !is null, "Can't allocate array O");
+      Z = new int[(BLOCK_SIZE + 1) * (BLOCK_SIZE + 2)]; assert(Z !is null, "Can't allocate array Z");
     }
 
     Mt19937 gen;
-    gen.seed( SEED );
-    foreach ( r; 1 .. rows )
+    gen.seed(SEED);
+    foreach (r; 1 .. rows)
     {
       F[r * cols] = -penalty * r;
-      M[r] = uniform( 1, CHARS, gen );
+      M[r] = uniform(1, CHARS, gen);
     }
-    foreach ( c; 1 .. cols )
+    foreach (c; 1 .. cols)
     {
       F[c] = -penalty * c;
-      N[c] = uniform( 1, CHARS, gen );
+      N[c] = uniform(1, CHARS, gen);
     }
-    foreach ( r; 1 .. rows )
-      foreach ( c; 1 .. cols )
+    foreach (r; 1 .. rows)
+      foreach (c; 1 .. cols)
         S[r * cols + c] = BLOSUM62[M[r] * CHARS + N[c]];
 
-    /**
-     *
-     **/
+    /++
+     +/
     char[] code = q{
       #define BLOCK_SIZE 16
       #define CHARS      24
@@ -158,7 +157,12 @@ class Application {
         return k > c ? k : c;
       }
 
-      __kernel void nw_noblocks( __global const int* S, __global int* F, int cols, int penalty, int diagonal )
+      __kernel void
+      nw_noblocks(__global const int* S,
+                  __global       int* F,
+                                 int  cols,
+                                 int  penalty,
+                                 int  diagonal)
       {
         int tx = get_global_id( 0 );
         int c =            tx + 1;
@@ -176,7 +180,14 @@ class Application {
 
       /**
        */
-      __kernel void nw_noblocks_indirectS( __global const int* S, __global const int* M, __global const int* N, __global int* F, int cols, int penalty, int diagonal )
+      __kernel void
+      nw_noblocks_indirectS(__global const int* S,
+                            __global const int* M,
+                            __global const int* N,
+                            __global       int* F,
+                                           int  cols,
+                                           int  penalty,
+                                           int  diagonal)
       {
         int tx = get_global_id( 0 );
         int c =            tx + 1;
@@ -194,7 +205,15 @@ class Application {
 
       /**
        */
-      __kernel void nw_rectangles( __global const int* S, __global int* F, int cols, int penalty, int br, int bc, __local int* s, __local int* t )
+      __kernel void
+      nw_rectangles(__global const int* S,
+                    __global       int* F,
+                                   int  cols,
+                                   int  penalty,
+                                   int  br,
+                                   int  bc,
+                    __local        int* s,
+                    __local        int* t)
       {
         int bx = get_group_id( 0 );
         int tx = get_local_id( 0 );
@@ -247,7 +266,17 @@ class Application {
 
       /**
        */
-      __kernel void nw_rectangles_indirectS( __global const int* S, __global const int* M, __global const int* N, __global int* F, int cols, int penalty, int br, int bc, __local int* s, __local int* t )
+      __kernel void
+      nw_rectangles_indirectS(__global const int* S,
+                              __global const int* M,
+                              __global const int* N,
+                              __global       int* F,
+                                             int  cols,
+                                             int  penalty,
+                                             int  br,
+                                             int  bc,
+                              __local        int* s,
+                              __local        int* t)
       {
         int bx = get_group_id( 0 );
         int tx = get_local_id( 0 );
@@ -308,7 +337,15 @@ class Application {
 
       /**
        */
-      __kernel void nw_diamonds( __global const int* S, __global int* F, int cols, int penalty, int br, int bc, __local int* s, __local int* t )
+      __kernel void
+      nw_diamonds(__global const int* S,
+                  __global       int* F,
+                                 int  cols,
+                                 int  penalty,
+                                 int  br,
+                                 int  bc,
+                  __local        int* s,
+                  __local        int* t)
       {
         int bx = get_group_id( 0 );
         int tx = get_local_id( 0 );
@@ -368,16 +405,17 @@ class Application {
 
       /**
        */
-      __kernel void nw_diamonds_indirectS( __global const int* S      , //
-                                           __global const int* M      , //
-                                           __global const int* N      , //
-                                           __global       int* F      , //
-                                                          int  cols   , //
-                                                          int  penalty, //
-                                                          int  br     , //
-                                                          int  bc     , //
-                                           __local        int* s      , //
-                                           __local        int* t      ) //
+      __kernel void
+      nw_diamonds_indirectS( __global const int* S      , //
+                             __global const int* M      , //
+                             __global const int* N      , //
+                             __global       int* F      , //
+                                            int  cols   , //
+                                            int  penalty, //
+                                            int  br     , //
+                                            int  bc     , //
+                             __local        int* s      , //
+                             __local        int* t      ) //
       {
         int bx = get_group_id( 0 );
         int tx = get_local_id( 0 );
@@ -447,30 +485,38 @@ class Application {
     cl_int status;
     size_t size = code.length;
     char*[] strs = [code.ptr];
-    auto program = clCreateProgramWithSource( runtime.context, 1, strs.ptr, &size, &status );
-    assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
-    status = clBuildProgram( program, 1, &runtime.device, "", null, null );
-    assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
-    kernel_noblocks             = clCreateKernel( program, "nw_noblocks"             , &status );
-    assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
-    kernel_rectangles           = clCreateKernel( program, "nw_rectangles"           , &status );
-    assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
-    kernel_diamonds             = clCreateKernel( program, "nw_diamonds"             , &status );
-    assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
-    kernel_noblocks_indirectS   = clCreateKernel( program, "nw_noblocks_indirectS"   , &status );
-    assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
-    kernel_rectangles_indirectS = clCreateKernel( program, "nw_rectangles_indirectS" , &status );
-    assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
-    kernel_diamonds_indirectS   = clCreateKernel( program, "nw_diamonds_indirectS"   , &status );
-    assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
-    status = clReleaseProgram( program );
-    assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
+    auto program = clCreateProgramWithSource(runtime.context, 1, strs.ptr, &size, &status);
+    assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
+    status = clBuildProgram(program, 1, &runtime.device, "", null, null);
 
-    static if ( false )
+    if (status != CL_SUCCESS)
+    {
+      char[3072] log;
+      clGetProgramBuildInfo(program, runtime.device, CL_PROGRAM_BUILD_LOG, 3071, log.ptr, null);
+      writeln("CL_PROGRAM_BUILD_LOG:\n", log, "\nEOD");
+    }
+
+    assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
+    kernel_noblocks             = clCreateKernel(program, "nw_noblocks"             , &status);
+    assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
+    kernel_rectangles           = clCreateKernel(program, "nw_rectangles"           , &status);
+    assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
+    kernel_diamonds             = clCreateKernel(program, "nw_diamonds"             , &status);
+    assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
+    kernel_noblocks_indirectS   = clCreateKernel(program, "nw_noblocks_indirectS"   , &status);
+    assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
+    kernel_rectangles_indirectS = clCreateKernel(program, "nw_rectangles_indirectS" , &status);
+    assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
+    kernel_diamonds_indirectS   = clCreateKernel(program, "nw_diamonds_indirectS"   , &status);
+    assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
+    status = clReleaseProgram(program);
+    assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
+
+    static if (false)
     { // an example of getting the correct maximum work group
       // size. device info on OS X reports an incorrect value.
       size_t max_group_size;
-      clGetKernelWorkGroupInfo( kernel_rectangles, runtime.device, CL_KERNEL_WORK_GROUP_SIZE, max_group_size.sizeof, &max_group_size, null );
+      clGetKernelWorkGroupInfo(kernel_rectangles, runtime.device, CL_KERNEL_WORK_GROUP_SIZE, max_group_size.sizeof, &max_group_size, null);
     }
   } // this()
 
@@ -478,7 +524,7 @@ class Application {
    */
   void save()
   {
-    if ( null != outfile )
+    if (outfile !is null)
     {
       auto fp = File( outfile, "w" );
       for ( int ii = 1; ii < rows - 1; ++ii ) fp.writef( "%c", to!(char)(M[ii] + 'A') ); fp.writeln();

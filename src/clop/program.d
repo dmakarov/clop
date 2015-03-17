@@ -616,16 +616,36 @@ struct Program
     debug (DEBUG_GRAMMAR) return "";
     else
     {
-      auto gsz0 = range.intervals[0].get_max();
-      auto bsz0 = block_size;
-      auto bsz1 = block_size;
-      auto name = "clop_opencl_kernel";
-      auto n = 0;
-      ulong argindex[2];
-      foreach (i, p; parameters)
-        if (p.skip)
-          argindex[n++] = i;
-      return format(template_antidiagonal_rectangular_blocks_invoke_kernel, gsz0, bsz0, bsz0, bsz0, name, argindex[0], name, argindex[1], name);
+      if (pattern == "Antidiagonal")
+      {
+        if (true) // plain anti-diagonal pattern, no blocking.
+        {
+          auto n = 0;
+          ulong argindex[2];
+          foreach (i, p; parameters)
+            if (p.skip)
+              argindex[n++] = i;
+          auto gsz0 = range.intervals[0].get_max();
+          auto name = "clop_opencl_kernel";
+          return format(template_antidiagonal_invoke_kernel,
+                        gsz0, gsz0, gsz0, name, argindex[0], name);
+        }
+        else
+        {
+          auto gsz0 = range.intervals[0].get_max();
+          auto bsz0 = block_size;
+          auto bsz1 = block_size;
+          auto name = "clop_opencl_kernel";
+          auto n = 0;
+          ulong argindex[2];
+          foreach (i, p; parameters)
+            if (p.skip)
+              argindex[n++] = i;
+          return format(template_antidiagonal_rectangular_blocks_invoke_kernel,
+                        gsz0, bsz0, bsz0, bsz0, name, argindex[0], name, argindex[1], name);
+        }
+      }
+      return "";
     }
   }
 
