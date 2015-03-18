@@ -1337,7 +1337,7 @@ class Application {
         return k > c ? k : c;
       }
       Antidiagonal NDRange( c : 1 .. cols, r : 1 .. rows ) {
-        F[c, r] = max3( F[c - 1, r - 1] + S[c, r], F[c - 1, r] - penalty, F[c, r - 1] - penalty );
+        F[c, r] = max3( F[c - 1, r - 1] + S[c + cols * r], F[c - 1, r] - penalty, F[c, r - 1] - penalty );
       } apply( rectangular_blocking( 8, 8 ) )
     } ) );
   }
