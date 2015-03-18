@@ -8,6 +8,10 @@
         "name"         : "default"
       },
       {
+        "name"         : "debug",
+        "debugVersions": ["DEBUG"]
+      },
+      {
         "name"         : "debug-grammar",
         "debugVersions": ["DEBUG_GRAMMAR"]
       }

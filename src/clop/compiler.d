@@ -771,7 +771,7 @@ set_kernel_arg(T)(string kernel, string arg, string name, string back, string si
            ~ "assert(runtime.status == CL_SUCCESS, \"clCreateBuffer failed.\");\n"
            ~ "runtime.status = clSetKernelArg(" ~ kernel ~ ", " ~ arg ~ ", cl_mem.sizeof, &clop_opencl_device_buffer_"
            ~ name ~ ");\nassert(runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\");\n"
-           ~ `writefln("clCreateBuffer(%s at %s)", typeid(*` ~ name ~ `.ptr).tsize * ` ~ name ~ `.length, ` ~ name ~ `.ptr);`
+           ~ `debug (DEBUG) writefln("clCreateBuffer(%s at %s)", typeid(*` ~ name ~ `.ptr).tsize * ` ~ name ~ `.length, ` ~ name ~ `.ptr);`
            :
            "runtime.status = clSetKernelArg(" ~ kernel ~ ", " ~ arg ~ ", " ~ size ~ " * typeid(*" ~ back ~ ".ptr).tsize, " ~ name ~ ");\n"
            ~ "assert(runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\");";
