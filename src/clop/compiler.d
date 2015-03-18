@@ -462,7 +462,7 @@ struct Compiler
   {
     foreach (k, v; symtable)
     {
-      if (v.is_array && v.shadow != null)
+      if (v.is_array && v.can_cache)
       {
         auto uses = v.uses;
         auto box = range.map(uses[0]);
