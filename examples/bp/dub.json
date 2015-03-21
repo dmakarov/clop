@@ -1,26 +1,20 @@
 {
-    "name"          : "nw",
+    "name"          : "bp",
     "authors"       : ["Dmitri Makarov"],
-    "description"   : "Needleman-Wunsch algorithm implementation.",
+    "description"   : "Neural network back propagation.",
     "targetType"    : "executable",
     "targetPath"    : "./bin",
     "importPaths"   : ["../../src"],
     "libs"          : ["clop_runtime"],
     "lflags-linux"  : ["-Llib", "-lOpenCL", "-lrt"],
     "lflags-osx"    : ["-Llib", "-framework", "OpenCL"],
-    "debugVersions" : ["DEBUG"],
     "dependencies"  : {
         "derelict-cl"  : "~>1.2.2",
         "pegged"       : "~>0.1.0",
         "clop:runtime" : "*"
     },
-    "configurations": [
-        {
-            "name"               : "default"
-        },
-        {
-            "name"               : "debug-grammar",
-            "debugVersions"      : ["DEBUG_GRAMMAR"]
-        }
-    ]
+    "buildTypes"    : {
+        "debug"        : { "debugVersions" : ["DEBUG"] },
+        "grammar"      : { "debugVersions" : ["DEBUG_GRAMMAR"] }
+    }
 }

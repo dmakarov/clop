@@ -13,17 +13,8 @@
         "pegged"       : "~>0.1.0",
         "clop:runtime" : "*"
     },
-    "configurations": [
-        {
-            "name"               : "default"
-        },
-        {
-            "name"               : "debug",
-            "debugVersions"      : ["DEBUG"]
-        },
-        {
-            "name"               : "debug-grammar",
-            "debugVersions"      : ["DEBUG_GRAMMAR"]
-        }
-    ]
+    "buildTypes"    : {
+        "debug"        : { "debugVersions" : ["DEBUG"] },
+        "grammar"      : { "debugVersions" : ["DEBUG_GRAMMAR"] }
+    }
 }

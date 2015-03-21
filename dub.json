@@ -1,37 +1,27 @@
 {
-  "name"         : "clop",
-  "description"  : "OpenCL OPtimizer DSL.",
-  "targetType"   : "none",
-
-  "configurations": [
-      {
-        "name"         : "default"
-      },
-      {
-        "name"         : "debug",
-        "debugVersions": ["DEBUG"]
-      },
-      {
-        "name"         : "debug-grammar",
-        "debugVersions": ["DEBUG_GRAMMAR"]
-      }
-  ],
-  "subPackages"  : [
-      {
-        "name"         : "runtime",
-        "targetType"   : "library",
-        "targetPath"   : "./lib",
-        "sourcePaths"  : ["src"],
-        "importPaths"  : ["src"],
-        "lflags-linux" : ["-lOpenCL", "-lrt"],
-        "lflags-osx"   : ["-framework", "OpenCL"],
-        "dependencies" : {
-            "derelict-cl" : "~>1.2.2",
-            "pegged"      : "~>0.1.0"
-        }
-      },
-      "./examples/nw",
-      "./examples/pf",
-      "./examples/stencil"
-  ]
+    "name"         : "clop",
+    "description"  : "OpenCL OPtimizer DSL.",
+    "targetType"   : "none",
+    "buildTypes"   : {
+        "debug"            : { "debugVersions" : ["DEBUG"] },
+        "grammar"          : { "debugVersions" : ["DEBUG_GRAMMAR"] }
+    },
+    "subPackages"  : [
+        {
+            "name"         : "runtime",
+            "targetType"   : "library",
+            "targetPath"   : "./lib",
+            "sourcePaths"  : ["src"],
+            "importPaths"  : ["src"],
+            "lflags-linux" : ["-lOpenCL", "-lrt"],
+            "lflags-osx"   : ["-framework", "OpenCL"],
+            "dependencies" : {
+                "derelict-cl" : "~>1.2.2",
+                "pegged"      : "~>0.1.0"
+            }
+        },
+        "./examples/nw",
+        "./examples/pf",
+        "./examples/stencil"
+    ]
 }
