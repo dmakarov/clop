@@ -1,27 +1,27 @@
 /*
-  The MIT License (MIT)
-  =====================
-
-  Copyright (c) 2015 Dmitri Makarov <dmakarov@alumni.stanford.edu>
-
-  Permission is hereby granted, free of charge, to any person obtaining a copy
-  of this software and associated documentation files (the "Software"), to deal
-  in the Software without restriction, including without limitation the rights
-  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-  copies of the Software, and to permit persons to whom the Software is
-  furnished to do so, subject to the following conditions:
-
-  The above copyright notice and this permission notice shall be included in all
-  copies or substantial portions of the Software.
-
-  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-  SOFTWARE.
-*/
+ *  The MIT License (MIT)
+ *  =====================
+ *
+ *  Copyright (c) 2015 Dmitri Makarov <dmakarov@alumni.stanford.edu>
+ *
+ *  Permission is hereby granted, free of charge, to any person obtaining a copy
+ *  of this software and associated documentation files (the "Software"), to deal
+ *  in the Software without restriction, including without limitation the rights
+ *  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ *  copies of the Software, and to permit persons to whom the Software is
+ *  furnished to do so, subject to the following conditions:
+ *
+ *  The above copyright notice and this permission notice shall be included in all
+ *  copies or substantial portions of the Software.
+ *
+ *  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ *  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ *  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ *  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ *  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ *  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *  SOFTWARE.
+ */
 module clop.compiler;
 
 import std.container;
@@ -658,9 +658,9 @@ struct Compiler
     }
   }
 
-  /**
-   * The very limited integer to string conversion works at compile-time.
-   */
+  /++
+   +  A very limited integer to string conversion works at compile-time.
+   +/
   string ct_itoa(T)(T x) if (is (T == byte) || is (T == ubyte)
                          ||  is (T == short) || is (T == ushort)
                          ||  is (T == int ) || is (T == uint )
@@ -692,10 +692,9 @@ struct Compiler
 
 /++
  +/
-string
-set_kernel_param(T)(string name, string back)
+auto generate_kernel_parameter(T)(string name, string back)
 {
-  string code;
+  auto code = "\"\"";
   static      if (is (T == bool  )) code = "\"uchar "  ~ name ~ "\"";
   else static if (is (T == char  )) code = "\"char "   ~ name ~ "\"";
   else static if (is (T == byte  )) code = "\"char "   ~ name ~ "\"";
@@ -714,17 +713,14 @@ set_kernel_param(T)(string name, string back)
     auto orig = (back == "") ? name : back;
     code = "\"" ~ qual ~ " \" ~ typeid(*" ~ orig ~ ".ptr).toString() ~ \"* " ~ name ~ "\"";
   }
-  else
-    code = "\"\"";
   return code;
 }
 
 /++
  +/
-string
-set_kernel_arg(T)(string kernel, string arg, string name, string back, string size)
+auto set_kernel_arg(T)(string kernel, string arg, string name, string back, string size)
 {
-  string code;
+  auto code = "";
   static      if (is (T == bool))
     code = "runtime.status = clSetKernelArg(" ~ kernel ~ ", " ~ arg  ~ ", cl_char.sizeof, &" ~ name ~ ");\n"
          ~ "assert(runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\");";
@@ -776,23 +772,18 @@ set_kernel_arg(T)(string kernel, string arg, string name, string back, string si
            "runtime.status = clSetKernelArg(" ~ kernel ~ ", " ~ arg ~ ", " ~ size ~ " * typeid(*" ~ back ~ ".ptr).tsize, " ~ name ~ ");\n"
            ~ "assert(runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\");";
   }
-  else
-    code = "";
   return "debug (DEBUG) writefln(\"%s\", q{" ~ code ~ "});\n" ~ code;
 }
 
 /++
  +/
-string
-read_device_buffer(T)(string name)
+auto read_device_buffer(T)(string name)
 {
-  string code;
+  auto code = "";
   static if (isDynamicArray!T || isStaticArray!T || __traits(isSame, TemplateOf!(T), NDArray))
     code = "runtime.status = clEnqueueReadBuffer(runtime.queue, clop_opencl_device_buffer_"
            ~ name ~ ", CL_TRUE, 0, typeid(*" ~ name ~ ".ptr).tsize * " ~ name ~ ".length, " ~ name ~
            ".ptr, 0, null, null);\nassert(runtime.status == CL_SUCCESS, \"clEnqueueReadBuffer failed.\");";
-  else
-    code = "";
   return "debug (DEBUG) writefln(\"%s\", q{" ~ code ~ "});\n" ~ code;
 }
 
@@ -807,8 +798,7 @@ read_device_buffer(T)(string name)
  +             to invoke the kernel along with the data movements to
  +             and from the OpenCL device used to execute the kernel.
  +/
-string
-compile(string expr, string file = __FILE__, size_t line = __LINE__)
+string compile(string expr, string file = __FILE__, size_t line = __LINE__)
 {
   auto compiler = Compiler(expr, file, line);
   auto code = compiler.generate_code();

@@ -554,11 +554,13 @@ struct Program
       {
         if (p.back == "")
         {
-          result ~= format("param = mixin(set_kernel_param!(typeof(%s))(\"%s\",\"%s\"));\n", p.name, p.name, p.back);
+          result ~= format("param = mixin(generate_kernel_parameter!(typeof(%s))(\"%s\",\"%s\"));\n",
+                           p.name, p.name, p.back);
         }
         else
         {
-          result ~= format("param = mixin(set_kernel_param!(typeof(%s))(\"%s\",\"%s\"));\n", p.back, p.name, p.back);
+          result ~= format("param = mixin(generate_kernel_parameter!(typeof(%s))(\"%s\",\"%s\"));\n",
+                           p.back, p.name, p.back);
         }
       }
       else
