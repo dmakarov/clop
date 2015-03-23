@@ -24,6 +24,7 @@
  */
 module clop.compiler;
 
+import std.algorithm : reduce;
 import std.container;
 import std.conv;
 import std.string;
@@ -327,12 +328,13 @@ struct Compiler
         {
           return;
         }
-        // this is an identifier
+        // this is PostfixExpr.PrimaryExpr.Identifier
         auto symbol = t.children[0].children[0].matches[0];
         // analyze index expression
         if (!symtable[symbol].is_array)
         {
           symtable[symbol].is_array = true;
+          // test PostfixExpr.Expression for transformability
           if (can_transform_index_expression(t.children[1]))
           {
             symtable[symbol].can_cache = true;
@@ -493,18 +495,8 @@ struct Compiler
   {
     switch (t.name)
     {
-    case "CLOP.ArrayIndex":
-    case "CLOP.FunctionCall":
-      return false;
-    case "CLOP.ArgumentList":
-      if (t.children.length == 1)
-        return false;
-      goto default;
     default:
-      auto result = true;
-      foreach (c; t.children)
-        result = result && can_transform_index_expression(c);
-      return result;
+      return reduce!((a, b) => a && b)(true, map!(a => can_transform_index_expression(a))(t.children));
     }
   }
 
