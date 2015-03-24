@@ -28,7 +28,7 @@ struct Symbol
 
   string toString()
   {
-    return format("name %10s, type %10s, %6s, %6s, #uses %2d, #defs %2d, shadow %s",
+    return format("name %10s, type %10s, #uses %2d, #defs %2d, %6s, %6s, cache %s",
                   name,
                   (type == null ? "N/A" : type),
                   (uses == null ? 0 : uses.length),

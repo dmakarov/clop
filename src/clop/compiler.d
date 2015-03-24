@@ -56,7 +56,6 @@ struct Compiler
   string errors;
   string pattern;
   string external;
-  string block_size;
   string source_file;
   size_t source_line;
 
@@ -66,10 +65,10 @@ struct Compiler
 
   this(string expr, string file, size_t line)
   {
-    source_file = file;
-    source_line = line;
     errors = "";
     external = "";
+    source_file = file;
+    source_line = line;
     range = Box();
     AST   = CLOP(expr);
     trans = Set!Transformation();
@@ -91,12 +90,12 @@ struct Compiler
       auto t = transform_by_pattern(KBT);
       apply_optimizations(t);
       auto code = "";
-      debug (DISABLE_PERMANENTLY)
+      debug (DEBUG)
       {
-        code ~= "\n// transformations <" ~ trans.toString ~ ">\n";
+        code ~= "// Transformations <" ~ pattern ~ trans.toString ~ ">\n";
+        code ~= dump_symtable();
         code ~= dump_arraytab();
         code ~= dump_intervals();
-        code ~= dump_symtable();
       }
       // @FIXME we need to backup the data that can be overwritten by
       // each new variant. If an array is read from device and written
@@ -215,10 +214,6 @@ struct Compiler
       }
     case "CLOP.TransSpec":
       {
-        if (t.matches.length > 3)
-        {
-          block_size = t.matches[$-2];
-        }
         string[] params;
         if (t.children.length > 1)
           foreach (c; t.children[1].children)
