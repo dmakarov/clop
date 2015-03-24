@@ -515,13 +515,13 @@ struct Compiler
     {
       if (v.is_array)
       {
-        string s = "// defs " ~ ct_itoa(v.defs.length) ~ "\n";
+        string s = "// defs " ~ to!string(v.defs.length) ~ "\n";
         foreach (a; v.defs)
         {
           s ~= "// " ~ to!string(a.matches) ~ "\n";
           s ~= "// " ~ to!string(map!(p => p.toString())(range.map(a))) ~ "\n";
         }
-        s ~= "// uses " ~ ct_itoa(v.uses.length) ~ "\n";
+        s ~= "// uses " ~ to!string(v.uses.length) ~ "\n";
         foreach (a; v.uses)
         {
           s ~= "// " ~ to!string(a.matches) ~ "\n";
@@ -560,11 +560,11 @@ struct Compiler
     foreach (x; 0 .. depth) indent ~= "  ";
     ++depth;
     foreach (i, c; t.children)
-      s ~= indent ~ ct_itoa(i) ~ ": " ~ debug_tree(c) ~ "\n";
+      s ~= indent ~ to!string(i) ~ ": " ~ debug_tree(c) ~ "\n";
     --depth;
     string m = "";
     foreach (i, x; t.matches)
-      m ~= " " ~ ct_itoa(i) ~ ":\"" ~ x ~ "\"";
+      m ~= " " ~ to!string(i) ~ ":\"" ~ x ~ "\"";
     return format("<%s, input[%d,%d]:\"%s\" matches%s>%s%s</%s>", t.name, t.begin, t.end, t.input[t.begin .. t.end], m, s, indent, t.name);
   }
 
@@ -648,32 +648,6 @@ struct Compiler
         return debug_leaf(t);
     default: return t.name;
     }
-  }
-
-  /++
-   +  A very limited integer to string conversion works at compile-time.
-   +/
-  string ct_itoa(T)(T x) if (is (T == byte) || is (T == ubyte)
-                         ||  is (T == short) || is (T == ushort)
-                         ||  is (T == int ) || is (T == uint )
-                         ||  is (T == long) || is (T == ulong))
-  {
-    string s = "";
-    string v = "";
-    static if (is (T == byte) || is (T == short) || is (T == int) || is (T == long))
-    {
-      if (x < 0)
-      {
-        s = "-";
-        x = -x;
-      }
-    }
-    do
-    {
-      v = cast(char)('0' + (x % 10)) ~ v;
-      x /= 10;
-    } while (x > 0);
-    return s ~ v;
   }
 
 } // Compiler class
