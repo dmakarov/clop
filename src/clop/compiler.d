@@ -477,8 +477,17 @@ struct Compiler
   {
     auto items = trans.get_items_as_array();
     auto length = items.length;
-    foreach (p; trans)
-      variants ~= Program(symtable, [p], parameters, t.dup, range, pattern, external);
+    variants ~= Program(symtable, [], parameters, t.dup, range, pattern, external);
+    for (auto i = 0; i < length; ++i)
+    {
+      auto set = [items[i]];
+      variants ~= Program(symtable, set, parameters, t.dup, range, pattern, external);
+      for (auto j = i + 1; j < length; ++j)
+      {
+        set ~= items[j];
+        variants ~= Program(symtable, set, parameters, t.dup, range, pattern, external);
+      }
+    }
   }
 
   /++
