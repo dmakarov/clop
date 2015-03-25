@@ -112,10 +112,7 @@ struct Compiler
       // restore the array before the next variant starts.
       foreach (v; variants)
       {
-        auto vid = pattern ~ v.toString;
-        code ~= "writeln(\"Execute variant " ~ vid ~ "\");\n";
         code ~= v.generate_code();
-        code ~= "writeln(\"Finished variant " ~ vid ~ "\");\n";
       }
       return code;
     }

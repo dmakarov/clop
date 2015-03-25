@@ -56,14 +56,14 @@ struct Program
     auto clhost = format(template_create_opencl_kernel, generate_kernel_name());
     clhost ~= set_args("clop_opencl_kernel") ~ code_to_invoke_kernel() ~ code_to_read_data_from_device();
     auto diagnostics = format("static if (\"%s\" != \"\")\n  pragma (msg, \"%s\");\n", errors, errors);
-    return diagnostics ~ format(template_clop_unit, params, external, kernel, clhost);
+    return diagnostics ~ format(template_clop_unit, params, external, kernel, clhost, toString());
   }
 
   @property
   string toString()
   {
     import std.algorithm : map, reduce;
-    return reduce!((a, b) => a ~ "_" ~ b)("", map!(a => a.toString)(trans));
+    return pattern ~ reduce!((a, b) => a ~ "_" ~ b)("", map!(a => a.toString)(trans));
   }
 
   private:
@@ -101,20 +101,14 @@ struct Program
     }
   }
 
-  auto get_applied_transformations ()
-  {
-    return reduce!((a, b) => a ~ "_" ~ b)("", map!(a => a.toString)(trans));
-  }
-
   auto generate_shared_memory_variable(string v)
   {
     return v ~ "_in_shared_memory";
   }
 
-  auto generate_kernel_name ()
+  auto generate_kernel_name()
   {
-    auto suffix = get_applied_transformations();
-    return format ("clop_kernel_main_%s_%s", pattern, suffix);
+    return format("clop_kernel_main_%s", toString());
   }
 
   auto apply_rectangular_blocking(ParseTree t)
