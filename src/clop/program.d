@@ -85,7 +85,7 @@ struct Program
 
   ParseTree apply_trans(Transformation f, ParseTree t)
   {
-    switch (f.get_name())
+    switch (f.name)
     {
     case "rectangular_blocking":
       return apply_rectangular_blocking(t);
