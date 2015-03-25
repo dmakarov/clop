@@ -471,7 +471,12 @@ struct Compiler
   }
 
   /++
-   +
+   + Create all possible variants of optimized programs.  Different
+   + orderings of the same optimizations are considered equal.
+   + @FIXME more sophisticated logic is needed.  We want to apply one
+   + optimization of each kind, find the most beneficial, then apply
+   + one of remaining optimizations, find the most beneficial
+   + sequence, and so on.
    +/
   void apply_optimizations(ParseTree t)
   {
