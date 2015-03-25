@@ -59,6 +59,13 @@ struct Program
     return diagnostics ~ format(template_clop_unit, params, external, kernel, clhost);
   }
 
+  @property
+  string toString()
+  {
+    import std.algorithm : map, reduce;
+    return reduce!((a, b) => a ~ "_" ~ b)("", map!(a => a.toString)(trans));
+  }
+
   private:
 
   Symbol[string] symtable;
@@ -889,4 +896,5 @@ struct Program
     default: return t.name;
     }
   }
+
 } // Program

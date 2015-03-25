@@ -112,7 +112,10 @@ struct Compiler
       // restore the array before the next variant starts.
       foreach (v; variants)
       {
+        auto vid = pattern ~ v.toString;
+        code ~= "writeln(\"Execute variant " ~ vid ~ "\");\n";
         code ~= v.generate_code();
+        code ~= "writeln(\"Finished variant " ~ vid ~ "\");\n";
       }
       return code;
     }
@@ -475,6 +478,8 @@ struct Compiler
    +/
   void apply_optimizations(ParseTree t)
   {
+    auto items = trans.get_items_as_array();
+    auto length = items.length;
     foreach (p; trans)
       variants ~= Program(symtable, [p], parameters, t.dup, range, pattern, external);
   }
