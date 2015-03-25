@@ -1,6 +1,10 @@
-#include "backprop.h"
-
 #pragma OPENCL EXTENSION cl_khr_fp64 : enable
+
+#define ETA        0.3f
+#define MOMENTUM   0.3f
+#define ONEF       1.0f
+
+#define FP float
 
 __kernel void
 bpnn_layerforward( __global FP *x, __global FP *w, __global FP *sums, __local FP *inputs, __local FP *summands, int n2 )

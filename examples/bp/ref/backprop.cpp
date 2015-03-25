@@ -2,8 +2,12 @@
 #include <sstream>
 #include <unistd.h> // for getopt
 
-#include "CLHelper.h"
-#include "backprop.h"
+#define BLOCK_SIZE 16
+#define ETA        0.3f
+#define MOMENTUM   0.3f
+#define ONEF       1.0f
+
+#define CL_FP cl_float
 
 //#define VALIDATION 1
 
