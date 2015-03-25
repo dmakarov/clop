@@ -471,6 +471,27 @@ struct Compiler
   }
 
   /++
+   +
+   +/
+  void apply_optimizations(ParseTree t)
+  {
+    foreach (p; trans)
+      variants ~= Program(symtable, [p], parameters, t.dup, range, pattern, external);
+  }
+
+  /++
+   +
+   +/
+  bool can_transform_index_expression(ParseTree t)
+  {
+    switch (t.name)
+    {
+    default:
+      return reduce!((a, b) => a && b)(true, map!(a => can_transform_index_expression(a))(t.children));
+    }
+  }
+
+  /++
    + Transforms an AST as necessary to implement antidiagonal
    + synchronization pattern.
    + @FIXME can this be generalized and templatized?
@@ -498,27 +519,6 @@ struct Compiler
                                                     range.symbols[1], max, thread_index)));
     newt.children[0].children = decl ~ newt.children[0].children;
     return newt;
-  }
-
-  /++
-   +
-   +/
-  void apply_optimizations(ParseTree t)
-  {
-    foreach (p; trans)
-      variants ~= Program(symtable, [p], parameters, t.dup, range, pattern, external);
-  }
-
-  /++
-   +
-   +/
-  bool can_transform_index_expression(ParseTree t)
-  {
-    switch (t.name)
-    {
-    default:
-      return reduce!((a, b) => a && b)(true, map!(a => can_transform_index_expression(a))(t.children));
-    }
   }
 
   /+
