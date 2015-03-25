@@ -98,7 +98,7 @@ Sign                   <- "-" / "+"
 
 
 +/
-module clop.parser;
+module clop.ct.parser;
 
 public import pegged.peg;
 import std.algorithm: startsWith;

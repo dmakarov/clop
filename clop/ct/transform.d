@@ -22,7 +22,7 @@
  *  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  *  SOFTWARE.
  */
-module clop.transform;
+module clop.ct.transform;
 
 import std.algorithm : reduce;
 

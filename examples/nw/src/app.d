@@ -520,8 +520,8 @@ class Application {
     }
   } // this()
 
-  /**
-   */
+  /++
+   +/
   void save()
   {
     if (outfile !is null)
@@ -535,8 +535,8 @@ class Application {
     }
   }
 
-  /**
-   */
+  /++
+   +/
   void validate()
   {
     int diff = 0;
@@ -547,8 +547,8 @@ class Application {
       writeln( "DIFFs ", diff );
   }
 
-  /**
-   */
+  /++
+   +/
   void reset()
   {
     F[] = 0;
@@ -556,8 +556,8 @@ class Application {
     foreach ( r; 1 .. rows ) F[r * cols] = -penalty * r;
   }
 
-  /**
-   */
+  /++
+   +/
   void print( const string msg, const int[] A ) const
   {
     writeln( msg );
@@ -570,8 +570,8 @@ class Application {
     }
   }
 
-  /**
-   */
+  /++
+   +/
   void visualize()
   {
     // dumps.
@@ -601,34 +601,34 @@ class Application {
     foreach ( int j; 0 .. cols ) write( "XX" ); writeln( "\n" );
   }
 
-  /**
-   * Maximum of three numbers.
-   **/
+  /++
+   + Maximum of three numbers.
+   +/
   int max3( immutable int a, immutable int b, immutable int c ) const
   {
     auto k = a > b ? a : b;
     return k > c ? k : c;
   }
 
-  /**
-   * baseline_sequential:
-   * implements sequential computation of the alignment scores matrix.
-   *
-   * The algorithm of filling in the matrix F
-   * <p>
-   * <code>
-   *    for i=0 to length(A) F(i,0) ← d*i
-   *    for j=0 to length(B) F(0,j) ← d*j
-   *    for i=1 to length(A)
-   *    for j=1 to length(B)
-   *    {
-   *      Match  ← F( i-1, j-1) + S(Ai, Bj)
-   *      Delete ← F( i-1, j  ) + d
-   *      Insert ← F( i  , j-1) + d
-   *      F(i,j) ← max(Match, Insert, Delete)
-   *    }
-   * </code>
-   */
+  /++
+   + baseline_sequential:
+   + implements sequential computation of the alignment scores matrix.
+   +
+   + The algorithm of filling in the matrix F
+   + <p>
+   + <code>
+   +    for i=0 to length(A) F(i,0) ← d*i
+   +    for j=0 to length(B) F(0,j) ← d*j
+   +    for i=1 to length(A)
+   +    for j=1 to length(B)
+   +    {
+   +      Match  ← F( i-1, j-1) + S(Ai, Bj)
+   +      Delete ← F( i-1, j  ) + d
+   +      Insert ← F( i  , j-1) + d
+   +      F(i,j) ← max(Match, Insert, Delete)
+   +    }
+   + </code>
+   +/
   void baseline_sequential()
   {
     foreach ( r; 1 .. rows )
@@ -638,15 +638,15 @@ class Application {
                                 F[ r      * cols + c - 1] - penalty );
   }
 
-  /**
-   * rectangular_block:
-   * implements sequential computation of the alignment scores matrix
-   * for a single rectangular block of fixed size #BLOCK_SIZE.
-   * @br: block row, the vertical location of the block from the top of the
-   *      matrix, starting with 0 block.
-   * @bc: block column, the horizontal location of the block from the
-   *      left side of the matrix, starting with 0 block.
-   */
+  /++
+   + rectangular_block:
+   + implements sequential computation of the alignment scores matrix
+   + for a single rectangular block of fixed size #BLOCK_SIZE.
+   + @br: block row, the vertical location of the block from the top of the
+   +      matrix, starting with 0 block.
+   + @bc: block column, the horizontal location of the block from the
+   +      left side of the matrix, starting with 0 block.
+   +/
   void rectangular_block( int br, int bc )
   {
     while ( br >= 0 && bc < (cols - 1) / BLOCK_SIZE )
@@ -663,8 +663,8 @@ class Application {
     }
   }
 
-  /**
-   */
+  /++
+   +/
   void rectangles()
   {
     auto max_blocks = (cols - 1) / BLOCK_SIZE;
@@ -676,8 +676,8 @@ class Application {
     }
   }
 
-  /**
-   */
+  /++
+   +/
   void diamond_blocks( int br, int bc  )
   {
     while ( br >= 0 && bc < (cols - 1) / BLOCK_SIZE )
@@ -718,8 +718,8 @@ class Application {
     }
   }
 
-  /**
-   */
+  /++
+   +/
   void diamonds()
   {
     for ( int i = 0; i < rows / BLOCK_SIZE - 1; ++i )
@@ -736,36 +736,36 @@ class Application {
     }
   }
 
-  /**
-   * <code>
-   *    AlignmentA ← ""
-   *    AlignmentB ← ""
-   *    i ← length(A)
-   *    j ← length(B)
-   *    while (i > 0 or j > 0)
-   *    {
-   *      if (i > 0 and j > 0 and F(i,j) == F(i-1,j-1) + S(Ai, Bj))
-   *      {
-   *        AlignmentA ← Ai + AlignmentA
-   *        AlignmentB ← Bj + AlignmentB
-   *        i ← i - 1
-   *        j ← j - 1
-   *      }
-   *      else if (i > 0 and F(i,j) == F(i-1,j) + d)
-   *      {
-   *        AlignmentA ← Ai + AlignmentA
-   *        AlignmentB ← "-" + AlignmentB
-   *        i ← i - 1
-   *      }
-   *      else (j > 0 and F(i,j) == F(i,j-1) + d)
-   *      {
-   *        AlignmentA ← "-" + AlignmentA
-   *        AlignmentB ← Bj + AlignmentB
-   *        j ← j - 1
-   *      }
-   *    }
-   * </code>
-   */
+  /++
+   + <code>
+   +    AlignmentA ← ""
+   +    AlignmentB ← ""
+   +    i ← length(A)
+   +    j ← length(B)
+   +    while (i > 0 or j > 0)
+   +    {
+   +      if (i > 0 and j > 0 and F(i,j) == F(i-1,j-1) + S(Ai, Bj))
+   +      {
+   +        AlignmentA ← Ai + AlignmentA
+   +        AlignmentB ← Bj + AlignmentB
+   +        i ← i - 1
+   +        j ← j - 1
+   +      }
+   +      else if (i > 0 and F(i,j) == F(i-1,j) + d)
+   +      {
+   +        AlignmentA ← Ai + AlignmentA
+   +        AlignmentB ← "-" + AlignmentB
+   +        i ← i - 1
+   +      }
+   +      else (j > 0 and F(i,j) == F(i,j-1) + d)
+   +      {
+   +        AlignmentA ← "-" + AlignmentA
+   +        AlignmentB ← Bj + AlignmentB
+   +        j ← j - 1
+   +      }
+   +    }
+   + </code>
+   +/
   void compute_alignments()
   {
     int i = rows - 2;
@@ -800,8 +800,8 @@ class Application {
     }
   }
 
-  /**
-   */
+  /++
+   +/
   double opencl_noblocks()
   {
     double result = 0.0;
@@ -867,8 +867,8 @@ class Application {
     return result;
   }
 
-  /**
-   */
+  /++
+   +/
   double opencl_noblocks_indirectS()
   {
     double result = 0.0;
@@ -929,8 +929,8 @@ class Application {
     return result;
   }
 
-  /**
-   */
+  /++
+   +/
   double opencl_rectangles()
   {
     double result = 0.0;
@@ -996,8 +996,8 @@ class Application {
     return result;
   }
 
-  /**
-   */
+  /++
+   +/
   double opencl_rectangles_indirectS()
   {
     double result = 0.0;
@@ -1077,8 +1077,8 @@ class Application {
     return result;
   }
 
-  /**
-   */
+  /++
+   +/
   double opencl_diamonds()
   {
     double result = 0.0;
@@ -1190,8 +1190,8 @@ class Application {
     return result;
   }
 
-  /**
-   */
+  /++
+   +/
   double opencl_diamonds_indirectS()
   {
     double result = 0.0;
@@ -1324,8 +1324,8 @@ class Application {
     return result;
   }
 
-  /**
-   */
+  /++
+   +/
   void clop_dsl()
   {
     // use CLOP DSL to generate OpenCL kernel and API calls.
@@ -1342,8 +1342,8 @@ class Application {
     } ) );
   }
 
-  /**
-   */
+  /++
+   +/
   void clop_dsl_indirectS()
   {
     mixin( compile(
@@ -1359,8 +1359,8 @@ class Application {
     } ) );
   }
 
-  /**
-   */
+  /++
+   +/
   void run()
   {
     size_t size;

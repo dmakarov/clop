@@ -24,7 +24,7 @@
  */
 module clop.compiler;
 
-public import clop.runtime;
+public import clop.rt.ctx;
 
 private:
 
@@ -34,13 +34,13 @@ import std.conv;
 import std.string;
 import std.traits;
 
-import clop.analysis;
-import clop.grammar;
-import clop.program;
-import clop.structs;
-import clop.symbol;
-import clop.templates;
-import clop.transform;
+import clop.ct.analysis;
+import clop.ct.grammar;
+import clop.ct.program;
+import clop.ct.structs;
+import clop.ct.symbol;
+import clop.ct.templates;
+import clop.ct.transform;
 
 
 /++
@@ -462,9 +462,13 @@ struct Compiler
    +/
   ParseTree transform_by_pattern(ParseTree t)
   {
-    if (pattern == "Antidiagonal")
+    if (pattern is null)
     {
-      return Antidiagonal(t);
+      return Plain(t);
+    }
+    if (pattern == "Antidiagonal") //if (hasMember!(Compiler, pattern))
+    {
+      return Antidiagonal(t); //return mixin("this." ~ pattern ~ "(t)");
     }
     errors ~= "CLOP: unknown syncronization pattern " ~ pattern ~ "\n";
     return t;
@@ -505,6 +509,28 @@ struct Compiler
     default:
       return reduce!((a, b) => a && b)(true, map!(a => can_transform_index_expression(a))(t.children));
     }
+  }
+
+  /++
+   + Transforms an AST with no synchronization pattern.
+   + Each thread computes a single item in the NDRange.
+   + @FIXME can this be generalized and templatized?
+   +/
+  ParseTree Plain(ParseTree t)
+  {
+    if (t.children.length == 0 || t.name != "CLOP.CompoundStatement")
+    {
+      return t;
+    }
+    ParseTree newt = t.dup;
+    ParseTree[] decl;
+    for (auto i = 0; i < range.get_dimensionality(); ++i)
+    {
+      decl ~= CLOP.decimateTree(CLOP.Declaration(format("int %s = get_global_id(%d);",
+                                                        range.symbols[i], i)));
+    }
+    newt.children[0].children = decl ~ newt.children[0].children;
+    return newt;
   }
 
   /++

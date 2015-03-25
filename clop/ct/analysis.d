@@ -1,4 +1,4 @@
-module clop.analysis;
+module clop.ct.analysis;
 
 import std.string;
 

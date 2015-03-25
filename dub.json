@@ -11,8 +11,20 @@
             "name"         : "runtime",
             "targetType"   : "library",
             "targetPath"   : "./lib",
-            "sourcePaths"  : ["src"],
-            "importPaths"  : ["src"],
+            "sourcePaths"  : ["clop/rt"],
+            "lflags-linux" : ["-lOpenCL", "-lrt"],
+            "lflags-osx"   : ["-framework", "OpenCL"],
+            "dependencies" : {
+                "derelict-cl" : "~>1.2.2",
+                "pegged"      : "~>0.1.0"
+            }
+        },
+        {
+            "name"         : "compiler",
+            "targetType"   : "library",
+            "targetPath"   : "./lib",
+            "sourcePaths"  : ["clop"],
+            "excludedSourceFiles" : ["clop/rt/ctx.d"],
             "lflags-linux" : ["-lOpenCL", "-lrt"],
             "lflags-osx"   : ["-framework", "OpenCL"],
             "dependencies" : {

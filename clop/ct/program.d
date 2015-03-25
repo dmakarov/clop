@@ -22,7 +22,7 @@
  *  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  *  SOFTWARE.
  */
-module clop.program;
+module clop.ct.program;
 
 import std.algorithm : reduce;
 import std.conv;
@@ -31,11 +31,11 @@ import std.string;
 
 import pegged.grammar;
 
-import clop.analysis;
-import clop.structs;
-import clop.symbol;
-import clop.templates;
-import clop.transform;
+import clop.ct.analysis;
+import clop.ct.structs;
+import clop.ct.symbol;
+import clop.ct.templates;
+import clop.ct.transform;
 
 /++
  +  The container of all information related to a specific variant
@@ -46,7 +46,7 @@ struct Program
   /++
    + Return the string that is this program's kernel source code.
    +/
-  string generate_code ()
+  string generate_code()
   {
     auto t = optimize(AST); // apply the optimizing transformations on the AST
     auto kbody = translate(t);  // generate OpenCL kernel source code from the AST
@@ -66,22 +66,25 @@ struct Program
     return pattern ~ reduce!((a, b) => a ~ "_" ~ b)("", map!(a => a.toString)(trans));
   }
 
-  private:
+ private:
 
-  Symbol[string] symtable;
-  Transformation[] trans;
-  Argument[] parameters;
-  ParseTree AST;
-  Box range;
-  string pattern;
-  string external;
-  string errors;
+  Symbol[string] symtable; ///
+  Transformation[] trans;  ///
+  Argument[] parameters;   ///
+  ParseTree AST;           ///
+  Box range;               ///
+  string pattern;          ///
+  string external;         ///
+  string errors;           ///
 
-  string kernel;
-  string indent = "  ";
-  string block_size = "8";
-  bool use_shadow = false;
+  string kernel;           ///
+  string indent = "  ";    ///
+  string block_size = "8"; ///
+  bool use_shadow = false; ///
 
+  /++
+   +
+   +/
   ParseTree optimize(ParseTree t)
   {
     auto r = t;
@@ -614,45 +617,45 @@ struct Program
     return result;
   }
 
+  /++
+   +
+   +/
   string code_to_invoke_kernel()
   {
-    debug (DEBUG_GRAMMAR) return "";
-    else
+    if (pattern == "Antidiagonal")
     {
-      if (pattern == "Antidiagonal")
+      if (true) // plain anti-diagonal pattern, no blocking.
       {
-        if (true) // plain anti-diagonal pattern, no blocking.
-        {
-          auto n = 0;
-          ulong argindex[2];
-          foreach (i, p; parameters)
-            if (p.skip)
-              argindex[n++] = i;
-          auto gsz0 = range.intervals[0].get_max();
-          auto name = "clop_opencl_kernel";
-          return format(template_antidiagonal_invoke_kernel,
-                        gsz0, gsz0, gsz0, name, argindex[0], name);
-        }
-        else
-        {
-          auto gsz0 = range.intervals[0].get_max();
-          auto bsz0 = block_size;
-          auto bsz1 = block_size;
-          auto name = "clop_opencl_kernel";
-          auto n = 0;
-          ulong argindex[2];
-          foreach (i, p; parameters)
-            if (p.skip)
-              argindex[n++] = i;
-          return format(template_antidiagonal_rectangular_blocks_invoke_kernel,
-                        gsz0, bsz0, bsz0, bsz0, name, argindex[0], name, argindex[1], name);
-        }
+        auto n = 0;
+        ulong argindex[2];
+        foreach (i, p; parameters)
+          if (p.skip)
+            argindex[n++] = i;
+        auto gsz0 = range.intervals[0].get_max();
+        auto name = "clop_opencl_kernel";
+        return format(template_antidiagonal_invoke_kernel,
+                      gsz0, gsz0, gsz0, name, argindex[0], name);
       }
-      return "";
+      else
+      {
+        auto gsz0 = range.intervals[0].get_max();
+        auto bsz0 = block_size;
+        auto bsz1 = block_size;
+        auto name = "clop_opencl_kernel";
+        auto n = 0;
+        ulong argindex[2];
+        foreach (i, p; parameters)
+          if (p.skip)
+            argindex[n++] = i;
+        return format(template_antidiagonal_rectangular_blocks_invoke_kernel,
+                      gsz0, bsz0, bsz0, bsz0, name, argindex[0], name, argindex[1], name);
+      }
     }
+    return "";
   }
 
   /++
+   +
    +/
   string translate_index_expression(string v, ParseTree t)
   {
@@ -670,6 +673,9 @@ struct Program
     return s;
   }
 
+  /++
+   +
+   +/
   string translate(ParseTree t)
   {
     switch (t.name)
@@ -891,4 +897,4 @@ struct Program
     }
   }
 
-} // Program
+} // Program struct

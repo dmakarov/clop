@@ -1,7 +1,7 @@
-module clop.grammar;
+module clop.ct.grammar;
 
-import pegged.grammar;
 public import pegged.peg;
+import pegged.grammar;
 
 mixin(grammar(q{
  CLOP:

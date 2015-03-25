@@ -1,10 +1,10 @@
-module clop.symbol;
+module clop.ct.symbol;
 
 import std.string;
 
 import pegged.grammar;
 
-import clop.analysis;
+import clop.ct.analysis;
 
 struct Symbol
 {

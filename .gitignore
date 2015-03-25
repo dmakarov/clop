@@ -5,6 +5,7 @@ bin/
 lib/
 examples/*/bin/
 
+.project
 .settings
 dub.selections.json
 FILES

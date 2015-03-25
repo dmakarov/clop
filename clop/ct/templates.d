@@ -1,4 +1,4 @@
-module clop.templates;
+module clop.ct.templates;
 
 enum
 

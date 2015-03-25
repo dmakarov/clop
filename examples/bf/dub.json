@@ -4,14 +4,15 @@
     "description"   : "Bellman-Ford algorithm implementation.",
     "targetType"    : "executable",
     "targetPath"    : "./bin",
-    "importPaths"   : ["../../src"],
-    "libs"          : ["clop_runtime"],
+    "importPaths"   : ["../../clop"],
+    "libs"          : ["clop_runtime", "clop_compiler"],
     "lflags-linux"  : ["-Llib", "-lOpenCL", "-lrt"],
     "lflags-osx"    : ["-Llib", "-framework", "OpenCL"],
     "dependencies"  : {
         "derelict-cl"  : "~>1.2.2",
         "pegged"       : "~>0.1.0",
-        "clop:runtime" : "*"
+        "clop:runtime" : "*",
+        "clop:compiler": "*"
     },
     "buildTypes"    : {
         "debug"        : { "debugVersions" : ["DEBUG"] },
