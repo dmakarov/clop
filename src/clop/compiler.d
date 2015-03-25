@@ -24,15 +24,15 @@
  */
 module clop.compiler;
 
+public import clop.runtime;
+
+private:
+
 import std.algorithm : reduce;
 import std.container;
 import std.conv;
 import std.string;
 import std.traits;
-
-public import clop.runtime;
-
-private:
 
 import clop.analysis;
 import clop.grammar;
@@ -48,13 +48,13 @@ import clop.transform;
  +/
 struct Compiler
 {
-  Box range;
-  ParseTree AST;
-  ParseTree KBT; // kernel body compound statement AST
-  Program[] variants;
-  Argument[] parameters;
-  Symbol[string] symtable;
-  Set!Transformation trans;
+  Box range;                /// box of intervals for this piece
+  ParseTree AST;            /// the tree for this piece
+  ParseTree KBT;            /// kernel body compound statement AST
+  Program[] variants;       /// one variant for each set of transformations
+  Argument[] parameters;    /// kernel parameters
+  Symbol[string] symtable;  /// the symbol table
+  Set!Transformation trans; /// set of optimizing transformations
 
   string errors;
   string pattern;
@@ -66,6 +66,9 @@ struct Compiler
   bool eval_def     = false;
   uint depth        = 0;
 
+  /++
+   +
+   +/
   this(string expr, string file, size_t line)
   {
     errors = "";
@@ -77,6 +80,9 @@ struct Compiler
     trans = Set!Transformation();
   }
 
+  /++
+   +
+   +/
   string generate_code()
   {
     debug (DEBUG_GRAMMAR)
@@ -114,6 +120,9 @@ struct Compiler
 
   // The following methods are internal to the struct and not used outside.
 
+  /++
+   +
+   +/
   void analyze(ParseTree t)
   {
     switch (t.name)
@@ -438,6 +447,9 @@ struct Compiler
     }
   }
 
+  /++
+   +
+   +/
   void collect_parameters()
   {
     foreach (s, v; symtable)
@@ -445,6 +457,9 @@ struct Compiler
         parameters ~= [Argument(s)];
   }
 
+  /++
+   +
+   +/
   ParseTree transform_by_pattern(ParseTree t)
   {
     if (pattern == "Antidiagonal")
@@ -485,12 +500,18 @@ struct Compiler
     return newt;
   }
 
+  /++
+   +
+   +/
   void apply_optimizations(ParseTree t)
   {
     foreach (p; trans)
       variants ~= Program(symtable, [p], parameters, t.dup, range, pattern, external);
   }
 
+  /++
+   +
+   +/
   bool can_transform_index_expression(ParseTree t)
   {
     switch (t.name)
@@ -499,6 +520,10 @@ struct Compiler
       return reduce!((a, b) => a && b)(true, map!(a => can_transform_index_expression(a))(t.children));
     }
   }
+
+  /+
+   + Methods to dump compiler's internal and debug information
+   +/
 
   string dump_symtable()
   {
@@ -652,6 +677,12 @@ struct Compiler
 
 } // Compiler class
 
+unittest {
+  auto s = "";
+  auto c = Compiler(s, __FILE__, __LINE__);
+  auto p = c.generate_code();
+}
+
 /+
  +  Free functions, not members of Compiler class.  These functions are
  +  evaluated at compile time and used for the second level of mixin
@@ -785,3 +816,8 @@ string compile(string expr, string file = __FILE__, size_t line = __LINE__)
   auto dump = format("debug (DEBUG) writeln(\"%s:\\n\",`%s`,\"%s:\");\n", head, code, tail);
   return dump ~ code;
 }
+
+// Local Variables:
+// hide-functions: ("dump_symtable" "dump_arraytab" "dump_intervals" \
+//                  "dump_parameters" "debug_node" "debug_leaf" "debug_tree")
+// End:
