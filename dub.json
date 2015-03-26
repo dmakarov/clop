@@ -12,11 +12,8 @@
             "targetType"   : "library",
             "targetPath"   : "./lib",
             "sourcePaths"  : ["clop/rt"],
-            "lflags-linux" : ["-lOpenCL", "-lrt"],
-            "lflags-osx"   : ["-framework", "OpenCL"],
             "dependencies" : {
-                "derelict-cl" : "~>1.2.2",
-                "pegged"      : "~>0.1.0"
+                "derelict-cl" : "~>1.2.2"
             }
         },
         {
@@ -25,8 +22,6 @@
             "targetPath"   : "./lib",
             "sourcePaths"  : ["clop"],
             "excludedSourceFiles" : ["clop/rt/ctx.d"],
-            "lflags-linux" : ["-lOpenCL", "-lrt"],
-            "lflags-osx"   : ["-framework", "OpenCL"],
             "dependencies" : {
                 "derelict-cl" : "~>1.2.2",
                 "pegged"      : "~>0.1.0"

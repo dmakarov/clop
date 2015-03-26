@@ -9,8 +9,6 @@
     "lflags-linux"  : ["-Llib", "-lOpenCL", "-lrt"],
     "lflags-osx"    : ["-Llib", "-framework", "OpenCL"],
     "dependencies"  : {
-        "derelict-cl"  : "~>1.2.2",
-        "pegged"       : "~>0.1.0",
         "clop:runtime" : "*",
         "clop:compiler": "*"
     },
