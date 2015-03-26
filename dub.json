@@ -1,6 +1,8 @@
 {
     "name"         : "clop",
     "description"  : "OpenCL OPtimizer DSL.",
+    "authors"      : ["Dmitri Makarov"],
+    "license"      : "MIT",
     "targetType"   : "none",
     "buildTypes"   : {
         "debug"            : { "debugVersions" : ["DEBUG"] },
@@ -30,5 +32,6 @@
         "./examples/nw",
         "./examples/pf",
         "./examples/stencil"
-    ]
+    ],
+    "copyright": "Copyright © 2014-2015, Dmitri Makarov"
 }
