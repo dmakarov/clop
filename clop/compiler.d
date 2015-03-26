@@ -466,9 +466,28 @@ struct Compiler
     {
       return Plain(t);
     }
-    if (pattern == "Antidiagonal") //if (hasMember!(Compiler, pattern))
+    // check all Compiler member whether we can find a callable one
+    // with the same name as the value of pattern
+    foreach (member; __traits (allMembers, Compiler))
     {
-      return Antidiagonal(t); //return mixin("this." ~ pattern ~ "(t)");
+      if (pattern == member)
+      {
+        // @FIXME the requirement ReturnType!M == ParseTree is to
+        // force the D compiler to consider in the following mixin
+        // only the methods that can do pattern transformations.
+        // Otherwise, the D compiler will check(?) every callable
+        // member of the Compiler struct and see if it can be called
+        // with a ParseTree parameter and return a ParseTree, which is
+        // not true for the majority of Compiler's methods.  This
+        // condition prevents a compile-time error, by restricting the
+        // set of checked(?) methods to the ones that don't trigger an
+        // error.  If we add a method that returns ParseTree but takes
+        // different parameters, this will break.  How to do this
+        // correctly?
+        alias M = typeof (mixin ("this." ~ member));
+        static if (isCallable!M && is (ReturnType!M == ParseTree))
+          return mixin ("this." ~ member ~ "(t)");
+      }
     }
     errors ~= "CLOP: unknown syncronization pattern " ~ pattern ~ "\n";
     return t;
@@ -486,15 +505,15 @@ struct Compiler
   {
     auto items = trans.get_items_as_array();
     auto length = items.length;
-    variants ~= Program(symtable, [], parameters, t.dup, range, pattern, external);
+    variants ~= Program(symtable, [], parameters, t.dup, range, pattern, external, errors);
     for (auto i = 0; i < length; ++i)
     {
       auto set = [items[i]];
-      variants ~= Program(symtable, set, parameters, t.dup, range, pattern, external);
+      variants ~= Program(symtable, set, parameters, t.dup, range, pattern, external, errors);
       for (auto j = i + 1; j < length; ++j)
       {
         set ~= items[j];
-        variants ~= Program(symtable, set, parameters, t.dup, range, pattern, external);
+        variants ~= Program(symtable, set, parameters, t.dup, range, pattern, external, errors);
       }
     }
   }
