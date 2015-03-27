@@ -28,6 +28,7 @@
             "sourcePaths"  : ["clop/rt"],
             "dependencies" : { "derelict-cl" : "~>1.2.2" }
         },
+        "./examples/algebra",
         "./examples/nw",
         "./examples/pf",
         "./examples/stencil"

@@ -1,0 +1,7 @@
+* General information
+  This program performs simple linear algebra operations.
+
+* Usage
+#+BEGIN_SRC sh
+  ./bin/algebra
+#+END_SRC
