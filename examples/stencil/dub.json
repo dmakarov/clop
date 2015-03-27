@@ -5,12 +5,11 @@
     "targetType"    : "executable",
     "targetPath"    : "./bin",
     "importPaths"   : ["../../clop"],
-    "libs"          : ["clop_runtime", "clop_compiler"],
     "lflags-linux"  : ["-Llib", "-lOpenCL", "-lrt"],
     "lflags-osx"    : ["-Llib", "-framework", "OpenCL"],
     "dependencies"  : {
-        "clop:runtime" : "*",
-        "clop:compiler": "*"
+        "clop:compiler": "*",
+        "clop:runtime" : "*"
     },
     "buildTypes"    : {
         "debug"        : { "debugVersions" : ["DEBUG"] },

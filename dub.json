@@ -2,6 +2,7 @@
     "name"         : "clop",
     "description"  : "OpenCL OPtimizer DSL.",
     "authors"      : ["Dmitri Makarov"],
+    "copyright"    : "Copyright © 2014-2015, Dmitri Makarov",
     "license"      : "MIT",
     "targetType"   : "none",
     "buildTypes"   : {
@@ -10,28 +11,25 @@
     },
     "subPackages"  : [
         {
-            "name"         : "runtime",
-            "targetType"   : "library",
-            "targetPath"   : "./lib",
-            "sourcePaths"  : ["clop/rt"],
-            "dependencies" : {
-                "derelict-cl" : "~>1.2.2"
-            }
-        },
-        {
             "name"         : "compiler",
             "targetType"   : "library",
             "targetPath"   : "./lib",
             "sourcePaths"  : ["clop"],
-            "excludedSourceFiles" : ["clop/rt/ctx.d"],
             "dependencies" : {
                 "derelict-cl" : "~>1.2.2",
                 "pegged"      : "~>0.1.0"
-            }
+            },
+            "excludedSourceFiles" : ["clop/rt/ctx.d"]
+        },
+        {
+            "name"         : "runtime",
+            "targetType"   : "library",
+            "targetPath"   : "./lib",
+            "sourcePaths"  : ["clop/rt"],
+            "dependencies" : { "derelict-cl" : "~>1.2.2" }
         },
         "./examples/nw",
         "./examples/pf",
         "./examples/stencil"
     ],
-    "copyright": "Copyright © 2014-2015, Dmitri Makarov"
 }
