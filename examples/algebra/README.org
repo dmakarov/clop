@@ -3,5 +3,5 @@
 
 * Usage
 #+BEGIN_SRC sh
-  ./bin/algebra
+  ./bin/algebra 32
 #+END_SRC
