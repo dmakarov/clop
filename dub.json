@@ -17,7 +17,7 @@
             "sourcePaths"  : ["clop"],
             "dependencies" : {
                 "derelict-cl" : "~>1.2.2",
-                "pegged"      : "~master"
+                "pegged"      : "~0.1.0"
             },
             "excludedSourceFiles" : ["clop/rt/ctx.d"]
         },
