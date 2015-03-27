@@ -627,7 +627,7 @@ struct Program
       if (true) // plain anti-diagonal pattern, no blocking.
       {
         auto n = 0;
-        ulong argindex[2];
+        ulong[2] argindex;
         foreach (i, p; parameters)
           if (p.skip)
             argindex[n++] = i;
@@ -643,7 +643,7 @@ struct Program
         auto bsz1 = block_size;
         auto name = "clop_opencl_kernel";
         auto n = 0;
-        ulong argindex[2];
+        ulong[2] argindex;
         foreach (i, p; parameters)
           if (p.skip)
             argindex[n++] = i;
