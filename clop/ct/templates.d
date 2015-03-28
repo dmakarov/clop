@@ -8,12 +8,14 @@ template_clop_unit = q{
     import std.datetime;
     StopWatch timer;
     %s
-    char[] clop_opencl_program_source = (%s ~ %s).dup;
+    char[] clop_opencl_program_source = (q{
+        %s
+      } ~ %s).dup;
     timer.start();
     %s
     timer.stop();
     TickDuration ticks = timer.peek();
-    writefln("VARIANT %s %%5.3f [s]", ticks.usecs / 1E6);
+    writefln("CLOP %s %%5.3f [s]", ticks.usecs / 1E6);
   }
   catch( Exception e )
   {

@@ -137,12 +137,10 @@ struct Compiler
         if (t.children[0].name == "CLOP.ExternalDeclarations")
         {
           auto x = t.children[0];
-          external = "q{\n";
           foreach (m; x.matches)
           {
             external ~= " " ~ m;
           }
-          external ~= "\n}";
           analyze(t.children[0]);
           analyze(t.children[1]);
         }
