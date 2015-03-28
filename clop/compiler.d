@@ -434,15 +434,30 @@ struct Compiler
     {
       if (v.is_array && v.can_cache)
       {
-        auto uses = v.uses;
-        auto box = range.map(uses[0]);
-        foreach (u; uses[1 .. $])
+        if (v.uses.length > 0)
         {
-          auto newbox = range.map(u);
-          foreach (i; 0 .. box.length)
-            box[i] = interval_union(box[i], newbox[i]);
+          auto uses = v.uses;
+          auto box = range.map(uses[0]);
+          foreach (u; uses[1 .. $])
+          {
+            auto newbox = range.map(u);
+            foreach (i; 0 .. box.length)
+              box[i] = interval_union(box[i], newbox[i]);
+          }
+          symtable[k].box = box;
         }
-        symtable[k].box = box;
+        else if (v.defs.length > 0)
+        {
+          auto defs = v.defs;
+          auto box = range.map(defs[0]);
+          foreach (d; defs[1 .. $])
+          {
+            auto newbox = range.map(d);
+            foreach (i; 0 .. box.length)
+              box[i] = interval_union(box[i], newbox[i]);
+          }
+          symtable[k].box = box;
+        }
       }
     }
   }
