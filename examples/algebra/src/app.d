@@ -166,12 +166,8 @@ class Application {
     writefln("OPENCL %5.3f [s]", ticks.usecs / 1E6);
     validate();
 
-    timer.reset();
-    timer.start();
+    C[] = float.init;
     clop_compute();
-    timer.stop();
-    ticks = timer.peek();
-    writefln("CLOP   %5.3f [s]", ticks.usecs / 1E6);
     validate();
   }
 } // Application class
