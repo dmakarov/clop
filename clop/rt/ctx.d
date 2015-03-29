@@ -355,6 +355,11 @@ class NDArray(T)
     return data.ptr;
   }
 
+  ref T[] opCast(U)() if (is (U == T[]))
+  {
+    return data;
+  }
+
   T[] opIndex()
   {
     return data[];
