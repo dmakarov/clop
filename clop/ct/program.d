@@ -627,9 +627,9 @@ struct Program
   {
     if (pattern is null)
     {
-      auto global = "[size]";             // FIXME replace with computed values
-      auto kernel = "clop_opencl_kernel"; // FIXME replace with computed values
-      auto dimensions = 1;                // FIXME replace with computed values
+      auto global = "[" ~ range.get_interval_sizes() ~ "]";
+      auto kernel = "clop_opencl_kernel"; // FIXME shouldn't be hard-coded.
+      auto dimensions = range.get_dimensions();
       return format(template_plain_invoke_kernel, global, kernel, dimensions);
     }
     if (pattern == "Antidiagonal")
@@ -669,7 +669,7 @@ struct Program
    +/
   string translate_index_expression(string v, ParseTree t)
   {
-    if (t.children.length == 1 || t.children.length != range.get_dimensionality() || v !in symtable || symtable[v].box is null)
+    if (t.children.length == 1 || t.children.length != range.get_dimensions() || v !in symtable || symtable[v].box is null)
     {
       return translate(t);
     }

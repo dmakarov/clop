@@ -201,7 +201,7 @@ struct Compiler
     case "CLOP.RangeSpec":
       {
         auto s = t.matches[0];
-        auto d = range.get_dimensionality();
+        auto d = range.get_dimensions();
         symtable[s] = Symbol(s, "int", t, null, null, null, "clop_local_index_" ~ s, true, false, false);
         range.intervals ~= [Interval(t.children[1], t.children[2])];
         range.symbols ~= [s];
@@ -556,7 +556,7 @@ struct Compiler
     }
     ParseTree newt = t.dup;
     ParseTree[] decl;
-    for (auto i = 0; i < range.get_dimensionality(); ++i)
+    for (auto i = 0; i < range.get_dimensions(); ++i)
     {
       decl ~= CLOP.decimateTree(CLOP.Declaration(format("int %s = get_global_id(%d);",
                                                         range.symbols[i], i)));
@@ -635,7 +635,7 @@ struct Compiler
   string dump_intervals()
   {
     string result = "// The intervals:\n";
-    foreach (k; 0 .. range.get_dimensionality())
+    foreach (k; 0 .. range.get_dimensions())
     {
       result ~= "// " ~ range.symbols[k] ~ ": " ~ range.intervals[k].toString() ~ "\n";
     }

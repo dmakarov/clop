@@ -23,23 +23,29 @@ struct Box
   /// map range parameter name to dimension index; dimension 0 is the inner most
   ulong[string] s2i;
 
-  this( this )
+  this(this)
   {
     intervals = intervals.dup;
     symbols   = symbols.dup;
     s2i       = s2i.dup;
   }
 
-  auto get_dimensionality()
+  auto get_dimensions()
   {
     return intervals.length;
   }
 
-  string get_size( ulong dimension )
+  string get_size(ulong dimension)
   {
     if ( dimension >= intervals.length )
       return null;
     return intervals[dimension].get_size();
+  }
+
+  string get_interval_sizes()
+  {
+    import std.algorithm : reduce;
+    return reduce!((a, b) => a ~ ", " ~ b.get_size())(intervals[0].get_size(), intervals[1 .. $]);
   }
 
   string toString()
@@ -54,7 +60,7 @@ struct Box
 
   Interval[] map(ref ParseTree t)
   {
-    if (t.name != "CLOP.Expression" || t.children.length != get_dimensionality())
+    if (t.name != "CLOP.Expression" || t.children.length != get_dimensions())
     {
       return null;
     }
