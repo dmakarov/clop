@@ -27,7 +27,6 @@ module clop.examples.vectors;
 import std.conv;
 import std.datetime;
 import std.getopt;
-import std.functional : binaryFun;
 import std.random;
 import std.stdio;
 
@@ -177,14 +176,15 @@ class Application {
     timer.stop();
     ticks = timer.peek();
     writefln("OPENCL %5.3f [s]", ticks.usecs / 1E6);
-    validate!((a, b) => a + b)(C, A, B);
+    alias check = validate!((a, b) => a + b);
+    check(C, A, B);
 
     C[] = cl_float.init;
     clop_add_vectors();
-    validate!((a, b) => a + b)(C, A, B);
+    check(C, A, B);
 
     clop_add_matrices();
-    validate!((a, b) => a + b)(cast(cl_float[]) R, cast(cl_float[]) M, cast(cl_float[]) N);
+    check(cast(cl_float[]) R, cast(cl_float[]) M, cast(cl_float[]) N);
   }
 } // Application class
 
@@ -199,11 +199,11 @@ class Application {
  +/
 template validate(alias fun)
 {
-  void validate(T)(T[] R, T[] A, T[] B)
+  void validate(T)(T[] R, T[] A, T[] B) if (is (typeof (fun(A[0], B[0])) == T))
   {
     uint diff = 0;
     foreach (ii; 0 .. R.length)
-      if (R[ii] != binaryFun!fun(A[ii], B[ii]))
+      if (R[ii] != fun(A[ii], B[ii]))
         ++diff;
     if (diff > 0)
       writeln("DIFFs ", diff);
