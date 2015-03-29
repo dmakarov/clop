@@ -40,7 +40,7 @@ class Application {
 
   static immutable int SEED  =  1;
 
-  float[] A, B, C;
+  cl_float[] A, B, C;
   size_t size;
 
   /++
@@ -52,9 +52,9 @@ class Application {
       throw new Exception("ERROR: invalid args # " ~ to!(string)(args.length - 1));
     }
     size = to!(size_t)(args[1]);
-    A = new float[size]; assert(A !is null, "Can't allocate array A");
-    B = new float[size]; assert(B !is null, "Can't allocate array B");
-    C = new float[size]; assert(C !is null, "Can't allocate array C");
+    A = new cl_float[size]; assert(A !is null, "Can't allocate array A");
+    B = new cl_float[size]; assert(B !is null, "Can't allocate array B");
+    C = new cl_float[size]; assert(C !is null, "Can't allocate array C");
 
     Mt19937 gen;
     gen.seed(SEED);
@@ -86,9 +86,9 @@ class Application {
         } /* vector_sum */
       }.dup;
       cl_int status;
-      size_t size = code.length;
       char*[] strs = [code.ptr];
-      auto program = clCreateProgramWithSource(runtime.context, 1, strs.ptr, &size, &status);
+      size_t code_length = code.length;
+      auto program = clCreateProgramWithSource(runtime.context, 1, strs.ptr, &code_length, &status);
       assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
       status = clBuildProgram(program, 1, &runtime.device, "", null, null);
       if (status != CL_SUCCESS)
@@ -103,15 +103,15 @@ class Application {
       status = clReleaseProgram(program);
       assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
 
-      cl_mem dA = clCreateBuffer(runtime.context, CL_MEM_READ_ONLY, cl_float.sizeof * size, null, &status);
+      cl_mem dA = clCreateBuffer(runtime.context, CL_MEM_READ_ONLY, cl_float.sizeof * A.length, null, &status);
       assert(status == CL_SUCCESS, "opencl_compute clCreateBuffer A " ~ cl_strerror(status));
-      cl_mem dB = clCreateBuffer(runtime.context, CL_MEM_READ_ONLY, cl_float.sizeof * size, null, &status);
+      cl_mem dB = clCreateBuffer(runtime.context, CL_MEM_READ_ONLY, cl_float.sizeof * B.length, null, &status);
       assert(status == CL_SUCCESS, "opencl_compute clCreateBuffer B " ~ cl_strerror(status));
-      cl_mem dC = clCreateBuffer(runtime.context, CL_MEM_WRITE_ONLY, cl_float.sizeof * size, null, &status);
+      cl_mem dC = clCreateBuffer(runtime.context, CL_MEM_WRITE_ONLY, cl_float.sizeof * C.length, null, &status);
       assert(status == CL_SUCCESS, "opencl_compute clCreateBuffer C " ~ cl_strerror(status));
-      status = clEnqueueWriteBuffer(runtime.queue, dA, CL_TRUE, 0, cl_float.sizeof * size, A.ptr, 0, null, null);
+      status = clEnqueueWriteBuffer(runtime.queue, dA, CL_TRUE, 0, cl_float.sizeof * A.length, A.ptr, 0, null, null);
       assert(status == CL_SUCCESS, "opencl_compute " ~ cl_strerror(status));
-      status = clEnqueueWriteBuffer(runtime.queue, dB, CL_TRUE, 0, cl_float.sizeof * size, B.ptr, 0, null, null);
+      status = clEnqueueWriteBuffer(runtime.queue, dB, CL_TRUE, 0, cl_float.sizeof * B.length, B.ptr, 0, null, null);
       assert(status == CL_SUCCESS, "opencl_compute " ~ cl_strerror(status));
       status = clSetKernelArg(kernel, 0, cl_mem.sizeof, &dA);
       assert(status == CL_SUCCESS, "opencl_compute " ~ cl_strerror(status));
@@ -166,7 +166,7 @@ class Application {
     writefln("OPENCL %5.3f [s]", ticks.usecs / 1E6);
     validate();
 
-    C[] = float.init;
+    C[] = cl_float.init;
     clop_compute();
     validate();
   }
