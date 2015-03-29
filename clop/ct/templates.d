@@ -41,6 +41,12 @@ template_create_opencl_kernel = q{
   assert( runtime.status == CL_SUCCESS, "clCreateKernel failed " ~ cl_strerror( runtime.status ) );
 },
 
+template_plain_invoke_kernel = q{
+  size_t[] global = %s;
+  runtime.status = clEnqueueNDRangeKernel(runtime.queue, %s, %s, null, global.ptr, null, 0, null, null);
+  assert(runtime.status == CL_SUCCESS, "clEnqueueNDRangeKernel " ~ cl_strerror(runtime.status));
+},
+
 template_antidiagonal_invoke_kernel = q{
   foreach (i; 2 .. 2 * %s - 1)
   {

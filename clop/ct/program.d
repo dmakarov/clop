@@ -618,10 +618,20 @@ struct Program
   }
 
   /++
-   +
+   + Generate the host code that invokes the OpenCL kernel with proper
+   + synchronization pattern.  The code defines the parameters of
+   + the kernel's NDRange and then uses the clEnqueueNDRangeKernel
+   + call to launch the kernel.
    +/
   string code_to_invoke_kernel()
   {
+    if (pattern is null)
+    {
+      auto global = "[size]";             // FIXME replace with computed values
+      auto kernel = "clop_opencl_kernel"; // FIXME replace with computed values
+      auto dimensions = 1;                // FIXME replace with computed values
+      return format(template_plain_invoke_kernel, global, kernel, dimensions);
+    }
     if (pattern == "Antidiagonal")
     {
       if (true) // plain anti-diagonal pattern, no blocking.
