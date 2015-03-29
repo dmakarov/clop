@@ -11,7 +11,7 @@
   - invoke dub for a specific sample application, e.g.
 
 #+BEGIN_SRC sh
-  $ dub --compiler=ldc2 :nw -- 32 10
+  $ dub run --build=release --compiler=ldc2 :nw -- 32 10
 #+END_SRC
 
   The command will build the CLOP runtime library, and the NW application.  If

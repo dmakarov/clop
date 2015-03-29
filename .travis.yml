@@ -14,5 +14,5 @@ script:
   - dub --compiler=${DC} --build=release :nw -- 32 10
 
 # Local Variables:
-# compile-command: "dub --build=debug :nw -- 32 10"
+# compile-command: "dub --build=verbose :nw -- 32 10"
 # End:

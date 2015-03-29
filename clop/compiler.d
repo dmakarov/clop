@@ -85,7 +85,7 @@ struct Compiler
    +/
   string generate_code()
   {
-    debug (DEBUG_GRAMMAR)
+    debug (GRAMMAR)
     {
       debug_tree(AST);
     }
@@ -99,7 +99,7 @@ struct Compiler
       auto t = transform_by_pattern(KBT);
       apply_optimizations(t);
       auto code = "";
-      debug (DEBUG)
+      debug (VERBOSE)
       {
         code ~= "// Transformations <" ~ pattern ~ trans.toString ~ ">\n";
         code ~= dump_symtable();
@@ -848,12 +848,12 @@ auto set_kernel_arg(T)(string kernel, string arg, string name, string back, stri
            ~ "assert(runtime.status == CL_SUCCESS, \"clCreateBuffer failed.\");\n"
            ~ "runtime.status = clSetKernelArg(" ~ kernel ~ ", " ~ arg ~ ", cl_mem.sizeof, &clop_opencl_device_buffer_"
            ~ name ~ ");\nassert(runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\");\n"
-           ~ `debug (DEBUG) writefln("clCreateBuffer(%s at %s)", typeid(*` ~ name ~ `.ptr).tsize * ` ~ name ~ `.length, ` ~ name ~ `.ptr);`
+           ~ `debug (VERBOSE) writefln("clCreateBuffer(%s at %s)", typeid(*` ~ name ~ `.ptr).tsize * ` ~ name ~ `.length, ` ~ name ~ `.ptr);`
            :
            "runtime.status = clSetKernelArg(" ~ kernel ~ ", " ~ arg ~ ", " ~ size ~ " * typeid(*" ~ back ~ ".ptr).tsize, " ~ name ~ ");\n"
            ~ "assert(runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\");";
   }
-  return "debug (DEBUG) writefln(\"%s\", q{" ~ code ~ "});\n" ~ code;
+  return "debug (VERBOSE) writefln(\"%s\", q{" ~ code ~ "});\n" ~ code;
 }
 
 /++
@@ -866,7 +866,7 @@ auto read_device_buffer(T)(string name)
     code = "runtime.status = clEnqueueReadBuffer(runtime.queue, clop_opencl_device_buffer_"
            ~ name ~ ", CL_TRUE, 0, typeid(*" ~ name ~ ".ptr).tsize * " ~ name ~ ".length, " ~ name ~
            ".ptr, 0, null, null);\nassert(runtime.status == CL_SUCCESS, \"clEnqueueReadBuffer failed.\");";
-  return "debug (DEBUG) writefln(\"%s\", q{" ~ code ~ "});\n" ~ code;
+  return "debug (VERBOSE) writefln(\"%s\", q{" ~ code ~ "});\n" ~ code;
 }
 
 /++
@@ -887,7 +887,7 @@ string compile(string expr, string file = __FILE__, size_t line = __LINE__)
   auto flln = file ~ ":" ~ to!string(line);
   auto head = "CLOP MIXIN at " ~ flln;
   auto tail = "END OF CLOP " ~ flln;
-  auto dump = format("debug (DEBUG) writeln(\"%s:\\n\",`%s`,\"%s:\");\n", head, code, tail);
+  auto dump = format("debug (VERBOSE) writeln(\"%s:\\n\",`%s`,\"%s:\");\n", head, code, tail);
   return dump ~ code;
 }
 

@@ -6,8 +6,8 @@
     "license"      : "MIT",
     "targetType"   : "none",
     "buildTypes"   : {
-        "debug"            : { "debugVersions" : ["DEBUG"] },
-        "grammar"          : { "debugVersions" : ["DEBUG_GRAMMAR"] }
+        "verbose"          : { "debugVersions" : ["VERBOSE"] },
+        "grammar"          : { "debugVersions" : ["GRAMMAR"] }
     },
     "subPackages"  : [
         {
