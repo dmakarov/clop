@@ -27,6 +27,7 @@ module clop.examples.vectors;
 import std.conv;
 import std.datetime;
 import std.getopt;
+import std.functional : binaryFun;
 import std.random;
 import std.stdio;
 
@@ -35,15 +36,24 @@ import derelict.opencl.cl;
 import clop.compiler;
 
 /++
+ + The class examplifies the basic arithmetic operations on vectors
+ + and matrices.
  +/
 class Application {
 
-  static immutable int SEED  =  1;
+  static immutable int SEED = 1;
 
   cl_float[] A, B, C;
+  NDArray!cl_float M, N, R;
   size_t size;
 
   /++
+   + The Application constructor allocates and initializes the vectors
+   + and matrices with random numbers in the interval [0,1].
+   + @param args an array of command-line arguments passed to the
+   +        application by the user. The only accepted argument is an
+   +        integer positive value N -- the lentgh of a vector, and
+   +        the size N x N of a matrix.
    +/
   this(string[] args)
   {
@@ -55,6 +65,9 @@ class Application {
     A = new cl_float[size]; assert(A !is null, "Can't allocate array A");
     B = new cl_float[size]; assert(B !is null, "Can't allocate array B");
     C = new cl_float[size]; assert(C !is null, "Can't allocate array C");
+    M = new NDArray!cl_float(size, size); assert(M !is null, "Can't allocate array M");
+    N = new NDArray!cl_float(size, size); assert(N !is null, "Can't allocate array N");
+    R = new NDArray!cl_float(size, size); assert(R !is null, "Can't allocate array R");
 
     Mt19937 gen;
     gen.seed(SEED);
@@ -62,19 +75,31 @@ class Application {
     {
       A[i] = uniform(0f, 1f, gen);
       B[i] = uniform(0f, 1f, gen);
+      foreach (j; 0 .. size)
+      {
+        M[j, i] = uniform(0f, 1f, gen);
+        N[j, i] = uniform(0f, 1f, gen);
+      }
     }
   } // this
 
   /++
    +/
-  void clop_compute()
+  void clop_add_vectors()
   {
     mixin (compile(q{ NDRange(i : 0 .. size) { C[i] = A[i] + B[i]; } }));
   }
 
   /++
    +/
-  void opencl_compute()
+  void clop_add_matrices()
+  {
+    mixin (compile(q{ NDRange(j : 0 .. size, i : 0 .. size) { R[j, i] = M[j, i] + N[j, i]; } }));
+  }
+
+  /++
+   +/
+  void opencl_add_vectors()
   {
     try
     {
@@ -141,18 +166,6 @@ class Application {
 
   /++
    +/
-  void validate()
-  {
-    uint diff = 0;
-    foreach (ii; 0 .. size)
-      if (C[ii] != A[ii] + B[ii])
-        ++diff;
-    if (diff > 0)
-      writeln("DIFFs ", diff);
-  }
-
-  /++
-   +/
   void run()
   {
     StopWatch timer;
@@ -160,17 +173,42 @@ class Application {
 
     timer.reset();
     timer.start();
-    opencl_compute();
+    opencl_add_vectors();
     timer.stop();
     ticks = timer.peek();
     writefln("OPENCL %5.3f [s]", ticks.usecs / 1E6);
-    validate();
+    validate!((a, b) => a + b)(C, A, B);
 
     C[] = cl_float.init;
-    clop_compute();
-    validate();
+    clop_add_vectors();
+    validate!((a, b) => a + b)(C, A, B);
+
+    clop_add_matrices();
+    validate!((a, b) => a + b)(cast(cl_float[]) R, cast(cl_float[]) M, cast(cl_float[]) N);
   }
 } // Application class
+
+/++
+ + Validate that an is a result of applying an operation to two other
+ + arrays element-wise.
+ + @param fun template parameter is a binary operation
+ + @param T template parameter deduced from the actual parameters to
+ +          validate
+ + @param R the result of applying fun to A and B
+ + @param A, B input arrays
+ +/
+template validate(alias fun)
+{
+  void validate(T)(T[] R, T[] A, T[] B)
+  {
+    uint diff = 0;
+    foreach (ii; 0 .. R.length)
+      if (R[ii] != binaryFun!fun(A[ii], B[ii]))
+        ++diff;
+    if (diff > 0)
+      writeln("DIFFs ", diff);
+  }
+}
 
 int main(string[] args)
 {
