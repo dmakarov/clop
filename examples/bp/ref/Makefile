@@ -1,7 +1,21 @@
-include ../../common/make.config
+CXX      := g++
+CXXFLAGS := -I../../include -O3 --std=c++11 -Wall
 
-backprop: backprop.cpp backprop.h $(COMMON_HEADERS)
-	$(C++) $< -o $@ $(CFLAGS) $(OPENCL_INC) $(OPENCL_LIB)
+# OPENCL
+UNAME := $(shell uname)
+ifeq ($(UNAME), Linux)
+  OPENCL_LIB := -lOpenCL -lrt
+  DOCL_LIB := -L-lOpenCL
+endif
+ifeq ($(UNAME), Darwin)
+  OPENCL_LIB := -framework OpenCL
+  DOCL_LIB := -L-framework -LOpenCL
+endif
+
+all: bp
+
+bp: app.cpp ../../include/common.hpp Makefile
+	$(CXX) $(CXXFLAGS) -o $@ $< $(OPENCL_LIB)
 
 clean:
-	@rm -rf backprop $(COMMON_OBJECTS)
+	@rm -rf app app.o

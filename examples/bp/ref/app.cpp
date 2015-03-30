@@ -9,10 +9,6 @@
 
 #define CL_FP cl_float
 
-//#define VALIDATION 1
-
-using std::stringstream;
-
 struct Config {
   static const int SEED = 1;
   static const CL_FP ERROR;

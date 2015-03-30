@@ -19,6 +19,13 @@ i.e. between the hidden and output layers. By definition the number of output
 layer inputs and weights on edges connecting the hidden and the output layers is
 16 in both cases.
 
+* Usage
+#+BEGIN_SRC sh
+  ./bin/app <size>
+#+END_SRC
+=size= is the number of hidden nodes, e.g. 32768, or 131072, or 524288, or
+2097152, or 8388608.
+
 * Kernels
 ** =bpnn_layerforward=
 *** Inputs

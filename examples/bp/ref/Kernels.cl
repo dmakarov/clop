@@ -7,7 +7,12 @@
 #define FP float
 
 __kernel void
-bpnn_layerforward( __global FP *x, __global FP *w, __global FP *sums, __local FP *inputs, __local FP *summands, int n2 )
+bpnn_layerforward(__global FP *x,
+                  __global FP *w,
+                  __global FP *sums,
+                  __local  FP *inputs,
+                  __local  FP *summands,
+                           int n2)
 { // workgroups are organized so that get_group_id( 0 ) is always 1.
   int gcl = get_group_id( 1 );
   int row = get_local_id( 0 );
@@ -27,12 +32,15 @@ bpnn_layerforward( __global FP *x, __global FP *w, __global FP *sums, __local FP
 }
 
 __kernel void
-bpnn_adjust_weights( __global FP* deltas, __global FP* o, __global FP* weights, __global FP* changes )
+bpnn_adjust_weights(__global FP* deltas,
+                    __global FP* o,
+                    __global FP* weights,
+                    __global FP* changes)
 { // ii and jj have the same meaning as in host version of adjust_weights.
   int ii = get_global_id( 1 ) + 1;
   int jj = get_global_id( 0 ) + 1;
   int index = ii * ( 1 + get_global_size( 0 ) ) + jj;
-  FP adjust = MOMENTUM * changes[index] + ( ONEF - MOMENTUM ) * ETA * o[ii] * deltas[jj]; 
+  FP adjust = MOMENTUM * changes[index] + ( ONEF - MOMENTUM ) * ETA * o[ii] * deltas[jj];
   weights[index] += adjust;
   changes[index]  = adjust;
 }
