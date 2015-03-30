@@ -18,4 +18,4 @@ bp: app.cpp ../../include/common.hpp Makefile
 	$(CXX) $(CXXFLAGS) -o $@ $< $(OPENCL_LIB)
 
 clean:
-	@rm -rf app app.o
+	@rm -rf bp app.o
