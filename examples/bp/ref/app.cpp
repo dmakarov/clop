@@ -23,7 +23,7 @@
  *  SOFTWARE.
  */
 
-//#include <cmath>
+#include <cmath>
 #include <unistd.h> // for getopt
 #include "common.hpp"
 
@@ -37,17 +37,18 @@
 class Application
 {
   static const int SEED = 1;
-  static const CL_FP ERROR = 0.0001f;
+  static constexpr CL_FP ERROR = 0.0001f;
 
 public:
 
-  Application( int n_in, int n_hidden, int n_out )
+  Application(size_t size, cl_uint device, cl_uint platform, vector<const char*> kernel_names)
+    : input_n(size), hidden_n(BLOCK_SIZE), output_n(1)
+    , cec_(platform, device, "Kernels.cl", kernel_names)
+    , context_(cec_.get_context())
+    , queue_(cec_.get_queue())
+    , kernels_(cec_.get_kernels())
   {
-    BPNN *net = new BPNN( cfg->size, BLOCK_SIZE, 1 ); // ( 16, 1 can not be changed )
     srandom(SEED);
-    input_n        = n_in;
-    hidden_n       = n_hidden;
-    output_n       = n_out;
     input_units    = alloc_1d( input_n + 1 );
     input_weights  = alloc_2d( input_n + 1, hidden_n + 1 );
     input_changes  = alloc_2d( input_n + 1, hidden_n + 1 );
@@ -90,16 +91,16 @@ public:
   CL_FP* alloc_1d( int n ) throw ( string )
   {
     CL_FP *new_t = (CL_FP*) malloc( n * sizeof(CL_FP) );
-    if ( NULL == new_t ) throw string( "BPNN::alloc_1d: couldn't allocate FPs" );
+    if ( nullptr == new_t ) throw string( "BPNN::alloc_1d: couldn't allocate FPs" );
     return new_t;
   }
 
   CL_FP** alloc_2d( int m, int n ) throw ( string )
   {
     CL_FP **new_t = (CL_FP**) malloc( m * sizeof(CL_FP*) );
-    if ( NULL == new_t ) throw string( "BPNN::alloc_2d: couldn't allocate ptrs" );
+    if ( nullptr == new_t ) throw string( "BPNN::alloc_2d: couldn't allocate ptrs" );
     new_t[0] = (CL_FP*) malloc( m * n * sizeof(CL_FP) );
-    if ( NULL == new_t[0] ) throw string( "BPNN::alloc_2d: couldn't allocate FPs" );
+    if ( nullptr == new_t[0] ) throw string( "BPNN::alloc_2d: couldn't allocate FPs" );
     for ( int ii = 1; ii < m; ++ii ) new_t[ii] = new_t[0] + ii * n;
     return new_t;
   }
@@ -209,28 +210,29 @@ public:
   bool train_kernel(CL_FP *eo, CL_FP *eh)
   {
     bool valid = true;
-    cl_mem d_input_units   = cl->createBuffer( CL_MEM_READ_WRITE, ( input_n + 1 )                    * sizeof(CL_FP), NULL );
-    cl_mem d_input_weights = cl->createBuffer( CL_MEM_READ_WRITE, ( input_n + 1 ) * ( hidden_n + 1 ) * sizeof(CL_FP), NULL );
-    cl_mem d_partial_sum   = cl->createBuffer( CL_MEM_READ_WRITE, input_n                            * sizeof(CL_FP), NULL );
-    cl->enqueueWriteBuffer( d_input_units  , CL_TRUE, 0, ( input_n + 1 )                    * sizeof(CL_FP), input_units     , 0, NULL, NULL );
-    cl->enqueueWriteBuffer( d_input_weights, CL_TRUE, 0, ( input_n + 1 ) * ( hidden_n + 1 ) * sizeof(CL_FP), input_weights[0], 0, NULL, NULL );
-    cl->setKernelArg( 0, 0, sizeof(cl_mem)                     , &d_input_units   );
-    cl->setKernelArg( 0, 1, sizeof(cl_mem)                     , &d_input_weights );
-    cl->setKernelArg( 0, 2, sizeof(cl_mem)                     , &d_partial_sum   );
-    cl->setKernelArg( 0, 3, sizeof(CL_FP) * hidden_n           , NULL             );
-    cl->setKernelArg( 0, 4, sizeof(CL_FP) * hidden_n * hidden_n, NULL             );
-    cl->setKernelArg( 0, 5, sizeof(int)                        , &hidden_n        );
+    cl_int status;
+    cl_mem d_input_units   = clCreateBuffer(context_, CL_MEM_READ_WRITE, ( input_n + 1 )                    * sizeof(CL_FP), nullptr, &status);
+    cl_mem d_input_weights = clCreateBuffer(context_, CL_MEM_READ_WRITE, ( input_n + 1 ) * ( hidden_n + 1 ) * sizeof(CL_FP), nullptr, &status);
+    cl_mem d_partial_sum   = clCreateBuffer(context_, CL_MEM_READ_WRITE, input_n                            * sizeof(CL_FP), nullptr, &status);
+    status = clEnqueueWriteBuffer(queue_, d_input_units  , CL_TRUE, 0, ( input_n + 1 )                    * sizeof(CL_FP), input_units     , 0, nullptr, nullptr);
+    status = clEnqueueWriteBuffer(queue_, d_input_weights, CL_TRUE, 0, ( input_n + 1 ) * ( hidden_n + 1 ) * sizeof(CL_FP), input_weights[0], 0, nullptr, nullptr);
+    clSetKernelArg( kernels_[0], 0, sizeof(cl_mem)                     , &d_input_units   );
+    clSetKernelArg( kernels_[0], 1, sizeof(cl_mem)                     , &d_input_weights );
+    clSetKernelArg( kernels_[0], 2, sizeof(cl_mem)                     , &d_partial_sum   );
+    clSetKernelArg( kernels_[0], 3, sizeof(CL_FP) * hidden_n           , nullptr          );
+    clSetKernelArg( kernels_[0], 4, sizeof(CL_FP) * hidden_n * hidden_n, nullptr          );
+    clSetKernelArg( kernels_[0], 5, sizeof(int)                        , &hidden_n        );
     size_t global_work[] = { hidden_n, input_n };
     size_t local_work[]  = { hidden_n, hidden_n };
-    cl->enqueueNDRangeKernel( 0, 2, NULL, global_work, local_work, 0, NULL, NULL );
-    cl->enqueueReadBuffer( d_partial_sum, CL_TRUE, 0, input_n * sizeof(CL_FP), partial_sum, 0, NULL, NULL );
+    status = clEnqueueNDRangeKernel(queue_, kernels_[0], 2, nullptr, global_work, local_work, 0, nullptr, nullptr);
+    status = clEnqueueReadBuffer(queue_, d_partial_sum, CL_TRUE, 0, input_n * sizeof(CL_FP), partial_sum, 0, nullptr, nullptr);
     for ( size_t j = 1; j <= hidden_n; ++j )
     {
       CL_FP sum = input_weights[0][j];
       for ( size_t k = 0; k < num_blocks; ++k ) sum += partial_sum[k * hidden_n + j - 1];
       hidden_units[j] = ONEF / ( ONEF + exp( -sum ) );
     }
-    cl->releaseMemObject( d_partial_sum );
+    clReleaseMemObject( d_partial_sum );
     layerforward( hidden_units, output_units, hidden_weights, hidden_n, output_n );
     output_error( eo );
     hidden_error( eh );
@@ -242,15 +244,15 @@ public:
     layerforward( hidden_units, output_units, hidden_weights, hidden_n, output_n );
     output_error( &h_eo );
     hidden_error( &h_eh );
-    //    if ( fabs( h_eo - *eo ) > Config::ERROR || fabs( h_eh - *eh ) > Config::ERROR )
+    //if (fabs(h_eo - *eo) > ERROR || fabs(h_eh - *eh) > ERROR)
     if ( h_eo != *eo || h_eh != *eh )
     {
       printf( "%.12f %.12f\n%.12f %.12f\n", *eo, *eh, h_eo, h_eh );
       valid = false;
     }
     for ( size_t ii = 0; ii <= hidden_n; ++ii )
-      //      if ( fabs( backup_hidden_units[ii] - hidden_units[ii] ) > Config::ERROR )
-      if ( backup_hidden_units[ii] != hidden_units[ii] )
+      if (fabs(backup_hidden_units[ii] - hidden_units[ii]) > ERROR)
+        //if ( backup_hidden_units[ii] != hidden_units[ii] )
       {
         printf( "%2lu %.12f %.12f\n", ii, backup_hidden_units[ii], hidden_units[ii] );
         valid = false;
@@ -265,20 +267,20 @@ public:
         backup_input_weights[i][j] = input_weights[i][j];
     // VALIDATION BLOCK END
     adjust_weights( output_deltas, output_n, hidden_units, hidden_n, hidden_weights, hidden_changes );
-    cl_mem d_hidden_deltas = cl->createBuffer( CL_MEM_READ_WRITE, ( hidden_n + 1 )                   * sizeof(CL_FP), NULL );
-    cl_mem d_input_changes = cl->createBuffer( CL_MEM_READ_WRITE, ( input_n + 1 ) * ( hidden_n + 1 ) * sizeof(CL_FP), NULL );
-    cl->enqueueWriteBuffer( d_hidden_deltas, CL_TRUE, 0, ( hidden_n + 1 )                   * sizeof(CL_FP), hidden_deltas   , 0, NULL, NULL );
-    cl->enqueueWriteBuffer( d_input_weights, CL_TRUE, 0, ( input_n + 1 ) * ( hidden_n + 1 ) * sizeof(CL_FP), input_weights[0], 0, NULL, NULL );
-    cl->enqueueWriteBuffer( d_input_changes, CL_TRUE, 0, ( input_n + 1 ) * ( hidden_n + 1 ) * sizeof(CL_FP), input_changes[0], 0, NULL, NULL );
-    cl->setKernelArg( 1, 0, sizeof(cl_mem), &d_hidden_deltas );
-    cl->setKernelArg( 1, 1, sizeof(cl_mem), &d_input_units );
-    cl->setKernelArg( 1, 2, sizeof(cl_mem), &d_input_weights );
-    cl->setKernelArg( 1, 3, sizeof(cl_mem), &d_input_changes );
-    cl->enqueueNDRangeKernel( 1, 2, NULL, global_work, NULL, 0, NULL, NULL );
-    cl->enqueueReadBuffer( d_input_weights, CL_TRUE, 0, ( input_n + 1 ) * ( hidden_n + 1 ) * sizeof(CL_FP), input_weights[0], 0, NULL, NULL );
-    cl->enqueueReadBuffer( d_input_changes, CL_TRUE, 0, ( input_n + 1 ) * ( hidden_n + 1 ) * sizeof(CL_FP), input_changes[0], 0, NULL, NULL );
+    cl_mem d_hidden_deltas = clCreateBuffer(context_, CL_MEM_READ_WRITE, ( hidden_n + 1 )                   * sizeof(CL_FP), nullptr, &status);
+    cl_mem d_input_changes = clCreateBuffer(context_, CL_MEM_READ_WRITE, ( input_n + 1 ) * ( hidden_n + 1 ) * sizeof(CL_FP), nullptr, &status);
+    status = clEnqueueWriteBuffer(queue_, d_hidden_deltas, CL_TRUE, 0, ( hidden_n + 1 )                   * sizeof(CL_FP), hidden_deltas   , 0, nullptr, nullptr);
+    status = clEnqueueWriteBuffer(queue_, d_input_weights, CL_TRUE, 0, ( input_n + 1 ) * ( hidden_n + 1 ) * sizeof(CL_FP), input_weights[0], 0, nullptr, nullptr);
+    status = clEnqueueWriteBuffer(queue_, d_input_changes, CL_TRUE, 0, ( input_n + 1 ) * ( hidden_n + 1 ) * sizeof(CL_FP), input_changes[0], 0, nullptr, nullptr);
+    clSetKernelArg( kernels_[1], 0, sizeof(cl_mem), &d_hidden_deltas);
+    clSetKernelArg( kernels_[1], 1, sizeof(cl_mem), &d_input_units);
+    clSetKernelArg( kernels_[1], 2, sizeof(cl_mem), &d_input_weights);
+    clSetKernelArg( kernels_[1], 3, sizeof(cl_mem), &d_input_changes);
+    status = clEnqueueNDRangeKernel(queue_, kernels_[1], 2, nullptr, global_work, nullptr, 0, nullptr, nullptr);
+    status = clEnqueueReadBuffer(queue_, d_input_weights, CL_TRUE, 0, ( input_n + 1 ) * ( hidden_n + 1 ) * sizeof(CL_FP), input_weights[0], 0, nullptr, nullptr);
+    status = clEnqueueReadBuffer(queue_, d_input_changes, CL_TRUE, 0, ( input_n + 1 ) * ( hidden_n + 1 ) * sizeof(CL_FP), input_changes[0], 0, nullptr, nullptr);
     // VALIDATION BLOCK START
-    adjust_weights( hidden_deltas, hidden_n, input_units, input_n, backup_input_weights, backup_input_changes );
+    adjust_weights(hidden_deltas, hidden_n, input_units, input_n, backup_input_weights, backup_input_changes);
     for ( size_t i = 1; i <= input_n; ++i )
       for ( size_t j = 1; j <= hidden_n; ++j )
         //        if ( fabs( backup_input_weights[i][j] - input_weights[i][j] ) > Config::ERROR )
@@ -293,10 +295,10 @@ public:
     free( backup_input_weights );
     free( backup_input_changes );
     // VALIDATION BLOCK END
-    cl->releaseMemObject( d_input_units );
-    cl->releaseMemObject( d_input_weights );
-    cl->releaseMemObject( d_hidden_deltas );
-    cl->releaseMemObject( d_input_changes );
+    clReleaseMemObject( d_input_units );
+    clReleaseMemObject( d_input_weights );
+    clReleaseMemObject( d_hidden_deltas );
+    clReleaseMemObject( d_input_changes );
     return valid;
   }
 
@@ -328,10 +330,10 @@ public:
   CL_FP *partial_sum;
   size_t num_blocks;
 
+  clop_examples_common cec_;
   cl_context context_;
   cl_command_queue queue_;
   vector<cl_kernel> kernels_;
-  clop_examples_common cec_;
 }; // Application class
 
 static void usage(char **argv)
@@ -366,7 +368,7 @@ main(int argc, char** argv)
   }
   if ((size = atoi(argv[0])) % BLOCK_SIZE != 0)
   {
-    fprintf(stderr, "bp: the size (%d) must be divisible by %d\n", size, BLOCK_SIZE);
+    fprintf(stderr, "bp: the size (%zu) must be divisible by %d\n", size, BLOCK_SIZE);
     exit(EXIT_FAILURE);
   }
 
@@ -378,7 +380,7 @@ main(int argc, char** argv)
   }
   catch (string msg)
   {
-    std::cerr, "bp: " << msg << std::endl;
+    std::cerr << "bp: " << msg << std::endl;
     return EXIT_FAILURE;
   }
   return EXIT_SUCCESS;
