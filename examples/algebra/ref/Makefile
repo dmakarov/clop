@@ -14,7 +14,7 @@ endif
 
 all: algebra
 
-algebra: app.cpp ../../include/common.hpp
+algebra: app.cpp ../../include/common.hpp Makefile
 	$(CXX) $(CXXFLAGS) -o $@ $< $(OPENCL_LIB)
 
 clean:

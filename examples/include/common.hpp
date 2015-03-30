@@ -44,13 +44,14 @@ using std::ofstream;
 using std::string;
 using std::vector;
 
-class ClopExamplesCommon
+class clop_examples_common
 {
 #ifdef __MACH__
   host_name_port_t self;
   clock_serv_t cclock;
 #endif
 
+  vector<cl_kernel> kernels;
   cl_platform_id* platforms;
   cl_platform_id platform;
   cl_device_id* devices;
@@ -58,12 +59,11 @@ class ClopExamplesCommon
   cl_program program;
   cl_context context;
   cl_command_queue queue;
-  vector<cl_kernel> kernels;
   double t1_, t2_;
 
 public:
 
-  ClopExamplesCommon(cl_uint platform_index, cl_uint device_index, const char* kernel_file, vector<const char*> kernel_names)
+  clop_examples_common(cl_uint platform_index, cl_uint device_index, const char* kernel_file, vector<const char*> kernel_names)
     : kernels(kernel_names.size())
   {
 #ifdef __MACH__
@@ -110,7 +110,7 @@ public:
     }
   }
 
-  ~ClopExamplesCommon()
+  ~clop_examples_common()
   {
     for (int kn = 0; kn < kernels.size(); ++kn)
     {
@@ -289,6 +289,6 @@ public:
     return "UNKNOWN CL ERROR";
   }
 
-}; // ClopExamplesCommon class
+}; // clop_examples_common class
 
 #endif // CLOP_EXAMPLES_COMMON_HPP

@@ -119,10 +119,10 @@ private:
   cl_float* B;
   cl_float* C;
   size_t size_;
-  ClopExamplesCommon cec_;
   cl_context context_;
   cl_command_queue queue_;
   vector<cl_kernel> kernels_;
+  clop_examples_common cec_;
 };
 
 void usage(char** argv)
