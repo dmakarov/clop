@@ -1,6 +1,31 @@
-#include <cmath>
-#include <sstream>
+/*
+ *  The MIT License (MIT)
+ *  =====================
+ *
+ *  Copyright (c) 2015 Dmitri Makarov <dmakarov@alumni.stanford.edu>
+ *
+ *  Permission is hereby granted, free of charge, to any person obtaining a copy
+ *  of this software and associated documentation files (the "Software"), to deal
+ *  in the Software without restriction, including without limitation the rights
+ *  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ *  copies of the Software, and to permit persons to whom the Software is
+ *  furnished to do so, subject to the following conditions:
+ *
+ *  The above copyright notice and this permission notice shall be included in all
+ *  copies or substantial portions of the Software.
+ *
+ *  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ *  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ *  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ *  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ *  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ *  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *  SOFTWARE.
+ */
+
+//#include <cmath>
 #include <unistd.h> // for getopt
+#include "common.hpp"
 
 #define BLOCK_SIZE 16
 #define ETA        0.3f
@@ -9,41 +34,17 @@
 
 #define CL_FP cl_float
 
-struct Config {
-  static const int SEED = 1;
-  static const CL_FP ERROR;
-  Config() : size( -1 ), outfile( NULL ) { srandom( SEED ); }
-  string summary()
-  {
-    ss << "\"SEED='" << SEED << "',size='" << size << "',outfile='" << ( outfile ? outfile : "(null)" ) << "'\"";
-    return ss.str();
-  }
-  void output()
-  {
-    if ( NULL != outfile )
-    {
-      FILE *fp = fopen( outfile, "w" );
-      if ( NULL == fp )
-      {
-        fprintf( stderr, "ERROR: can't create file %s\n", outfile );
-        exit( EXIT_FAILURE );
-      }
-      fprintf( fp, "output error %.12f\nhidden error %.12f\n", out_err, hid_err );
-      fclose( fp );
-    }
-  }
-  int size;
-  CL_FP out_err, hid_err;
-  const char *outfile;
-  stringstream ss;
-};
-
-const CL_FP Config::ERROR = 0.0001f;
-
-struct BPNN
+class Application
 {
-  BPNN( int n_in, int n_hidden, int n_out )
+  static const int SEED = 1;
+  static const CL_FP ERROR = 0.0001f;
+
+public:
+
+  Application( int n_in, int n_hidden, int n_out )
   {
+    BPNN *net = new BPNN( cfg->size, BLOCK_SIZE, 1 ); // ( 16, 1 can not be changed )
+    srandom(SEED);
     input_n        = n_in;
     hidden_n       = n_hidden;
     output_n       = n_out;
@@ -66,7 +67,8 @@ struct BPNN
     num_blocks     = input_n / BLOCK_SIZE;
     partial_sum    = new CL_FP[num_blocks * BLOCK_SIZE];
   }
-  ~BPNN()
+
+  ~Application()
   {
     delete [] partial_sum;
     free( input_units );
@@ -84,12 +86,14 @@ struct BPNN
     free( output_deltas );
     free( target );
   }
+
   CL_FP* alloc_1d( int n ) throw ( string )
   {
     CL_FP *new_t = (CL_FP*) malloc( n * sizeof(CL_FP) );
     if ( NULL == new_t ) throw string( "BPNN::alloc_1d: couldn't allocate FPs" );
     return new_t;
   }
+
   CL_FP** alloc_2d( int m, int n ) throw ( string )
   {
     CL_FP **new_t = (CL_FP**) malloc( m * sizeof(CL_FP*) );
@@ -99,6 +103,7 @@ struct BPNN
     for ( int ii = 1; ii < m; ++ii ) new_t[ii] = new_t[0] + ii * n;
     return new_t;
   }
+
   void randomize_1d( CL_FP *w, int m )
   {
     for ( int ii = 0; ii <= m; ++ii )
@@ -107,6 +112,7 @@ struct BPNN
       w[ii] = rr / RAND_MAX;
     }
   }
+
   void randomize_2d( CL_FP **w, int m, int n )
   {
     for ( int ii = 0; ii <= m; ++ii )
@@ -116,16 +122,19 @@ struct BPNN
         w[ii][jj] = rr / RAND_MAX;
       }
   }
+
   void zero_1d( CL_FP *w, int m )
   {
     for ( int ii = 0; ii <= m; ++ii ) w[ii] = 0.0;
   }
+
   void zero_2d( CL_FP **w, int m, int n )
   {
     for ( int ii = 0; ii <= m; ++ii )
       for ( int jj = 0; jj <= n; ++jj )
         w[ii][jj] = 0.0;
   }
+
   void layerforward( CL_FP *l1, CL_FP *l2, CL_FP **conn, int n1, int n2 )
   {
     l1[0] = ONEF;                   // Set up thresholding unit
@@ -136,6 +145,7 @@ struct BPNN
       l2[j] = ONEF / ( ONEF + exp( -sum ) );
     }
   }
+
   // this version of layerforward performs additions in exactly the
   // same order as the kernel version does.
   void layerforward_parallel( CL_FP *l1, CL_FP *l2, CL_FP **conn, int n1, int n2 )
@@ -159,6 +169,7 @@ struct BPNN
     }
     delete [] work;
   }
+
   void output_error( CL_FP *err )
   {
     CL_FP errsum = 0.0;
@@ -170,6 +181,7 @@ struct BPNN
     }
     *err = errsum;
   }
+
   void hidden_error( CL_FP *err )
   {
     CL_FP errsum = 0.0;
@@ -182,6 +194,7 @@ struct BPNN
     }
     *err = errsum;
   }
+
   void adjust_weights( CL_FP *deltas, int ndelta, CL_FP *o, int no, CL_FP **weights, CL_FP **changes )
   {
     o[0] = ONEF;
@@ -192,7 +205,8 @@ struct BPNN
         weights[jj][ii] += changes[jj][ii];
       }
   }
-  bool train_kernel( CLHelper *cl, CL_FP *eo, CL_FP *eh )
+
+  bool train_kernel(CL_FP *eo, CL_FP *eh)
   {
     bool valid = true;
     cl_mem d_input_units   = cl->createBuffer( CL_MEM_READ_WRITE, ( input_n + 1 )                    * sizeof(CL_FP), NULL );
@@ -220,7 +234,7 @@ struct BPNN
     layerforward( hidden_units, output_units, hidden_weights, hidden_n, output_n );
     output_error( eo );
     hidden_error( eh );
-#if VALIDATION
+    // VALIDATION BLOCK START
     CL_FP h_eo, h_eh;
     CL_FP* backup_hidden_units = new CL_FP[hidden_n + 1];
     memcpy( backup_hidden_units, hidden_units, sizeof(CL_FP) * ( hidden_n + 1 ) );
@@ -249,7 +263,7 @@ struct BPNN
     for ( size_t i = 0; i <= input_n; ++i )
       for ( size_t j = 0; j <= hidden_n; ++j)
         backup_input_weights[i][j] = input_weights[i][j];
-#endif
+    // VALIDATION BLOCK END
     adjust_weights( output_deltas, output_n, hidden_units, hidden_n, hidden_weights, hidden_changes );
     cl_mem d_hidden_deltas = cl->createBuffer( CL_MEM_READ_WRITE, ( hidden_n + 1 )                   * sizeof(CL_FP), NULL );
     cl_mem d_input_changes = cl->createBuffer( CL_MEM_READ_WRITE, ( input_n + 1 ) * ( hidden_n + 1 ) * sizeof(CL_FP), NULL );
@@ -263,7 +277,7 @@ struct BPNN
     cl->enqueueNDRangeKernel( 1, 2, NULL, global_work, NULL, 0, NULL, NULL );
     cl->enqueueReadBuffer( d_input_weights, CL_TRUE, 0, ( input_n + 1 ) * ( hidden_n + 1 ) * sizeof(CL_FP), input_weights[0], 0, NULL, NULL );
     cl->enqueueReadBuffer( d_input_changes, CL_TRUE, 0, ( input_n + 1 ) * ( hidden_n + 1 ) * sizeof(CL_FP), input_changes[0], 0, NULL, NULL );
-#if VALIDATION
+    // VALIDATION BLOCK START
     adjust_weights( hidden_deltas, hidden_n, input_units, input_n, backup_input_weights, backup_input_changes );
     for ( size_t i = 1; i <= input_n; ++i )
       for ( size_t j = 1; j <= hidden_n; ++j )
@@ -278,12 +292,24 @@ struct BPNN
     free( backup_input_changes[0] );
     free( backup_input_weights );
     free( backup_input_changes );
-#endif
+    // VALIDATION BLOCK END
     cl->releaseMemObject( d_input_units );
     cl->releaseMemObject( d_input_weights );
     cl->releaseMemObject( d_hidden_deltas );
     cl->releaseMemObject( d_input_changes );
     return valid;
+  }
+
+  void run()
+  {
+    CL_FP out_err, hid_err;
+    double t1 = cec_.gettime();
+    if (!train_kernel(&out_err, &hid_err))
+    {
+      fprintf(stdout, "bp: out error %f, hidden error %f\n", out_err, hid_err);
+    }
+    double t2 = cec_.gettime();
+    fprintf(stdout, "OPENCL %f [s]\n", t2 - t1);
   }
 
   size_t input_n;              // number of input units
@@ -301,82 +327,59 @@ struct BPNN
   CL_FP *target;               // storage for target vector
   CL_FP *partial_sum;
   size_t num_blocks;
-};
 
-static bool
-backprop( CLHelper *cl, Config *cfg, double *prep ) throw ( string )
-{
-  double t1 = gettime();
-  BPNN *net = new BPNN( cfg->size, BLOCK_SIZE, 1 ); // ( 16, 1 can not be changed )
-  if ( NULL == net ) throw string( "backprop: couldn't allocate neural network" );
-  double t2 = gettime();
-  *prep += t2 - t1;
-  bool result = net->train_kernel( cl, &cfg->out_err, &cfg->hid_err );
-  delete net;
-  return result;
-}
+  cl_context context_;
+  cl_command_queue queue_;
+  vector<cl_kernel> kernels_;
+  clop_examples_common cec_;
+}; // Application class
 
-static void
-usage( char **argv )
+static void usage(char **argv)
 {
-  const char *help = "Usage: %s [-p <platform>] [-d <device>] [-o <outfile>] <size>\n"
-                     "\t<size>    - number of input elements, must be divisible by %d\n"
-                     "\t<outfile> - name of the output file\n";
-  fprintf( stderr, help, argv[0], BLOCK_SIZE );
-  exit( EXIT_FAILURE );
-}
-
-static void
-parse_command_line( int argc, char **argv, cl_uint *platform, cl_uint *device, Config *cfg )
-{
-  int ch;
-  while ( ( ch = getopt( argc, argv, "d:o:p:" ) ) != -1 )
-  {
-    switch ( ch )
-    {
-    case 'd': sscanf( optarg, "%d", device );     break;
-    case 'o': cfg->outfile = optarg;
-    case 'p': sscanf( optarg, "%d", platform );   break;
-    default:  usage( argv );
-    }
-  }
-  if ( argc - optind < 1 ) usage( argv );
-  if ( ( cfg->size = atoi( argv[optind] ) ) % BLOCK_SIZE != 0 )
-  {
-    fprintf( stderr, "ERROR: the number of input points (%d) must be divisible by %d\n", cfg->size, BLOCK_SIZE );
-    exit( EXIT_FAILURE );
-  }
+  const char *help = "Usage: %s [-p <platform>] [-d <device>] <size>\n"
+                     "\t<size>    - number of input elements, must be divisible by %d\n";
+  fprintf(stderr, help, argv[0], BLOCK_SIZE);
+  exit(EXIT_FAILURE);
 }
 
 int
-main( int argc, char **argv )
+main(int argc, char** argv)
 {
-  string kernel_file    = "Kernels.cl";
-  string kernel_names[] = { "bpnn_layerforward", "bpnn_adjust_weights" };
-  cl_uint platform      = 0;
-  cl_uint device        = 0;
-  bool passed           = false;
-  CLHelper *cl          = NULL;
-  Config cfg;
+  int ch;
+  size_t size;
+  cl_uint device_index = 0;
+  cl_uint platform_index = 0;
+  while ((ch = getopt(argc, argv, "d:p:")) != -1)
+  {
+    switch (ch)
+    {
+    case 'd': sscanf(optarg, "%d", &device_index);   break;
+    case 'p': sscanf(optarg, "%d", &platform_index); break;
+    default:  usage(argv);
+    }
+  }
+  argc -= optind;
+  argv += optind;
+  if (argc < 1)
+  {
+    usage(argv);
+  }
+  if ((size = atoi(argv[0])) % BLOCK_SIZE != 0)
+  {
+    fprintf(stderr, "bp: the size (%d) must be divisible by %d\n", size, BLOCK_SIZE);
+    exit(EXIT_FAILURE);
+  }
 
-  parse_command_line( argc, argv, &platform, &device, &cfg );
   try
   {
-    double prep = 0.0;
-    double t1 = gettime();
-    cl = new CLHelper( "backprop", platform, device, kernel_file, sizeof(kernel_names) / sizeof(string), kernel_names );
-    passed = backprop( cl, &cfg, &prep );
-    cl->release();
-    double t2 = gettime();
-    cl->statistics( t2 - t1, cfg.summary().c_str(), prep );
-    cfg.output();
-    delete cl;
+    vector<const char*> kernel_names = {"bpnn_layerforward", "bpnn_adjust_weights"};
+    Application app(size, device_index, platform_index, kernel_names);
+    app.run();
   }
-  catch ( std::string msg )
+  catch (string msg)
   {
-    fprintf( stderr, "ERROR: exception caught in main function-> %s\n", msg.c_str() );
-    if ( NULL != cl ) delete cl;
+    std::cerr, "bp: " << msg << std::endl;
     return EXIT_FAILURE;
   }
-  return passed ? EXIT_SUCCESS : EXIT_FAILURE;
+  return EXIT_SUCCESS;
 }

@@ -110,7 +110,7 @@ public:
     compute();
     double t2 = cec_.gettime();
     validate();
-    fprintf(stdout, "OPENCL %f s\n", t2 - t1);
+    fprintf(stdout, "OPENCL %f [s]\n", t2 - t1);
   }
 
 private:
@@ -125,7 +125,7 @@ private:
   clop_examples_common cec_;
 };
 
-void usage(char** argv)
+static void usage(char** argv)
 {
   const char* help = "Usage: %s [-p <platform>] [-d <device>] <size>\n"
                      "\t<size>    - sequence length\n";
