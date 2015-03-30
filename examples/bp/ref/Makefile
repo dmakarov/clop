@@ -12,10 +12,10 @@ ifeq ($(UNAME), Darwin)
   DOCL_LIB := -L-framework -LOpenCL
 endif
 
-all: bp
+all: app
 
-bp: app.cpp ../../include/common.hpp Makefile
+app: app.cpp ../../include/common.hpp Makefile
 	$(CXX) $(CXXFLAGS) -o $@ $< $(OPENCL_LIB)
 
 clean:
-	@rm -rf bp app.o
+	@rm -rf app app.o

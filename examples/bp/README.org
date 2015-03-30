@@ -12,12 +12,11 @@ random numbers.  The inputs and the weights are positive floating point numbers
 in the range (0, 0.00001) so as not to saturate sigmoid function of the computed
 hidden outputs, when the number of inputs is very large, e.g. 8,388,608.
 
-Most of the benchmark functionality is encapsulated in BPNN structure. The
-functionality provided by the kernels is also implemented as methods of BPNN on
-host and used in stages where the amount of data to be processed is small,
-i.e. between the hidden and output layers. By definition the number of output
-layer inputs and weights on edges connecting the hidden and the output layers is
-16 in both cases.
+The functionality provided by the kernels is also implemented as methods of
+=Application= on host and used in stages where the amount of data to be processed
+is small, i.e. between the hidden and output layers. By definition the number of
+output layer inputs and weights on edges connecting the hidden and the output
+layers is 16 in both cases.
 
 * Usage
 #+BEGIN_SRC sh
