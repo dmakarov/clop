@@ -83,6 +83,7 @@ class Application {
   } // this
 
   /++
+   + Compute the sum of two vectors using CLOP.
    +/
   void clop_add_vectors()
   {
@@ -90,6 +91,7 @@ class Application {
   }
 
   /++
+   + Compute the sum of two matrices usin CLOP.
    +/
   void clop_add_matrices()
   {
@@ -97,6 +99,7 @@ class Application {
   }
 
   /++
+   + Compute the sum of two vectors using OpenCL directly.
    +/
   void opencl_add_vectors()
   {
