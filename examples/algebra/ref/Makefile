@@ -1,5 +1,5 @@
 CXX      := g++
-CXXFLAGS := -O3 -Wall
+CXXFLAGS := -I../../include -O3 --std=c++11 -Wall
 
 # OPENCL
 UNAME := $(shell uname)
@@ -14,7 +14,7 @@ endif
 
 all: algebra
 
-algebra: app.cpp
+algebra: app.cpp ../../include/common.hpp
 	$(CXX) $(CXXFLAGS) -o $@ $< $(OPENCL_LIB)
 
 clean:
