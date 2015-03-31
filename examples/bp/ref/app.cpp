@@ -264,7 +264,10 @@ public:
     zero_2d(input_changes, input_n, hidden_n);
     for (size_t i = 0; i <= input_n; ++i)
       for (size_t j = 0; j <= hidden_n; ++j)
+      {
         backup_input_weights[i][j] = input_weights[i][j];
+        backup_input_changes[i][j] = 0.0f;
+      }
     // VALIDATION BLOCK END
     adjust_weights(output_deltas, output_n, hidden_units, hidden_n, hidden_weights, hidden_changes);
     cl_mem d_hidden_deltas = clCreateBuffer(context_, CL_MEM_READ_WRITE, (hidden_n + 1)                   * sizeof(CL_FP), nullptr, &status);
