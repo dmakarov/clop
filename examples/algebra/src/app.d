@@ -76,8 +76,8 @@ class Application {
       B[i] = uniform(0f, 1f, gen);
       foreach (j; 0 .. size)
       {
-        M[j, i] = uniform(0f, 1f, gen);
-        N[j, i] = uniform(0f, 1f, gen);
+        M[i, j] = uniform(0f, 1f, gen);
+        N[i, j] = uniform(0f, 1f, gen);
       }
     }
   } // this
@@ -95,7 +95,7 @@ class Application {
    +/
   void clop_add_matrices()
   {
-    mixin (compile(q{ NDRange(j : 0 .. size, i : 0 .. size) { R[j, i] = M[j, i] + N[j, i]; } }));
+    mixin (compile(q{ NDRange(i : 0 .. size, j : 0 .. size) { R[i, j] = M[i, j] + N[i, j]; } }));
   }
 
   /++
