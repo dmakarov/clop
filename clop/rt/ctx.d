@@ -326,11 +326,11 @@ class NDArray(T)
     size_t[] dims;
   }
 
-  this( size_t[] dims... )
+  this(size_t[] dims...)
   {
     this.dims = new size_t[dims.length];
     size_t size = 1;
-    foreach ( i, d; dims )
+    foreach (i, d; dims)
     {
       this.dims[i] = d;
       size *= d;
@@ -341,6 +341,11 @@ class NDArray(T)
   auto get_num_dimensions()
   {
     return dims.length;
+  }
+
+  auto get_dimensions()
+  {
+    return dims;
   }
 
   @property
@@ -355,6 +360,18 @@ class NDArray(T)
     return data.ptr;
   }
 
+  @property
+  bool empty()
+  {
+    return data is null;
+  }
+
+  @property
+  ref T front()
+  {
+    return data[0];
+  }
+
   ref T[] opCast(U)() if (is (U == T[]))
   {
     return data;
@@ -365,29 +382,29 @@ class NDArray(T)
     return data[];
   }
 
-  T opIndex( size_t[] indices... )
+  T opIndex(size_t[] indices...)
   in
   {
-    enforce( indices.length <= dims.length,
-             format( "Too many dimensions (%d) indexing %d-dimensional array.",
-                      indices.length, dims.length ) );
+    enforce(indices.length <= dims.length,
+            format("Too many dimensions (%d) indexing %d-dimensional array.",
+                   indices.length, dims.length));
   }
   body
   {
-    return data[get_index( indices )];
+    return data[get_index(indices)];
   }
 
-  void opIndexAssign( T c )
+  void opIndexAssign(T c)
   {
     data[] = c;
   }
 
-  void opIndexAssign( T c, size_t[] indices... )
+  void opIndexAssign(T c, size_t[] indices...)
   in
   {
-    enforce( indices.length <= dims.length,
-             format( "Too many dimensions (%d) indexing %d-dimensional array.",
-                      indices.length, dims.length ) );
+    enforce(indices.length <= dims.length,
+            format("Too many dimensions (%d) indexing %d-dimensional array.",
+                   indices.length, dims.length));
   }
   body
   {
@@ -407,11 +424,21 @@ class NDArray(T)
     mixin ("data[get_index(indices)] " ~ op ~ "= c;");
   }
 
-  private size_t get_index( size_t[] indices... )
+  T[] OpSlice()
+  {
+    return data[];
+  }
+
+  T[] opSlice(size_t i, size_t j)
+  {
+    return data[i .. j];
+  }
+
+  private size_t get_index(size_t[] indices...)
   {
     size_t index = 0;
     size_t offset = 1;
-    foreach ( i, x; indices )
+    foreach (i, x; indices)
     {
       index = index + offset * x;
       offset = offset * dims[i];
@@ -419,4 +446,4 @@ class NDArray(T)
     return index;
   }
 
-}
+} // NDArray class
