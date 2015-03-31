@@ -1,17 +1,17 @@
 language: d
 
 d:
-#  - dmd-2.066.1
   - dmd-2.067.0
 #  - ldc-0.15.1
 
 before_install:
   - sudo apt-get update -qq
-  - sudo apt-get install -qq fglrx=2:8.960-0ubuntu1 opencl-headers
+  - sudo apt-get install -qq fglrx opencl-headers
 
 script:
-  - dub --compiler=${DC} --build=release :algebra -- 32
-  - dub --compiler=${DC} --build=release :nw -- 32 10
+  - dub run --build=release --compiler=${DC} :algebra -- 32
+#  - dub run --build=release --compiler=${DC} :bp -- 32
+  - dub run --build=release --compiler=${DC} :nw -- 32 10
 
 # Local Variables:
 # compile-command: "dub --build=verbose :nw -- 32 10"
