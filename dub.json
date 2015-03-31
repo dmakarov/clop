@@ -29,6 +29,7 @@
             "dependencies" : { "derelict-cl" : "~>1.2.2" }
         },
         "./examples/algebra",
+        "./examples/bp",
         "./examples/nw",
         "./examples/pf",
         "./examples/stencil"
