@@ -391,7 +391,20 @@ class NDArray(T)
   }
   body
   {
-    data[get_index( indices )] = c;
+    data[get_index(indices)] = c;
+  }
+
+  void opIndexOpAssign(string op)(T c, size_t[] indices...)
+  if (op == "+" || op == "-" || op == "*" || op == "/")
+  in
+  {
+    enforce(indices.length <= dims.length,
+            format("Too many dimensions (%d) indexing %d-dimensional array.",
+                   indices.length, dims.length));
+  }
+  body
+  {
+    mixin ("data[get_index(indices)] " ~ op ~ "= c;");
   }
 
   private size_t get_index( size_t[] indices... )
