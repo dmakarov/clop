@@ -45,8 +45,8 @@ struct Runtime
   cl_kernel kernel_copy;
   cl_kernel kernel_madd;
 
-  /**
-   */
+  /++
+   +/
   void init(size_t platform_id = 0, size_t device_id = 0, bool verbose = true)
   {
     if ( !has_platform_ids )
@@ -242,8 +242,8 @@ struct Runtime
     return result;
   }
 
-  /**
-   */
+  /++
+   +/
   void shutdown()
   {
     status = clReleaseCommandQueue( queue );
@@ -256,8 +256,8 @@ struct Runtime
 
 static Runtime runtime = Runtime();
 
-/**
- */
+/++
+ +/
 string
 cl_strerror( cl_int err )
 {
@@ -316,7 +316,23 @@ cl_strerror( cl_int err )
 }
 
 /++
- +
+ + NDArray is a multi-dimensional array.  The number of dimensions is
+ + determined at the object construction.  The first dimension is the
+ + most significant and slowest changing, the last dimensions is the
+ + least significant and the fastest changing.
+ + @example auto A = NDArray!float(8, 12);
+ + A is a 2-dimensional array or matrix with 8 rows, 12 elements each.
+ + To access an element of A at row 3, column 5 use the expression
+ + A[3, 5].
+ + Internally the data is placed in a 1-dimensional dynamic array of
+ + size equal to the produc of all dimensions. In the example above, A
+ + data are stored in an array of length 8 x 12 = 96.  The element
+ + A[3, 5] accesses the element at index 3 * 12 + 5 = 41 in the
+ + internal 1-dimensional data array.
+ + For k dimensions N_{1}, N_{2}, ..., N_{k}, the size is
+ + N_{1} * N_{2} * ... * N_{k}
+ + and the internal index for element A[i_{1}, i_{2}, ..., i_{k}] is
+ + i_{k} + N_{k} * (i_{k-1} + N_{k-1} * ( i_{k-2} + ... + N_{2} * i_{1}))
  +/
 class NDArray(T)
 {
@@ -438,10 +454,10 @@ class NDArray(T)
   {
     size_t index = 0;
     size_t offset = 1;
-    foreach (i, x; indices)
+    foreach_reverse (i, x; indices)
     {
-      index = index + offset * x;
-      offset = offset * dims[i];
+      index += offset * x;
+      offset *= dims[i];
     }
     return index;
   }
