@@ -6,11 +6,11 @@ d:
 
 before_install:
   - sudo apt-get update -qq
-  - sudo apt-get install -qq fglrx opencl-headers
+  - sudo apt-get install -qq fglrx=2:8.960-0ubuntu1 opencl-headers
 
 script:
   - dub run --build=release --compiler=${DC} :algebra -- 32
-#  - dub run --build=release --compiler=${DC} :bp -- 32
+  - dub run --build=release --compiler=${DC} :bp -- 32
   - dub run --build=release --compiler=${DC} :nw -- 32 10
 
 # Local Variables:
