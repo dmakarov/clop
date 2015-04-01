@@ -25,8 +25,8 @@
 module clop.ct.program;
 
 import std.algorithm : reduce;
-import std.conv;
 import std.container;
+import std.conv;
 import std.string;
 
 import pegged.grammar;
@@ -53,10 +53,10 @@ struct Program
     auto kname = generate_kernel_name(); // we need to give the kernel a name
     auto params = set_params();
     auto kernel = "\"__kernel void " ~ kname ~ "(\" ~ kernel_params ~ \")\" ~\nq{\n" ~ kbody ~ "}";
-    auto clhost = format(template_create_opencl_kernel, generate_kernel_name());
+    auto clhost = format(template_create_opencl_kernel, params, external, kernel, generate_kernel_name());
     clhost ~= set_args("clop_opencl_kernel") ~ code_to_invoke_kernel() ~ code_to_read_data_from_device();
     auto diagnostics = format("static if (\"%s\" != \"\")\n  pragma (msg, \"%s\");\n", errors, errors);
-    return diagnostics ~ format(template_clop_unit, params, external, kernel, clhost, toString());
+    return diagnostics ~ format(template_clop_unit, clhost, toString());
   }
 
   @property

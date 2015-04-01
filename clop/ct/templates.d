@@ -7,44 +7,50 @@ template_clop_unit = q{
   {
     import std.datetime;
     StopWatch timer;
-    %s
-    char[] clop_opencl_program_source = (q{
-        %s
-      } ~ %s).dup;
     timer.start();
     %s
     timer.stop();
     TickDuration ticks = timer.peek();
     writefln("CLOP %s %%5.3f [s]", ticks.usecs / 1E6);
   }
-  catch( Exception e )
+  catch (Exception e)
   {
-    writeln( e );
+    writeln(e);
   }
 },
 
 template_create_opencl_kernel = q{
-  debug ( DEBUG ) writeln( "OpenCL program:\n", clop_opencl_program_source, "EOF" );
-  size_t clop_opencl_program_source_size = clop_opencl_program_source.length;
-  char* clop_opencl_program_source_pointer = clop_opencl_program_source.ptr;
-  auto program = clCreateProgramWithSource( runtime.context, 1, &clop_opencl_program_source_pointer, &clop_opencl_program_source_size, &runtime.status );
-  assert( runtime.status == CL_SUCCESS, "clCreateProgramWithSource failed " ~ cl_strerror( runtime.status ) );
-  runtime.status = clBuildProgram( program, 1, &runtime.device, "", null, null );
-  if ( runtime.status != CL_SUCCESS )
-  {
-    char[3072] log;
-    clGetProgramBuildInfo( program, runtime.device, CL_PROGRAM_BUILD_LOG, 3071, log.ptr, null );
-    writeln( "CL_PROGRAM_BUILD_LOG:\n", log, "\nEOD" );
-  }
-  assert( runtime.status == CL_SUCCESS, "clBuildProgram failed " ~ cl_strerror( runtime.status ) );
-  auto clop_opencl_kernel = clCreateKernel( program, "%s", &runtime.status );
-  assert( runtime.status == CL_SUCCESS, "clCreateKernel failed " ~ cl_strerror( runtime.status ) );
+    //static bool kernel_has_been_created_;
+    cl_kernel clop_opencl_kernel;
+    //if (!kernel_has_been_created)
+    {
+      //kernel_has_been_created = true;
+      %s
+      char[] clop_opencl_program_source = (q{
+          %s
+      } ~ %s).dup;
+      debug (DEBUG) writeln("OpenCL program:\n", clop_opencl_program_source, "EOF");
+      size_t clop_opencl_program_source_size = clop_opencl_program_source.length;
+      char* clop_opencl_program_source_pointer = clop_opencl_program_source.ptr;
+      auto program = clCreateProgramWithSource(runtime.context, 1, &clop_opencl_program_source_pointer, &clop_opencl_program_source_size, &runtime.status);
+      assert(runtime.status == CL_SUCCESS, "clCreateProgramWithSource failed " ~ cl_strerror(runtime.status));
+      runtime.status = clBuildProgram(program, 1, &runtime.device, "", null, null);
+      if (runtime.status != CL_SUCCESS)
+      {
+        char[3072] log;
+        clGetProgramBuildInfo(program, runtime.device, CL_PROGRAM_BUILD_LOG, 3071, log.ptr, null);
+        writeln("CL_PROGRAM_BUILD_LOG:\n", log, "\nEOD");
+      }
+      assert(runtime.status == CL_SUCCESS, "clBuildProgram failed " ~ cl_strerror(runtime.status));
+      clop_opencl_kernel = clCreateKernel(program, "%s", &runtime.status);
+      assert(runtime.status == CL_SUCCESS, "clCreateKernel failed " ~ cl_strerror(runtime.status));
+    }
 },
 
 template_plain_invoke_kernel = q{
-  size_t[] global = %s;
-  runtime.status = clEnqueueNDRangeKernel(runtime.queue, %s, %s, null, global.ptr, null, 0, null, null);
-  assert(runtime.status == CL_SUCCESS, "clEnqueueNDRangeKernel " ~ cl_strerror(runtime.status));
+    size_t[] global = %s;
+    runtime.status = clEnqueueNDRangeKernel(runtime.queue, %s, %s, null, global.ptr, null, 0, null, null);
+    assert(runtime.status == CL_SUCCESS, "clEnqueueNDRangeKernel " ~ cl_strerror(runtime.status));
 },
 
 template_antidiagonal_invoke_kernel = q{
@@ -60,40 +66,40 @@ template_antidiagonal_invoke_kernel = q{
 
 template_antidiagonal_rectangular_blocks_invoke_kernel = q{
   auto max_blocks = ((%s) - 1) / (%s);
-  for ( int i = 0; i < 2 * max_blocks - 1; ++i )
+  for (int i = 0; i < 2 * max_blocks - 1; ++i)
   {
-    cl_int br = ( i < max_blocks ) ? i :     max_blocks - 1;
-    cl_int bc = ( i < max_blocks ) ? 0 : i - max_blocks + 1;
+    cl_int br = (i < max_blocks) ? i :     max_blocks - 1;
+    cl_int bc = (i < max_blocks) ? 0 : i - max_blocks + 1;
     size_t wgroup = %s;
-    size_t global = (%s) * min( br + 1, max_blocks - bc );
-    runtime.status = clSetKernelArg( %s, %d, cl_int.sizeof, &bc );
-    assert( runtime.status == CL_SUCCESS, "clSetKernelArg " ~ cl_strerror( runtime.status ) );
-    runtime.status = clSetKernelArg( %s, %d, cl_int.sizeof, &br );
-    assert( runtime.status == CL_SUCCESS, "clSetKernelArg " ~ cl_strerror( runtime.status ) );
-    runtime.status = clEnqueueNDRangeKernel( runtime.queue, %s, 1, null, &global, &wgroup, 0, null, null );
-    assert( runtime.status == CL_SUCCESS, "clEnqueueNDRangeKernel " ~ cl_strerror( runtime.status ) );
+    size_t global = (%s) * min(br + 1, max_blocks - bc);
+    runtime.status = clSetKernelArg(%s, %d, cl_int.sizeof, &bc);
+    assert(runtime.status == CL_SUCCESS, "clSetKernelArg " ~ cl_strerror(runtime.status));
+    runtime.status = clSetKernelArg(%s, %d, cl_int.sizeof, &br);
+    assert(runtime.status == CL_SUCCESS, "clSetKernelArg " ~ cl_strerror(runtime.status));
+    runtime.status = clEnqueueNDRangeKernel(runtime.queue, %s, 1, null, &global, &wgroup, 0, null, null);
+    assert(runtime.status == CL_SUCCESS, "clEnqueueNDRangeKernel " ~ cl_strerror(runtime.status));
   }
 },
 
 template_shared_memory_data_init = q{
-  for ( int %s = 0; %s < (%s); ++%s )
-    for ( int %s = 0; %s < (%s); %s += (%s) )
-      if ( (%s) + (%s) < (%s) )
+  for (int %s = 0; %s < (%s); ++%s)
+    for (int %s = 0; %s < (%s); %s += (%s))
+      if ((%s) + (%s) < (%s))
         %s[(%s) * (%s) + (%s) + (%s)] =
         %s[(%s) * (%s) + (%s) + (%s)];
-  barrier( CLK_LOCAL_MEM_FENCE );
+  barrier(CLK_LOCAL_MEM_FENCE);
 },
 
 template_shared_memory_fini = q{
-  for ( int %s = 0; %s < %s; ++%s )
-    for ( int %s = 0; %s < (%s); %s += (%s) )
-      if ( (%s) + (%s) < (%s) )
+  for (int %s = 0; %s < %s; ++%s)
+    for (int %s = 0; %s < (%s); %s += (%s))
+      if ((%s) + (%s) < (%s))
         %s[(%s) * (%s) + (%s) + (%s)] =
         %s[(%s) * (%s) + (%s) + (%s)];
 },
 
 template_antidiagonal_loop_prefix = "
-  for ( int %s = 0; %s < (%s) + (%s) - 1; ++%s )
+  for (int %s = 0; %s < (%s) + (%s) - 1; ++%s)
   {
 ",
 
@@ -103,7 +109,7 @@ template_shared_index_recalculation = "
 ",
 
 template_antidiagonal_loop_suffix = "
-    barrier( CLK_LOCAL_MEM_FENCE );
+    barrier(CLK_LOCAL_MEM_FENCE);
   }
 ",
 
