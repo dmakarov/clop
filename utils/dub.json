@@ -1,0 +1,12 @@
+{
+    "name"          : "clop_parser_generator",
+    "authors"       : ["Dmitri Makarov"],
+    "description"   : "Generate the CLOP parser from the grammar specification.",
+    "sourcePaths"   : ["."],
+    "targetType"    : "executable",
+    "targetPath"    : ".",
+    "dflags"        : ["-J."],
+    "dependencies"  : {
+        "pegged"      : "~>0.2.1"
+    }
+}

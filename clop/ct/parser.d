@@ -1,100 +1,128 @@
 /++
 This module was automatically generated from the following grammar:
 
+# -*- bison -*-
+#  The MIT License (MIT)
+#  =====================
+#
+#  Copyright (c) 2015 Dmitri Makarov <dmakarov@alumni.stanford.edu>
+#
+#  Permission is hereby granted, free of charge, to any person obtaining a copy
+#  of this software and associated documentation files (the "Software"), to deal
+#  in the Software without restriction, including without limitation the rights
+#  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+#  copies of the Software, and to permit persons to whom the Software is
+#  furnished to do so, subject to the following conditions:
+#
+#  The above copyright notice and this permission notice shall be included in all
+#  copies or substantial portions of the Software.
+#
+#  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+#  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+#  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+#  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+#  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+#  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+#  SOFTWARE.
 
 CLOP:
 
-TranslationUnit        <  ExternalDeclarations?
-                          (SyncPattern :Spacing)?
-                          RangeDecl :Spacing CompoundStatement
-                          (:Spacing Transformations)?
-ExternalDeclarations   <  ExternalDeclaration (:Spacing ExternalDeclaration)*
-ExternalDeclaration    <  FunctionDefinition / Declaration
-FunctionDefinition     <  TypeSpecifier Declarator CompoundStatement
+ TranslationUnit        <- ExternalDeclarations? KernelBlock
+ KernelBlock            <- (SyncPattern :Spacing)? RangeDecl :Spacing CompoundStatement (:Spacing Transformations)?
+ ExternalDeclarations   <- ExternalDeclaration (:Spacing ExternalDeclaration)*
+ ExternalDeclaration    <  FunctionDefinition / Declaration
+ FunctionDefinition     <  TypeSpecifier Declarator CompoundStatement
+ SyncPattern            <  Identifier
+ RangeDecl              <  "NDRange" '(' RangeList ')'
+ RangeList              <  RangeSpec (',' RangeSpec)*
+ RangeSpec              <  Identifier ':' ConditionalExpr ".." ConditionalExpr
+ Transformations        <  "apply" '(' TransList ')'
+ TransList              <  TransSpec (',' TransSpec)*
+ TransSpec              <  Identifier ('(' ')' / '(' ArgumentExprList ')')
 
-DeclarationList        <  Declaration (:Spacing Declaration)*
-Declaration            <  TypeSpecifier InitDeclaratorList? ';'
-Declarator             <  (Identifier / '(' Declarator ')') ( '[' ']'
-                                                            / '[' ConstantExpression ']'
-                                                            / '(' ')'
-                                                            / '(' ParameterList ')'
-                                                            / '(' IdentifierList ')'
-                                                            )*
-TypeSpecifier          <- "void" / "char" / "short" / "int" / "long" / "float" / "double"
-                       /  StructSpecifier
-ParameterList          <  ParameterDeclaration (',' ParameterDeclaration)*
-ParameterDeclaration   <  TypeSpecifier Declarator
-IdentifierList         <  Identifier (',' Identifier)*
-StructSpecifier        <  "struct" ( Identifier ('{' StructDeclarationList '}')?
-                                   / '{' StructDeclarationList '}' )
-StructDeclarationList  <  StructDeclaration (:Spacing StructDeclaration)*
-StructDeclaration      <  TypeSpecifier StructDeclaratorList ';'
-StructDeclaratorList   <  StructDeclarator (',' StructDeclarator)*
-StructDeclarator       <  ( Declarator ConstantExpression? / ConstantExpression )
-InitDeclaratorList     <  InitDeclarator (',' InitDeclarator)*
-InitDeclarator         <  Declarator ('=' Initializer)?
-Initializer            <  AssignExpr / '{' InitializerList ','? '}'
-InitializerList        <  Initializer (',' Initializer)*
+# CLOP_Decl:
+ Declaration            <  TypeSpecifier InitDeclaratorList? ';'
+ Declarator             <  (Identifier / '(' Declarator ')')
+                           ('[' ']' / '(' ')' / '[' ConditionalExpr ']' / '(' ParameterList ')' / '(' IdentifierList ')')*
+ TypeSpecifier          <- "void" / "char" / "short" / "int" / "long" / "float" / "double" / StructSpecifier
+ StructSpecifier        <  "struct" (Identifier ('{' StructDeclarationList '}')? / '{' StructDeclarationList '}')
+ StructDeclarationList  <  StructDeclaration (:Spacing StructDeclaration)*
+ StructDeclaration      <  TypeSpecifier StructDeclaratorList ';'
+ StructDeclaratorList   <  StructDeclarator (',' StructDeclarator)*
+ StructDeclarator       <  (Declarator ConditionalExpr? / ConditionalExpr)
+ InitDeclaratorList     <  InitDeclarator (',' InitDeclarator)*
+ InitDeclarator         <  Declarator ('=' Initializer)?
+ InitializerList        <  Initializer (',' Initializer)*
+ Initializer            <  AssignmentExpr / '{' InitializerList ','? '}'
+ ParameterList          <  ParameterDeclaration (',' ParameterDeclaration)*
+ ParameterDeclaration   <  TypeSpecifier Declarator
+ TypeName               <  TypeSpecifier ('[' ']' / '[' ConditionalExpr ']') ('[' ']' / '[' ConditionalExpr ']')*
 
-SyncPattern            <  "Antidiagonal" / "Horizontal" / "Stencil"
-RangeDecl              <  "NDRange" '(' RangeList ')'
-RangeList              <  RangeSpec ( ',' RangeSpec )*
-RangeSpec              <  Identifier ':' Expression ".." Expression
+# CLOP_Stmt:
+ StatementList          <- Statement (:Spacing Statement)*
+ Statement              <  CompoundStatement / ExpressionStatement / IfStatement / IterationStatement / ReturnStatement / Declaration
+ CompoundStatement      <  '{' StatementList? '}'
+ ExpressionStatement    <  Expression ';'
+ IfStatement            <  "if" '(' Expression ')' Statement ("else" Statement)?
+ IterationStatement     <  WhileStatement / ForStatement
+ WhileStatement         <  "while" '(' Expression ')' Statement
+ ForStatement           <  "for" '(' Expression? ';' Expression? ';' Expression? ')' Statement
+ ReturnStatement        <  "return" Expression? ';'
 
-Transformations        < "apply" '(' TransList ')'
-TransList              < TransSpec ( ',' TransSpec )*
-TransSpec              < Identifier ( '(' ')' / '(' ArgumentList ')' )
+# CLOP_Expr:
+ PrimaryExpr            <  Identifier / FloatLiteral / IntegerLiteral / '(' Expression ')'
+ PostfixExpr            <  PrimaryExpr ( '[' Expression ']'
+                                       / '(' ')'
+                                       / '(' ArgumentExprList ')'
+                                       / '.' Identifier
+                                       / "++"
+                                       / "--" )*
+ ArgumentExprList       <  AssignmentExpr (',' AssignmentExpr)*
+ UnaryExpr              <  PostfixExpr
+                         / IncrementExpr
+                         / DecrementExpr
+                         / UnaryOperator CastExpr
+ UnaryOperator          <- [-+~!]
+ IncrementExpr          < "++" UnaryExpr
+ DecrementExpr          < "--" UnaryExpr
+ CastExpr               <  UnaryExpr / '(' TypeName ')' CastExpr
+ MultiplicativeExpr     <  CastExpr (MultiplicativeOperator MultiplicativeExpr)*
+ MultiplicativeOperator <- [*%/]
+ AdditiveExpr           <  MultiplicativeExpr (AdditiveOperator AdditiveExpr)*
+ AdditiveOperator       <- [-+]
+ ShiftExpr              <  AdditiveExpr (ShiftOperator ShiftExpr)*
+ ShiftOperator          <- "<<" / ">>"
+ RelationalExpr         <  ShiftExpr (RelationalOperator RelationalExpr)*
+ RelationalOperator     <- "<=" / ">=" / "<" / ">"
+ EqualityExpr           <  RelationalExpr (EqualityOperator EqualityExpr)*
+ EqualityOperator       <- "==" / "!="
+ ANDExpr                <  EqualityExpr ('&' ANDExpr)*
+ ExclusiveORExpr        <  ANDExpr ('^' ExclusiveORExpr)*
+ InclusiveORExpr        <  ExclusiveORExpr ('|' InclusiveORExpr)*
+ LogicalANDExpr         <  InclusiveORExpr ("&&" LogicalANDExpr)*
+ LogicalORExpr          <  LogicalANDExpr ("||" LogicalORExpr)*
+ ConditionalExpr        <  LogicalORExpr ('?' Expression ':' ConditionalExpr)?
+ AssignmentExpr         <  UnaryExpr AssignmentOperator AssignmentExpr / ConditionalExpr
+ AssignmentOperator     <- "=" / "*=" / "/=" / "%=" / "+=" / "-=" / "<<=" / ">>=" / "&=" / "^=" / "|="
+ Expression             <  AssignmentExpr (',' AssignmentExpr)*
 
-PrimaryExpr            <  Identifier / FloatLiteral / IntegerLiteral / '(' Expression ')'
-UnaryExpr              <  PrimaryExpr ( ArrayIndex / FunctionCall )?
-ArrayIndex             <  '[' ArgumentList ']'
-FunctionCall           <  '(' ')' / '(' ArgumentList ')'
-ArgumentList           <  Expression ( ',' Expression )*
-
-MulExpr                <  [*/] UnaryExpr
-Factor                 <  UnaryExpr MulExpr*
-AddExpr                <  [-+] Factor
-Expression             <  Factor AddExpr*
-AssignExpr             <  UnaryExpr '=' AssignExpr /  ConditionalExpression
-RelationalExpression   <  Expression (RelationalOperator RelationalExpression)*
-RelationalOperator     <  "<=" / ">=" / "<" / ">"
-EqualityExpression     <  RelationalExpression (EqualityOperator EqualityExpression)*
-EqualityOperator       <  "==" / "!="
-ANDExpression          <  EqualityExpression ('&' ANDExpression)*
-ExclusiveORExpression  <  ANDExpression ('^' ExclusiveORExpression)*
-InclusiveORExpression  <  ExclusiveORExpression ('|' InclusiveORExpression)*
-LogicalANDExpression   <  InclusiveORExpression ("&&" LogicalANDExpression)*
-LogicalORExpression    <  LogicalANDExpression ("||" LogicalORExpression)*
-ConditionalExpression  <  LogicalORExpression ('?' Expression ':' ConditionalExpression)?
-ConstantExpression     <  ConditionalExpression
-
-CompoundStatement      <  '{' '}'
-                       /  '{' DeclarationList '}'
-                       /  '{' StatementList '}'
-                       /  '{' DeclarationList StatementList '}'
-ExpressionStatement    <  AssignExpr? ';'
-IfStatement            <  "if" '(' EqualityExpression ')' Statement ("else" Statement)?
-WhileStatement         <  "while" '(' EqualityExpression ')' Statement
-ForStatement           <  "for" '(' AssignExpr? ';' EqualityExpression? ';' AssignExpr? ')' Statement
-IterationStatement     <  WhileStatement / ForStatement
-ReturnStatement        <  "return" ConditionalExpression ';'
-Statement              <  CompoundStatement
-                       /  ExpressionStatement
-                       /  IfStatement
-                       /  IterationStatement
-                       /  ReturnStatement
-StatementList          <  Statement ( :Spacing Statement )*
-
-Identifier             <~ !Keyword [a-zA-Z_] [a-zA-Z0-9_]*
-Keyword                <- "NDRange"
-Spacing                <~ (space / endOfLine / Comment)*
-Comment                <~ "//" (!endOfLine .)* endOfLine
-IntegerLiteral         <~ Sign? Integer IntegerSuffix?
-Integer                <~ digit+
-IntegerSuffix          <- "Lu" / "LU" / "uL" / "UL" / "L" / "u" / "U"
-FloatLiteral           <~ Sign? Integer "." Integer? (("e" / "E") Sign? Integer)?
-Sign                   <- "-" / "+"
-
+# CLOP_Term:
+ IdentifierList         <  Identifier (',' Identifier)*
+ Identifier             <~ !Keyword [a-zA-Z_] [a-zA-Z0-9_]*
+ Keyword                <- "NDRange" / "apply"
+                         / "auto" / "break" / "case" / "char" / "const" / "continue"
+                         / "default" / "double" / "do" / "else" / "enum" / "extern"
+                         / "float" / "for" / "goto" / "if" / "inline" / "int" / "long"
+                         / "register" / "restrict" / "return" / "short" / "signed"
+                         / "sizeof" / "static" / "struct" / "switch" / "typedef"
+                         / "union" / "unsigned" / "void" / "volatile" / "while"
+ Spacing                <~ (space / endOfLine / Comment)*
+ Comment                <~ "//" (!endOfLine .)* endOfLine
+ IntegerLiteral         <~ Sign? Integer IntegerSuffix?
+ Integer                <~ digit+
+ IntegerSuffix          <- "Lu" / "LU" / "uL" / "UL" / "L" / "u" / "U"
+ FloatLiteral           <~ Sign? Integer "." Integer? (("e" / "E") Sign? Integer)?
+ Sign                   <- "-" / "+"
 
 
 +/
@@ -117,25 +145,10 @@ struct GenericCLOP(TParseTree)
     static this()
     {
         rules["TranslationUnit"] = toDelegate(&TranslationUnit);
+        rules["KernelBlock"] = toDelegate(&KernelBlock);
         rules["ExternalDeclarations"] = toDelegate(&ExternalDeclarations);
         rules["ExternalDeclaration"] = toDelegate(&ExternalDeclaration);
         rules["FunctionDefinition"] = toDelegate(&FunctionDefinition);
-        rules["DeclarationList"] = toDelegate(&DeclarationList);
-        rules["Declaration"] = toDelegate(&Declaration);
-        rules["Declarator"] = toDelegate(&Declarator);
-        rules["TypeSpecifier"] = toDelegate(&TypeSpecifier);
-        rules["ParameterList"] = toDelegate(&ParameterList);
-        rules["ParameterDeclaration"] = toDelegate(&ParameterDeclaration);
-        rules["IdentifierList"] = toDelegate(&IdentifierList);
-        rules["StructSpecifier"] = toDelegate(&StructSpecifier);
-        rules["StructDeclarationList"] = toDelegate(&StructDeclarationList);
-        rules["StructDeclaration"] = toDelegate(&StructDeclaration);
-        rules["StructDeclaratorList"] = toDelegate(&StructDeclaratorList);
-        rules["StructDeclarator"] = toDelegate(&StructDeclarator);
-        rules["InitDeclaratorList"] = toDelegate(&InitDeclaratorList);
-        rules["InitDeclarator"] = toDelegate(&InitDeclarator);
-        rules["Initializer"] = toDelegate(&Initializer);
-        rules["InitializerList"] = toDelegate(&InitializerList);
         rules["SyncPattern"] = toDelegate(&SyncPattern);
         rules["RangeDecl"] = toDelegate(&RangeDecl);
         rules["RangeList"] = toDelegate(&RangeList);
@@ -143,36 +156,58 @@ struct GenericCLOP(TParseTree)
         rules["Transformations"] = toDelegate(&Transformations);
         rules["TransList"] = toDelegate(&TransList);
         rules["TransSpec"] = toDelegate(&TransSpec);
-        rules["PrimaryExpr"] = toDelegate(&PrimaryExpr);
-        rules["UnaryExpr"] = toDelegate(&UnaryExpr);
-        rules["ArrayIndex"] = toDelegate(&ArrayIndex);
-        rules["FunctionCall"] = toDelegate(&FunctionCall);
-        rules["ArgumentList"] = toDelegate(&ArgumentList);
-        rules["MulExpr"] = toDelegate(&MulExpr);
-        rules["Factor"] = toDelegate(&Factor);
-        rules["AddExpr"] = toDelegate(&AddExpr);
-        rules["Expression"] = toDelegate(&Expression);
-        rules["AssignExpr"] = toDelegate(&AssignExpr);
-        rules["RelationalExpression"] = toDelegate(&RelationalExpression);
-        rules["RelationalOperator"] = toDelegate(&RelationalOperator);
-        rules["EqualityExpression"] = toDelegate(&EqualityExpression);
-        rules["EqualityOperator"] = toDelegate(&EqualityOperator);
-        rules["ANDExpression"] = toDelegate(&ANDExpression);
-        rules["ExclusiveORExpression"] = toDelegate(&ExclusiveORExpression);
-        rules["InclusiveORExpression"] = toDelegate(&InclusiveORExpression);
-        rules["LogicalANDExpression"] = toDelegate(&LogicalANDExpression);
-        rules["LogicalORExpression"] = toDelegate(&LogicalORExpression);
-        rules["ConditionalExpression"] = toDelegate(&ConditionalExpression);
-        rules["ConstantExpression"] = toDelegate(&ConstantExpression);
+        rules["Declaration"] = toDelegate(&Declaration);
+        rules["Declarator"] = toDelegate(&Declarator);
+        rules["TypeSpecifier"] = toDelegate(&TypeSpecifier);
+        rules["StructSpecifier"] = toDelegate(&StructSpecifier);
+        rules["StructDeclarationList"] = toDelegate(&StructDeclarationList);
+        rules["StructDeclaration"] = toDelegate(&StructDeclaration);
+        rules["StructDeclaratorList"] = toDelegate(&StructDeclaratorList);
+        rules["StructDeclarator"] = toDelegate(&StructDeclarator);
+        rules["InitDeclaratorList"] = toDelegate(&InitDeclaratorList);
+        rules["InitDeclarator"] = toDelegate(&InitDeclarator);
+        rules["InitializerList"] = toDelegate(&InitializerList);
+        rules["Initializer"] = toDelegate(&Initializer);
+        rules["ParameterList"] = toDelegate(&ParameterList);
+        rules["ParameterDeclaration"] = toDelegate(&ParameterDeclaration);
+        rules["TypeName"] = toDelegate(&TypeName);
+        rules["StatementList"] = toDelegate(&StatementList);
+        rules["Statement"] = toDelegate(&Statement);
         rules["CompoundStatement"] = toDelegate(&CompoundStatement);
         rules["ExpressionStatement"] = toDelegate(&ExpressionStatement);
         rules["IfStatement"] = toDelegate(&IfStatement);
+        rules["IterationStatement"] = toDelegate(&IterationStatement);
         rules["WhileStatement"] = toDelegate(&WhileStatement);
         rules["ForStatement"] = toDelegate(&ForStatement);
-        rules["IterationStatement"] = toDelegate(&IterationStatement);
         rules["ReturnStatement"] = toDelegate(&ReturnStatement);
-        rules["Statement"] = toDelegate(&Statement);
-        rules["StatementList"] = toDelegate(&StatementList);
+        rules["PrimaryExpr"] = toDelegate(&PrimaryExpr);
+        rules["PostfixExpr"] = toDelegate(&PostfixExpr);
+        rules["ArgumentExprList"] = toDelegate(&ArgumentExprList);
+        rules["UnaryExpr"] = toDelegate(&UnaryExpr);
+        rules["UnaryOperator"] = toDelegate(&UnaryOperator);
+        rules["IncrementExpr"] = toDelegate(&IncrementExpr);
+        rules["DecrementExpr"] = toDelegate(&DecrementExpr);
+        rules["CastExpr"] = toDelegate(&CastExpr);
+        rules["MultiplicativeExpr"] = toDelegate(&MultiplicativeExpr);
+        rules["MultiplicativeOperator"] = toDelegate(&MultiplicativeOperator);
+        rules["AdditiveExpr"] = toDelegate(&AdditiveExpr);
+        rules["AdditiveOperator"] = toDelegate(&AdditiveOperator);
+        rules["ShiftExpr"] = toDelegate(&ShiftExpr);
+        rules["ShiftOperator"] = toDelegate(&ShiftOperator);
+        rules["RelationalExpr"] = toDelegate(&RelationalExpr);
+        rules["RelationalOperator"] = toDelegate(&RelationalOperator);
+        rules["EqualityExpr"] = toDelegate(&EqualityExpr);
+        rules["EqualityOperator"] = toDelegate(&EqualityOperator);
+        rules["ANDExpr"] = toDelegate(&ANDExpr);
+        rules["ExclusiveORExpr"] = toDelegate(&ExclusiveORExpr);
+        rules["InclusiveORExpr"] = toDelegate(&InclusiveORExpr);
+        rules["LogicalANDExpr"] = toDelegate(&LogicalANDExpr);
+        rules["LogicalORExpr"] = toDelegate(&LogicalORExpr);
+        rules["ConditionalExpr"] = toDelegate(&ConditionalExpr);
+        rules["AssignmentExpr"] = toDelegate(&AssignmentExpr);
+        rules["AssignmentOperator"] = toDelegate(&AssignmentOperator);
+        rules["Expression"] = toDelegate(&Expression);
+        rules["IdentifierList"] = toDelegate(&IdentifierList);
         rules["Identifier"] = toDelegate(&Identifier);
         rules["Keyword"] = toDelegate(&Keyword);
         rules["Spacing"] = toDelegate(&Spacing);
@@ -238,7 +273,7 @@ struct GenericCLOP(TParseTree)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.option!(pegged.peg.wrapAround!(Spacing, ExternalDeclarations, Spacing)), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, SyncPattern, Spacing), pegged.peg.discard!(pegged.peg.wrapAround!(Spacing, Spacing, Spacing))), Spacing)), pegged.peg.wrapAround!(Spacing, RangeDecl, Spacing), pegged.peg.discard!(pegged.peg.wrapAround!(Spacing, Spacing, Spacing)), pegged.peg.wrapAround!(Spacing, CompoundStatement, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.discard!(pegged.peg.wrapAround!(Spacing, Spacing, Spacing)), pegged.peg.wrapAround!(Spacing, Transformations, Spacing)), Spacing))), "CLOP.TranslationUnit")(p);
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.option!(ExternalDeclarations), KernelBlock), "CLOP.TranslationUnit")(p);
         }
         else
         {
@@ -246,7 +281,7 @@ struct GenericCLOP(TParseTree)
                 return *m;
             else
             {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.option!(pegged.peg.wrapAround!(Spacing, ExternalDeclarations, Spacing)), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, SyncPattern, Spacing), pegged.peg.discard!(pegged.peg.wrapAround!(Spacing, Spacing, Spacing))), Spacing)), pegged.peg.wrapAround!(Spacing, RangeDecl, Spacing), pegged.peg.discard!(pegged.peg.wrapAround!(Spacing, Spacing, Spacing)), pegged.peg.wrapAround!(Spacing, CompoundStatement, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.discard!(pegged.peg.wrapAround!(Spacing, Spacing, Spacing)), pegged.peg.wrapAround!(Spacing, Transformations, Spacing)), Spacing))), "CLOP.TranslationUnit"), "TranslationUnit")(p);
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.option!(ExternalDeclarations), KernelBlock), "CLOP.TranslationUnit"), "TranslationUnit")(p);
                 memo[tuple(`TranslationUnit`,p.end)] = result;
                 return result;
             }
@@ -257,12 +292,12 @@ struct GenericCLOP(TParseTree)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.option!(pegged.peg.wrapAround!(Spacing, ExternalDeclarations, Spacing)), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, SyncPattern, Spacing), pegged.peg.discard!(pegged.peg.wrapAround!(Spacing, Spacing, Spacing))), Spacing)), pegged.peg.wrapAround!(Spacing, RangeDecl, Spacing), pegged.peg.discard!(pegged.peg.wrapAround!(Spacing, Spacing, Spacing)), pegged.peg.wrapAround!(Spacing, CompoundStatement, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.discard!(pegged.peg.wrapAround!(Spacing, Spacing, Spacing)), pegged.peg.wrapAround!(Spacing, Transformations, Spacing)), Spacing))), "CLOP.TranslationUnit")(TParseTree("", false,[], s));
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.option!(ExternalDeclarations), KernelBlock), "CLOP.TranslationUnit")(TParseTree("", false,[], s));
         }
         else
         {
             memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.option!(pegged.peg.wrapAround!(Spacing, ExternalDeclarations, Spacing)), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, SyncPattern, Spacing), pegged.peg.discard!(pegged.peg.wrapAround!(Spacing, Spacing, Spacing))), Spacing)), pegged.peg.wrapAround!(Spacing, RangeDecl, Spacing), pegged.peg.discard!(pegged.peg.wrapAround!(Spacing, Spacing, Spacing)), pegged.peg.wrapAround!(Spacing, CompoundStatement, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.discard!(pegged.peg.wrapAround!(Spacing, Spacing, Spacing)), pegged.peg.wrapAround!(Spacing, Transformations, Spacing)), Spacing))), "CLOP.TranslationUnit"), "TranslationUnit")(TParseTree("", false,[], s));
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.option!(ExternalDeclarations), KernelBlock), "CLOP.TranslationUnit"), "TranslationUnit")(TParseTree("", false,[], s));
         }
     }
     static string TranslationUnit(GetName g)
@@ -270,11 +305,47 @@ struct GenericCLOP(TParseTree)
         return "CLOP.TranslationUnit";
     }
 
+    static TParseTree KernelBlock(TParseTree p)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.option!(pegged.peg.and!(SyncPattern, pegged.peg.discard!(Spacing))), RangeDecl, pegged.peg.discard!(Spacing), CompoundStatement, pegged.peg.option!(pegged.peg.and!(pegged.peg.discard!(Spacing), Transformations))), "CLOP.KernelBlock")(p);
+        }
+        else
+        {
+            if(auto m = tuple(`KernelBlock`,p.end) in memo)
+                return *m;
+            else
+            {
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.option!(pegged.peg.and!(SyncPattern, pegged.peg.discard!(Spacing))), RangeDecl, pegged.peg.discard!(Spacing), CompoundStatement, pegged.peg.option!(pegged.peg.and!(pegged.peg.discard!(Spacing), Transformations))), "CLOP.KernelBlock"), "KernelBlock")(p);
+                memo[tuple(`KernelBlock`,p.end)] = result;
+                return result;
+            }
+        }
+    }
+
+    static TParseTree KernelBlock(string s)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.option!(pegged.peg.and!(SyncPattern, pegged.peg.discard!(Spacing))), RangeDecl, pegged.peg.discard!(Spacing), CompoundStatement, pegged.peg.option!(pegged.peg.and!(pegged.peg.discard!(Spacing), Transformations))), "CLOP.KernelBlock")(TParseTree("", false,[], s));
+        }
+        else
+        {
+            memo = null;
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.option!(pegged.peg.and!(SyncPattern, pegged.peg.discard!(Spacing))), RangeDecl, pegged.peg.discard!(Spacing), CompoundStatement, pegged.peg.option!(pegged.peg.and!(pegged.peg.discard!(Spacing), Transformations))), "CLOP.KernelBlock"), "KernelBlock")(TParseTree("", false,[], s));
+        }
+    }
+    static string KernelBlock(GetName g)
+    {
+        return "CLOP.KernelBlock";
+    }
+
     static TParseTree ExternalDeclarations(TParseTree p)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, ExternalDeclaration, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.discard!(pegged.peg.wrapAround!(Spacing, Spacing, Spacing)), pegged.peg.wrapAround!(Spacing, ExternalDeclaration, Spacing)), Spacing))), "CLOP.ExternalDeclarations")(p);
+            return         pegged.peg.defined!(pegged.peg.and!(ExternalDeclaration, pegged.peg.zeroOrMore!(pegged.peg.and!(pegged.peg.discard!(Spacing), ExternalDeclaration))), "CLOP.ExternalDeclarations")(p);
         }
         else
         {
@@ -282,7 +353,7 @@ struct GenericCLOP(TParseTree)
                 return *m;
             else
             {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, ExternalDeclaration, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.discard!(pegged.peg.wrapAround!(Spacing, Spacing, Spacing)), pegged.peg.wrapAround!(Spacing, ExternalDeclaration, Spacing)), Spacing))), "CLOP.ExternalDeclarations"), "ExternalDeclarations")(p);
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(ExternalDeclaration, pegged.peg.zeroOrMore!(pegged.peg.and!(pegged.peg.discard!(Spacing), ExternalDeclaration))), "CLOP.ExternalDeclarations"), "ExternalDeclarations")(p);
                 memo[tuple(`ExternalDeclarations`,p.end)] = result;
                 return result;
             }
@@ -293,12 +364,12 @@ struct GenericCLOP(TParseTree)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, ExternalDeclaration, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.discard!(pegged.peg.wrapAround!(Spacing, Spacing, Spacing)), pegged.peg.wrapAround!(Spacing, ExternalDeclaration, Spacing)), Spacing))), "CLOP.ExternalDeclarations")(TParseTree("", false,[], s));
+            return         pegged.peg.defined!(pegged.peg.and!(ExternalDeclaration, pegged.peg.zeroOrMore!(pegged.peg.and!(pegged.peg.discard!(Spacing), ExternalDeclaration))), "CLOP.ExternalDeclarations")(TParseTree("", false,[], s));
         }
         else
         {
             memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, ExternalDeclaration, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.discard!(pegged.peg.wrapAround!(Spacing, Spacing, Spacing)), pegged.peg.wrapAround!(Spacing, ExternalDeclaration, Spacing)), Spacing))), "CLOP.ExternalDeclarations"), "ExternalDeclarations")(TParseTree("", false,[], s));
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(ExternalDeclaration, pegged.peg.zeroOrMore!(pegged.peg.and!(pegged.peg.discard!(Spacing), ExternalDeclaration))), "CLOP.ExternalDeclarations"), "ExternalDeclarations")(TParseTree("", false,[], s));
         }
     }
     static string ExternalDeclarations(GetName g)
@@ -378,40 +449,256 @@ struct GenericCLOP(TParseTree)
         return "CLOP.FunctionDefinition";
     }
 
-    static TParseTree DeclarationList(TParseTree p)
+    static TParseTree SyncPattern(TParseTree p)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Declaration, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.discard!(pegged.peg.wrapAround!(Spacing, Spacing, Spacing)), pegged.peg.wrapAround!(Spacing, Declaration, Spacing)), Spacing))), "CLOP.DeclarationList")(p);
+            return         pegged.peg.defined!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), "CLOP.SyncPattern")(p);
         }
         else
         {
-            if(auto m = tuple(`DeclarationList`,p.end) in memo)
+            if(auto m = tuple(`SyncPattern`,p.end) in memo)
                 return *m;
             else
             {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Declaration, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.discard!(pegged.peg.wrapAround!(Spacing, Spacing, Spacing)), pegged.peg.wrapAround!(Spacing, Declaration, Spacing)), Spacing))), "CLOP.DeclarationList"), "DeclarationList")(p);
-                memo[tuple(`DeclarationList`,p.end)] = result;
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), "CLOP.SyncPattern"), "SyncPattern")(p);
+                memo[tuple(`SyncPattern`,p.end)] = result;
                 return result;
             }
         }
     }
 
-    static TParseTree DeclarationList(string s)
+    static TParseTree SyncPattern(string s)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Declaration, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.discard!(pegged.peg.wrapAround!(Spacing, Spacing, Spacing)), pegged.peg.wrapAround!(Spacing, Declaration, Spacing)), Spacing))), "CLOP.DeclarationList")(TParseTree("", false,[], s));
+            return         pegged.peg.defined!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), "CLOP.SyncPattern")(TParseTree("", false,[], s));
         }
         else
         {
             memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Declaration, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.discard!(pegged.peg.wrapAround!(Spacing, Spacing, Spacing)), pegged.peg.wrapAround!(Spacing, Declaration, Spacing)), Spacing))), "CLOP.DeclarationList"), "DeclarationList")(TParseTree("", false,[], s));
+            return hooked!(pegged.peg.defined!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), "CLOP.SyncPattern"), "SyncPattern")(TParseTree("", false,[], s));
         }
     }
-    static string DeclarationList(GetName g)
+    static string SyncPattern(GetName g)
     {
-        return "CLOP.DeclarationList";
+        return "CLOP.SyncPattern";
+    }
+
+    static TParseTree RangeDecl(TParseTree p)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("NDRange"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, RangeList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), "CLOP.RangeDecl")(p);
+        }
+        else
+        {
+            if(auto m = tuple(`RangeDecl`,p.end) in memo)
+                return *m;
+            else
+            {
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("NDRange"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, RangeList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), "CLOP.RangeDecl"), "RangeDecl")(p);
+                memo[tuple(`RangeDecl`,p.end)] = result;
+                return result;
+            }
+        }
+    }
+
+    static TParseTree RangeDecl(string s)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("NDRange"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, RangeList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), "CLOP.RangeDecl")(TParseTree("", false,[], s));
+        }
+        else
+        {
+            memo = null;
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("NDRange"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, RangeList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), "CLOP.RangeDecl"), "RangeDecl")(TParseTree("", false,[], s));
+        }
+    }
+    static string RangeDecl(GetName g)
+    {
+        return "CLOP.RangeDecl";
+    }
+
+    static TParseTree RangeList(TParseTree p)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, RangeSpec, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, RangeSpec, Spacing)), Spacing))), "CLOP.RangeList")(p);
+        }
+        else
+        {
+            if(auto m = tuple(`RangeList`,p.end) in memo)
+                return *m;
+            else
+            {
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, RangeSpec, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, RangeSpec, Spacing)), Spacing))), "CLOP.RangeList"), "RangeList")(p);
+                memo[tuple(`RangeList`,p.end)] = result;
+                return result;
+            }
+        }
+    }
+
+    static TParseTree RangeList(string s)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, RangeSpec, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, RangeSpec, Spacing)), Spacing))), "CLOP.RangeList")(TParseTree("", false,[], s));
+        }
+        else
+        {
+            memo = null;
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, RangeSpec, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, RangeSpec, Spacing)), Spacing))), "CLOP.RangeList"), "RangeList")(TParseTree("", false,[], s));
+        }
+    }
+    static string RangeList(GetName g)
+    {
+        return "CLOP.RangeList";
+    }
+
+    static TParseTree RangeSpec(TParseTree p)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(":"), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(".."), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing)), "CLOP.RangeSpec")(p);
+        }
+        else
+        {
+            if(auto m = tuple(`RangeSpec`,p.end) in memo)
+                return *m;
+            else
+            {
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(":"), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(".."), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing)), "CLOP.RangeSpec"), "RangeSpec")(p);
+                memo[tuple(`RangeSpec`,p.end)] = result;
+                return result;
+            }
+        }
+    }
+
+    static TParseTree RangeSpec(string s)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(":"), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(".."), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing)), "CLOP.RangeSpec")(TParseTree("", false,[], s));
+        }
+        else
+        {
+            memo = null;
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(":"), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(".."), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing)), "CLOP.RangeSpec"), "RangeSpec")(TParseTree("", false,[], s));
+        }
+    }
+    static string RangeSpec(GetName g)
+    {
+        return "CLOP.RangeSpec";
+    }
+
+    static TParseTree Transformations(TParseTree p)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("apply"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, TransList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), "CLOP.Transformations")(p);
+        }
+        else
+        {
+            if(auto m = tuple(`Transformations`,p.end) in memo)
+                return *m;
+            else
+            {
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("apply"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, TransList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), "CLOP.Transformations"), "Transformations")(p);
+                memo[tuple(`Transformations`,p.end)] = result;
+                return result;
+            }
+        }
+    }
+
+    static TParseTree Transformations(string s)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("apply"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, TransList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), "CLOP.Transformations")(TParseTree("", false,[], s));
+        }
+        else
+        {
+            memo = null;
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("apply"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, TransList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), "CLOP.Transformations"), "Transformations")(TParseTree("", false,[], s));
+        }
+    }
+    static string Transformations(GetName g)
+    {
+        return "CLOP.Transformations";
+    }
+
+    static TParseTree TransList(TParseTree p)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, TransSpec, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, TransSpec, Spacing)), Spacing))), "CLOP.TransList")(p);
+        }
+        else
+        {
+            if(auto m = tuple(`TransList`,p.end) in memo)
+                return *m;
+            else
+            {
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, TransSpec, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, TransSpec, Spacing)), Spacing))), "CLOP.TransList"), "TransList")(p);
+                memo[tuple(`TransList`,p.end)] = result;
+                return result;
+            }
+        }
+    }
+
+    static TParseTree TransList(string s)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, TransSpec, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, TransSpec, Spacing)), Spacing))), "CLOP.TransList")(TParseTree("", false,[], s));
+        }
+        else
+        {
+            memo = null;
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, TransSpec, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, TransSpec, Spacing)), Spacing))), "CLOP.TransList"), "TransList")(TParseTree("", false,[], s));
+        }
+    }
+    static string TransList(GetName g)
+    {
+        return "CLOP.TransList";
+    }
+
+    static TParseTree TransSpec(TParseTree p)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, ArgumentExprList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing))), Spacing)), "CLOP.TransSpec")(p);
+        }
+        else
+        {
+            if(auto m = tuple(`TransSpec`,p.end) in memo)
+                return *m;
+            else
+            {
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, ArgumentExprList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing))), Spacing)), "CLOP.TransSpec"), "TransSpec")(p);
+                memo[tuple(`TransSpec`,p.end)] = result;
+                return result;
+            }
+        }
+    }
+
+    static TParseTree TransSpec(string s)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, ArgumentExprList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing))), Spacing)), "CLOP.TransSpec")(TParseTree("", false,[], s));
+        }
+        else
+        {
+            memo = null;
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, ArgumentExprList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing))), Spacing)), "CLOP.TransSpec"), "TransSpec")(TParseTree("", false,[], s));
+        }
+    }
+    static string TransSpec(GetName g)
+    {
+        return "CLOP.TransSpec";
     }
 
     static TParseTree Declaration(TParseTree p)
@@ -454,7 +741,7 @@ struct GenericCLOP(TParseTree)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, Declarator, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing))), Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("["), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("]"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("["), Spacing), pegged.peg.wrapAround!(Spacing, ConstantExpression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("]"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, ParameterList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, IdentifierList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing))), Spacing))), "CLOP.Declarator")(p);
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, Declarator, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing))), Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("["), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("]"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("["), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("]"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, ParameterList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, IdentifierList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing))), Spacing))), "CLOP.Declarator")(p);
         }
         else
         {
@@ -462,7 +749,7 @@ struct GenericCLOP(TParseTree)
                 return *m;
             else
             {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, Declarator, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing))), Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("["), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("]"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("["), Spacing), pegged.peg.wrapAround!(Spacing, ConstantExpression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("]"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, ParameterList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, IdentifierList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing))), Spacing))), "CLOP.Declarator"), "Declarator")(p);
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, Declarator, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing))), Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("["), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("]"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("["), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("]"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, ParameterList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, IdentifierList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing))), Spacing))), "CLOP.Declarator"), "Declarator")(p);
                 memo[tuple(`Declarator`,p.end)] = result;
                 return result;
             }
@@ -473,12 +760,12 @@ struct GenericCLOP(TParseTree)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, Declarator, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing))), Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("["), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("]"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("["), Spacing), pegged.peg.wrapAround!(Spacing, ConstantExpression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("]"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, ParameterList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, IdentifierList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing))), Spacing))), "CLOP.Declarator")(TParseTree("", false,[], s));
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, Declarator, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing))), Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("["), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("]"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("["), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("]"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, ParameterList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, IdentifierList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing))), Spacing))), "CLOP.Declarator")(TParseTree("", false,[], s));
         }
         else
         {
             memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, Declarator, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing))), Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("["), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("]"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("["), Spacing), pegged.peg.wrapAround!(Spacing, ConstantExpression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("]"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, ParameterList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, IdentifierList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing))), Spacing))), "CLOP.Declarator"), "Declarator")(TParseTree("", false,[], s));
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, Declarator, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing))), Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("["), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("]"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("["), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("]"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, ParameterList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, IdentifierList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing))), Spacing))), "CLOP.Declarator"), "Declarator")(TParseTree("", false,[], s));
         }
     }
     static string Declarator(GetName g)
@@ -520,114 +807,6 @@ struct GenericCLOP(TParseTree)
     static string TypeSpecifier(GetName g)
     {
         return "CLOP.TypeSpecifier";
-    }
-
-    static TParseTree ParameterList(TParseTree p)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, ParameterDeclaration, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, ParameterDeclaration, Spacing)), Spacing))), "CLOP.ParameterList")(p);
-        }
-        else
-        {
-            if(auto m = tuple(`ParameterList`,p.end) in memo)
-                return *m;
-            else
-            {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, ParameterDeclaration, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, ParameterDeclaration, Spacing)), Spacing))), "CLOP.ParameterList"), "ParameterList")(p);
-                memo[tuple(`ParameterList`,p.end)] = result;
-                return result;
-            }
-        }
-    }
-
-    static TParseTree ParameterList(string s)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, ParameterDeclaration, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, ParameterDeclaration, Spacing)), Spacing))), "CLOP.ParameterList")(TParseTree("", false,[], s));
-        }
-        else
-        {
-            memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, ParameterDeclaration, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, ParameterDeclaration, Spacing)), Spacing))), "CLOP.ParameterList"), "ParameterList")(TParseTree("", false,[], s));
-        }
-    }
-    static string ParameterList(GetName g)
-    {
-        return "CLOP.ParameterList";
-    }
-
-    static TParseTree ParameterDeclaration(TParseTree p)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, TypeSpecifier, Spacing), pegged.peg.wrapAround!(Spacing, Declarator, Spacing)), "CLOP.ParameterDeclaration")(p);
-        }
-        else
-        {
-            if(auto m = tuple(`ParameterDeclaration`,p.end) in memo)
-                return *m;
-            else
-            {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, TypeSpecifier, Spacing), pegged.peg.wrapAround!(Spacing, Declarator, Spacing)), "CLOP.ParameterDeclaration"), "ParameterDeclaration")(p);
-                memo[tuple(`ParameterDeclaration`,p.end)] = result;
-                return result;
-            }
-        }
-    }
-
-    static TParseTree ParameterDeclaration(string s)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, TypeSpecifier, Spacing), pegged.peg.wrapAround!(Spacing, Declarator, Spacing)), "CLOP.ParameterDeclaration")(TParseTree("", false,[], s));
-        }
-        else
-        {
-            memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, TypeSpecifier, Spacing), pegged.peg.wrapAround!(Spacing, Declarator, Spacing)), "CLOP.ParameterDeclaration"), "ParameterDeclaration")(TParseTree("", false,[], s));
-        }
-    }
-    static string ParameterDeclaration(GetName g)
-    {
-        return "CLOP.ParameterDeclaration";
-    }
-
-    static TParseTree IdentifierList(TParseTree p)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, Identifier, Spacing)), Spacing))), "CLOP.IdentifierList")(p);
-        }
-        else
-        {
-            if(auto m = tuple(`IdentifierList`,p.end) in memo)
-                return *m;
-            else
-            {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, Identifier, Spacing)), Spacing))), "CLOP.IdentifierList"), "IdentifierList")(p);
-                memo[tuple(`IdentifierList`,p.end)] = result;
-                return result;
-            }
-        }
-    }
-
-    static TParseTree IdentifierList(string s)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, Identifier, Spacing)), Spacing))), "CLOP.IdentifierList")(TParseTree("", false,[], s));
-        }
-        else
-        {
-            memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, Identifier, Spacing)), Spacing))), "CLOP.IdentifierList"), "IdentifierList")(TParseTree("", false,[], s));
-        }
-    }
-    static string IdentifierList(GetName g)
-    {
-        return "CLOP.IdentifierList";
     }
 
     static TParseTree StructSpecifier(TParseTree p)
@@ -778,7 +957,7 @@ struct GenericCLOP(TParseTree)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Declarator, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, ConstantExpression, Spacing))), pegged.peg.wrapAround!(Spacing, ConstantExpression, Spacing)), Spacing), "CLOP.StructDeclarator")(p);
+            return         pegged.peg.defined!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Declarator, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing))), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing)), Spacing), "CLOP.StructDeclarator")(p);
         }
         else
         {
@@ -786,7 +965,7 @@ struct GenericCLOP(TParseTree)
                 return *m;
             else
             {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Declarator, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, ConstantExpression, Spacing))), pegged.peg.wrapAround!(Spacing, ConstantExpression, Spacing)), Spacing), "CLOP.StructDeclarator"), "StructDeclarator")(p);
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Declarator, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing))), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing)), Spacing), "CLOP.StructDeclarator"), "StructDeclarator")(p);
                 memo[tuple(`StructDeclarator`,p.end)] = result;
                 return result;
             }
@@ -797,12 +976,12 @@ struct GenericCLOP(TParseTree)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Declarator, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, ConstantExpression, Spacing))), pegged.peg.wrapAround!(Spacing, ConstantExpression, Spacing)), Spacing), "CLOP.StructDeclarator")(TParseTree("", false,[], s));
+            return         pegged.peg.defined!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Declarator, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing))), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing)), Spacing), "CLOP.StructDeclarator")(TParseTree("", false,[], s));
         }
         else
         {
             memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Declarator, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, ConstantExpression, Spacing))), pegged.peg.wrapAround!(Spacing, ConstantExpression, Spacing)), Spacing), "CLOP.StructDeclarator"), "StructDeclarator")(TParseTree("", false,[], s));
+            return hooked!(pegged.peg.defined!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Declarator, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing))), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing)), Spacing), "CLOP.StructDeclarator"), "StructDeclarator")(TParseTree("", false,[], s));
         }
     }
     static string StructDeclarator(GetName g)
@@ -882,42 +1061,6 @@ struct GenericCLOP(TParseTree)
         return "CLOP.InitDeclarator";
     }
 
-    static TParseTree Initializer(TParseTree p)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, AssignExpr, Spacing), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("{"), Spacing), pegged.peg.wrapAround!(Spacing, InitializerList, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("}"), Spacing))), "CLOP.Initializer")(p);
-        }
-        else
-        {
-            if(auto m = tuple(`Initializer`,p.end) in memo)
-                return *m;
-            else
-            {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, AssignExpr, Spacing), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("{"), Spacing), pegged.peg.wrapAround!(Spacing, InitializerList, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("}"), Spacing))), "CLOP.Initializer"), "Initializer")(p);
-                memo[tuple(`Initializer`,p.end)] = result;
-                return result;
-            }
-        }
-    }
-
-    static TParseTree Initializer(string s)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, AssignExpr, Spacing), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("{"), Spacing), pegged.peg.wrapAround!(Spacing, InitializerList, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("}"), Spacing))), "CLOP.Initializer")(TParseTree("", false,[], s));
-        }
-        else
-        {
-            memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, AssignExpr, Spacing), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("{"), Spacing), pegged.peg.wrapAround!(Spacing, InitializerList, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("}"), Spacing))), "CLOP.Initializer"), "Initializer")(TParseTree("", false,[], s));
-        }
-    }
-    static string Initializer(GetName g)
-    {
-        return "CLOP.Initializer";
-    }
-
     static TParseTree InitializerList(TParseTree p)
     {
         if(__ctfe)
@@ -954,1019 +1097,227 @@ struct GenericCLOP(TParseTree)
         return "CLOP.InitializerList";
     }
 
-    static TParseTree SyncPattern(TParseTree p)
+    static TParseTree Initializer(TParseTree p)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("Antidiagonal"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("Horizontal"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("Stencil"), Spacing)), "CLOP.SyncPattern")(p);
+            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, AssignmentExpr, Spacing), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("{"), Spacing), pegged.peg.wrapAround!(Spacing, InitializerList, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("}"), Spacing))), "CLOP.Initializer")(p);
         }
         else
         {
-            if(auto m = tuple(`SyncPattern`,p.end) in memo)
+            if(auto m = tuple(`Initializer`,p.end) in memo)
                 return *m;
             else
             {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("Antidiagonal"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("Horizontal"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("Stencil"), Spacing)), "CLOP.SyncPattern"), "SyncPattern")(p);
-                memo[tuple(`SyncPattern`,p.end)] = result;
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, AssignmentExpr, Spacing), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("{"), Spacing), pegged.peg.wrapAround!(Spacing, InitializerList, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("}"), Spacing))), "CLOP.Initializer"), "Initializer")(p);
+                memo[tuple(`Initializer`,p.end)] = result;
                 return result;
             }
         }
     }
 
-    static TParseTree SyncPattern(string s)
+    static TParseTree Initializer(string s)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("Antidiagonal"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("Horizontal"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("Stencil"), Spacing)), "CLOP.SyncPattern")(TParseTree("", false,[], s));
+            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, AssignmentExpr, Spacing), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("{"), Spacing), pegged.peg.wrapAround!(Spacing, InitializerList, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("}"), Spacing))), "CLOP.Initializer")(TParseTree("", false,[], s));
         }
         else
         {
             memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("Antidiagonal"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("Horizontal"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("Stencil"), Spacing)), "CLOP.SyncPattern"), "SyncPattern")(TParseTree("", false,[], s));
+            return hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, AssignmentExpr, Spacing), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("{"), Spacing), pegged.peg.wrapAround!(Spacing, InitializerList, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("}"), Spacing))), "CLOP.Initializer"), "Initializer")(TParseTree("", false,[], s));
         }
     }
-    static string SyncPattern(GetName g)
+    static string Initializer(GetName g)
     {
-        return "CLOP.SyncPattern";
+        return "CLOP.Initializer";
     }
 
-    static TParseTree RangeDecl(TParseTree p)
+    static TParseTree ParameterList(TParseTree p)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("NDRange"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, RangeList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), "CLOP.RangeDecl")(p);
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, ParameterDeclaration, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, ParameterDeclaration, Spacing)), Spacing))), "CLOP.ParameterList")(p);
         }
         else
         {
-            if(auto m = tuple(`RangeDecl`,p.end) in memo)
+            if(auto m = tuple(`ParameterList`,p.end) in memo)
                 return *m;
             else
             {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("NDRange"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, RangeList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), "CLOP.RangeDecl"), "RangeDecl")(p);
-                memo[tuple(`RangeDecl`,p.end)] = result;
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, ParameterDeclaration, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, ParameterDeclaration, Spacing)), Spacing))), "CLOP.ParameterList"), "ParameterList")(p);
+                memo[tuple(`ParameterList`,p.end)] = result;
                 return result;
             }
         }
     }
 
-    static TParseTree RangeDecl(string s)
+    static TParseTree ParameterList(string s)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("NDRange"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, RangeList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), "CLOP.RangeDecl")(TParseTree("", false,[], s));
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, ParameterDeclaration, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, ParameterDeclaration, Spacing)), Spacing))), "CLOP.ParameterList")(TParseTree("", false,[], s));
         }
         else
         {
             memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("NDRange"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, RangeList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), "CLOP.RangeDecl"), "RangeDecl")(TParseTree("", false,[], s));
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, ParameterDeclaration, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, ParameterDeclaration, Spacing)), Spacing))), "CLOP.ParameterList"), "ParameterList")(TParseTree("", false,[], s));
         }
     }
-    static string RangeDecl(GetName g)
+    static string ParameterList(GetName g)
     {
-        return "CLOP.RangeDecl";
+        return "CLOP.ParameterList";
     }
 
-    static TParseTree RangeList(TParseTree p)
+    static TParseTree ParameterDeclaration(TParseTree p)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, RangeSpec, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, RangeSpec, Spacing)), Spacing))), "CLOP.RangeList")(p);
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, TypeSpecifier, Spacing), pegged.peg.wrapAround!(Spacing, Declarator, Spacing)), "CLOP.ParameterDeclaration")(p);
         }
         else
         {
-            if(auto m = tuple(`RangeList`,p.end) in memo)
+            if(auto m = tuple(`ParameterDeclaration`,p.end) in memo)
                 return *m;
             else
             {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, RangeSpec, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, RangeSpec, Spacing)), Spacing))), "CLOP.RangeList"), "RangeList")(p);
-                memo[tuple(`RangeList`,p.end)] = result;
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, TypeSpecifier, Spacing), pegged.peg.wrapAround!(Spacing, Declarator, Spacing)), "CLOP.ParameterDeclaration"), "ParameterDeclaration")(p);
+                memo[tuple(`ParameterDeclaration`,p.end)] = result;
                 return result;
             }
         }
     }
 
-    static TParseTree RangeList(string s)
+    static TParseTree ParameterDeclaration(string s)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, RangeSpec, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, RangeSpec, Spacing)), Spacing))), "CLOP.RangeList")(TParseTree("", false,[], s));
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, TypeSpecifier, Spacing), pegged.peg.wrapAround!(Spacing, Declarator, Spacing)), "CLOP.ParameterDeclaration")(TParseTree("", false,[], s));
         }
         else
         {
             memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, RangeSpec, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, RangeSpec, Spacing)), Spacing))), "CLOP.RangeList"), "RangeList")(TParseTree("", false,[], s));
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, TypeSpecifier, Spacing), pegged.peg.wrapAround!(Spacing, Declarator, Spacing)), "CLOP.ParameterDeclaration"), "ParameterDeclaration")(TParseTree("", false,[], s));
         }
     }
-    static string RangeList(GetName g)
+    static string ParameterDeclaration(GetName g)
     {
-        return "CLOP.RangeList";
+        return "CLOP.ParameterDeclaration";
     }
 
-    static TParseTree RangeSpec(TParseTree p)
+    static TParseTree TypeName(TParseTree p)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(":"), Spacing), pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(".."), Spacing), pegged.peg.wrapAround!(Spacing, Expression, Spacing)), "CLOP.RangeSpec")(p);
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, TypeSpecifier, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("["), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("]"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("["), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("]"), Spacing))), Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("["), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("]"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("["), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("]"), Spacing))), Spacing))), "CLOP.TypeName")(p);
         }
         else
         {
-            if(auto m = tuple(`RangeSpec`,p.end) in memo)
+            if(auto m = tuple(`TypeName`,p.end) in memo)
                 return *m;
             else
             {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(":"), Spacing), pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(".."), Spacing), pegged.peg.wrapAround!(Spacing, Expression, Spacing)), "CLOP.RangeSpec"), "RangeSpec")(p);
-                memo[tuple(`RangeSpec`,p.end)] = result;
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, TypeSpecifier, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("["), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("]"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("["), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("]"), Spacing))), Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("["), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("]"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("["), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("]"), Spacing))), Spacing))), "CLOP.TypeName"), "TypeName")(p);
+                memo[tuple(`TypeName`,p.end)] = result;
                 return result;
             }
         }
     }
 
-    static TParseTree RangeSpec(string s)
+    static TParseTree TypeName(string s)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(":"), Spacing), pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(".."), Spacing), pegged.peg.wrapAround!(Spacing, Expression, Spacing)), "CLOP.RangeSpec")(TParseTree("", false,[], s));
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, TypeSpecifier, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("["), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("]"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("["), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("]"), Spacing))), Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("["), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("]"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("["), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("]"), Spacing))), Spacing))), "CLOP.TypeName")(TParseTree("", false,[], s));
         }
         else
         {
             memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(":"), Spacing), pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(".."), Spacing), pegged.peg.wrapAround!(Spacing, Expression, Spacing)), "CLOP.RangeSpec"), "RangeSpec")(TParseTree("", false,[], s));
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, TypeSpecifier, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("["), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("]"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("["), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("]"), Spacing))), Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("["), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("]"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("["), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("]"), Spacing))), Spacing))), "CLOP.TypeName"), "TypeName")(TParseTree("", false,[], s));
         }
     }
-    static string RangeSpec(GetName g)
+    static string TypeName(GetName g)
     {
-        return "CLOP.RangeSpec";
+        return "CLOP.TypeName";
     }
 
-    static TParseTree Transformations(TParseTree p)
+    static TParseTree StatementList(TParseTree p)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("apply"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, TransList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), "CLOP.Transformations")(p);
+            return         pegged.peg.defined!(pegged.peg.and!(Statement, pegged.peg.zeroOrMore!(pegged.peg.and!(pegged.peg.discard!(Spacing), Statement))), "CLOP.StatementList")(p);
         }
         else
         {
-            if(auto m = tuple(`Transformations`,p.end) in memo)
+            if(auto m = tuple(`StatementList`,p.end) in memo)
                 return *m;
             else
             {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("apply"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, TransList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), "CLOP.Transformations"), "Transformations")(p);
-                memo[tuple(`Transformations`,p.end)] = result;
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(Statement, pegged.peg.zeroOrMore!(pegged.peg.and!(pegged.peg.discard!(Spacing), Statement))), "CLOP.StatementList"), "StatementList")(p);
+                memo[tuple(`StatementList`,p.end)] = result;
                 return result;
             }
         }
     }
 
-    static TParseTree Transformations(string s)
+    static TParseTree StatementList(string s)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("apply"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, TransList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), "CLOP.Transformations")(TParseTree("", false,[], s));
+            return         pegged.peg.defined!(pegged.peg.and!(Statement, pegged.peg.zeroOrMore!(pegged.peg.and!(pegged.peg.discard!(Spacing), Statement))), "CLOP.StatementList")(TParseTree("", false,[], s));
         }
         else
         {
             memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("apply"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, TransList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), "CLOP.Transformations"), "Transformations")(TParseTree("", false,[], s));
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(Statement, pegged.peg.zeroOrMore!(pegged.peg.and!(pegged.peg.discard!(Spacing), Statement))), "CLOP.StatementList"), "StatementList")(TParseTree("", false,[], s));
         }
     }
-    static string Transformations(GetName g)
+    static string StatementList(GetName g)
     {
-        return "CLOP.Transformations";
+        return "CLOP.StatementList";
     }
 
-    static TParseTree TransList(TParseTree p)
+    static TParseTree Statement(TParseTree p)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, TransSpec, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, TransSpec, Spacing)), Spacing))), "CLOP.TransList")(p);
+            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, CompoundStatement, Spacing), pegged.peg.wrapAround!(Spacing, ExpressionStatement, Spacing), pegged.peg.wrapAround!(Spacing, IfStatement, Spacing), pegged.peg.wrapAround!(Spacing, IterationStatement, Spacing), pegged.peg.wrapAround!(Spacing, ReturnStatement, Spacing), pegged.peg.wrapAround!(Spacing, Declaration, Spacing)), "CLOP.Statement")(p);
         }
         else
         {
-            if(auto m = tuple(`TransList`,p.end) in memo)
+            if(auto m = tuple(`Statement`,p.end) in memo)
                 return *m;
             else
             {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, TransSpec, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, TransSpec, Spacing)), Spacing))), "CLOP.TransList"), "TransList")(p);
-                memo[tuple(`TransList`,p.end)] = result;
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, CompoundStatement, Spacing), pegged.peg.wrapAround!(Spacing, ExpressionStatement, Spacing), pegged.peg.wrapAround!(Spacing, IfStatement, Spacing), pegged.peg.wrapAround!(Spacing, IterationStatement, Spacing), pegged.peg.wrapAround!(Spacing, ReturnStatement, Spacing), pegged.peg.wrapAround!(Spacing, Declaration, Spacing)), "CLOP.Statement"), "Statement")(p);
+                memo[tuple(`Statement`,p.end)] = result;
                 return result;
             }
         }
     }
 
-    static TParseTree TransList(string s)
+    static TParseTree Statement(string s)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, TransSpec, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, TransSpec, Spacing)), Spacing))), "CLOP.TransList")(TParseTree("", false,[], s));
+            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, CompoundStatement, Spacing), pegged.peg.wrapAround!(Spacing, ExpressionStatement, Spacing), pegged.peg.wrapAround!(Spacing, IfStatement, Spacing), pegged.peg.wrapAround!(Spacing, IterationStatement, Spacing), pegged.peg.wrapAround!(Spacing, ReturnStatement, Spacing), pegged.peg.wrapAround!(Spacing, Declaration, Spacing)), "CLOP.Statement")(TParseTree("", false,[], s));
         }
         else
         {
             memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, TransSpec, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, TransSpec, Spacing)), Spacing))), "CLOP.TransList"), "TransList")(TParseTree("", false,[], s));
+            return hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, CompoundStatement, Spacing), pegged.peg.wrapAround!(Spacing, ExpressionStatement, Spacing), pegged.peg.wrapAround!(Spacing, IfStatement, Spacing), pegged.peg.wrapAround!(Spacing, IterationStatement, Spacing), pegged.peg.wrapAround!(Spacing, ReturnStatement, Spacing), pegged.peg.wrapAround!(Spacing, Declaration, Spacing)), "CLOP.Statement"), "Statement")(TParseTree("", false,[], s));
         }
     }
-    static string TransList(GetName g)
+    static string Statement(GetName g)
     {
-        return "CLOP.TransList";
-    }
-
-    static TParseTree TransSpec(TParseTree p)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, ArgumentList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing))), Spacing)), "CLOP.TransSpec")(p);
-        }
-        else
-        {
-            if(auto m = tuple(`TransSpec`,p.end) in memo)
-                return *m;
-            else
-            {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, ArgumentList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing))), Spacing)), "CLOP.TransSpec"), "TransSpec")(p);
-                memo[tuple(`TransSpec`,p.end)] = result;
-                return result;
-            }
-        }
-    }
-
-    static TParseTree TransSpec(string s)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, ArgumentList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing))), Spacing)), "CLOP.TransSpec")(TParseTree("", false,[], s));
-        }
-        else
-        {
-            memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, ArgumentList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing))), Spacing)), "CLOP.TransSpec"), "TransSpec")(TParseTree("", false,[], s));
-        }
-    }
-    static string TransSpec(GetName g)
-    {
-        return "CLOP.TransSpec";
-    }
-
-    static TParseTree PrimaryExpr(TParseTree p)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.wrapAround!(Spacing, FloatLiteral, Spacing), pegged.peg.wrapAround!(Spacing, IntegerLiteral, Spacing), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing))), "CLOP.PrimaryExpr")(p);
-        }
-        else
-        {
-            if(auto m = tuple(`PrimaryExpr`,p.end) in memo)
-                return *m;
-            else
-            {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.wrapAround!(Spacing, FloatLiteral, Spacing), pegged.peg.wrapAround!(Spacing, IntegerLiteral, Spacing), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing))), "CLOP.PrimaryExpr"), "PrimaryExpr")(p);
-                memo[tuple(`PrimaryExpr`,p.end)] = result;
-                return result;
-            }
-        }
-    }
-
-    static TParseTree PrimaryExpr(string s)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.wrapAround!(Spacing, FloatLiteral, Spacing), pegged.peg.wrapAround!(Spacing, IntegerLiteral, Spacing), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing))), "CLOP.PrimaryExpr")(TParseTree("", false,[], s));
-        }
-        else
-        {
-            memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.wrapAround!(Spacing, FloatLiteral, Spacing), pegged.peg.wrapAround!(Spacing, IntegerLiteral, Spacing), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing))), "CLOP.PrimaryExpr"), "PrimaryExpr")(TParseTree("", false,[], s));
-        }
-    }
-    static string PrimaryExpr(GetName g)
-    {
-        return "CLOP.PrimaryExpr";
-    }
-
-    static TParseTree UnaryExpr(TParseTree p)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, PrimaryExpr, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.wrapAround!(Spacing, ArrayIndex, Spacing), pegged.peg.wrapAround!(Spacing, FunctionCall, Spacing)), Spacing))), "CLOP.UnaryExpr")(p);
-        }
-        else
-        {
-            if(auto m = tuple(`UnaryExpr`,p.end) in memo)
-                return *m;
-            else
-            {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, PrimaryExpr, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.wrapAround!(Spacing, ArrayIndex, Spacing), pegged.peg.wrapAround!(Spacing, FunctionCall, Spacing)), Spacing))), "CLOP.UnaryExpr"), "UnaryExpr")(p);
-                memo[tuple(`UnaryExpr`,p.end)] = result;
-                return result;
-            }
-        }
-    }
-
-    static TParseTree UnaryExpr(string s)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, PrimaryExpr, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.wrapAround!(Spacing, ArrayIndex, Spacing), pegged.peg.wrapAround!(Spacing, FunctionCall, Spacing)), Spacing))), "CLOP.UnaryExpr")(TParseTree("", false,[], s));
-        }
-        else
-        {
-            memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, PrimaryExpr, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.wrapAround!(Spacing, ArrayIndex, Spacing), pegged.peg.wrapAround!(Spacing, FunctionCall, Spacing)), Spacing))), "CLOP.UnaryExpr"), "UnaryExpr")(TParseTree("", false,[], s));
-        }
-    }
-    static string UnaryExpr(GetName g)
-    {
-        return "CLOP.UnaryExpr";
-    }
-
-    static TParseTree ArrayIndex(TParseTree p)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("["), Spacing), pegged.peg.wrapAround!(Spacing, ArgumentList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("]"), Spacing)), "CLOP.ArrayIndex")(p);
-        }
-        else
-        {
-            if(auto m = tuple(`ArrayIndex`,p.end) in memo)
-                return *m;
-            else
-            {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("["), Spacing), pegged.peg.wrapAround!(Spacing, ArgumentList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("]"), Spacing)), "CLOP.ArrayIndex"), "ArrayIndex")(p);
-                memo[tuple(`ArrayIndex`,p.end)] = result;
-                return result;
-            }
-        }
-    }
-
-    static TParseTree ArrayIndex(string s)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("["), Spacing), pegged.peg.wrapAround!(Spacing, ArgumentList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("]"), Spacing)), "CLOP.ArrayIndex")(TParseTree("", false,[], s));
-        }
-        else
-        {
-            memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("["), Spacing), pegged.peg.wrapAround!(Spacing, ArgumentList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("]"), Spacing)), "CLOP.ArrayIndex"), "ArrayIndex")(TParseTree("", false,[], s));
-        }
-    }
-    static string ArrayIndex(GetName g)
-    {
-        return "CLOP.ArrayIndex";
-    }
-
-    static TParseTree FunctionCall(TParseTree p)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, ArgumentList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing))), "CLOP.FunctionCall")(p);
-        }
-        else
-        {
-            if(auto m = tuple(`FunctionCall`,p.end) in memo)
-                return *m;
-            else
-            {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, ArgumentList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing))), "CLOP.FunctionCall"), "FunctionCall")(p);
-                memo[tuple(`FunctionCall`,p.end)] = result;
-                return result;
-            }
-        }
-    }
-
-    static TParseTree FunctionCall(string s)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, ArgumentList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing))), "CLOP.FunctionCall")(TParseTree("", false,[], s));
-        }
-        else
-        {
-            memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, ArgumentList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing))), "CLOP.FunctionCall"), "FunctionCall")(TParseTree("", false,[], s));
-        }
-    }
-    static string FunctionCall(GetName g)
-    {
-        return "CLOP.FunctionCall";
-    }
-
-    static TParseTree ArgumentList(TParseTree p)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, Expression, Spacing)), Spacing))), "CLOP.ArgumentList")(p);
-        }
-        else
-        {
-            if(auto m = tuple(`ArgumentList`,p.end) in memo)
-                return *m;
-            else
-            {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, Expression, Spacing)), Spacing))), "CLOP.ArgumentList"), "ArgumentList")(p);
-                memo[tuple(`ArgumentList`,p.end)] = result;
-                return result;
-            }
-        }
-    }
-
-    static TParseTree ArgumentList(string s)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, Expression, Spacing)), Spacing))), "CLOP.ArgumentList")(TParseTree("", false,[], s));
-        }
-        else
-        {
-            memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, Expression, Spacing)), Spacing))), "CLOP.ArgumentList"), "ArgumentList")(TParseTree("", false,[], s));
-        }
-    }
-    static string ArgumentList(GetName g)
-    {
-        return "CLOP.ArgumentList";
-    }
-
-    static TParseTree MulExpr(TParseTree p)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.literal!("*"), pegged.peg.literal!("/")), Spacing), pegged.peg.wrapAround!(Spacing, UnaryExpr, Spacing)), "CLOP.MulExpr")(p);
-        }
-        else
-        {
-            if(auto m = tuple(`MulExpr`,p.end) in memo)
-                return *m;
-            else
-            {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.literal!("*"), pegged.peg.literal!("/")), Spacing), pegged.peg.wrapAround!(Spacing, UnaryExpr, Spacing)), "CLOP.MulExpr"), "MulExpr")(p);
-                memo[tuple(`MulExpr`,p.end)] = result;
-                return result;
-            }
-        }
-    }
-
-    static TParseTree MulExpr(string s)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.literal!("*"), pegged.peg.literal!("/")), Spacing), pegged.peg.wrapAround!(Spacing, UnaryExpr, Spacing)), "CLOP.MulExpr")(TParseTree("", false,[], s));
-        }
-        else
-        {
-            memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.literal!("*"), pegged.peg.literal!("/")), Spacing), pegged.peg.wrapAround!(Spacing, UnaryExpr, Spacing)), "CLOP.MulExpr"), "MulExpr")(TParseTree("", false,[], s));
-        }
-    }
-    static string MulExpr(GetName g)
-    {
-        return "CLOP.MulExpr";
-    }
-
-    static TParseTree Factor(TParseTree p)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, UnaryExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, MulExpr, Spacing))), "CLOP.Factor")(p);
-        }
-        else
-        {
-            if(auto m = tuple(`Factor`,p.end) in memo)
-                return *m;
-            else
-            {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, UnaryExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, MulExpr, Spacing))), "CLOP.Factor"), "Factor")(p);
-                memo[tuple(`Factor`,p.end)] = result;
-                return result;
-            }
-        }
-    }
-
-    static TParseTree Factor(string s)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, UnaryExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, MulExpr, Spacing))), "CLOP.Factor")(TParseTree("", false,[], s));
-        }
-        else
-        {
-            memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, UnaryExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, MulExpr, Spacing))), "CLOP.Factor"), "Factor")(TParseTree("", false,[], s));
-        }
-    }
-    static string Factor(GetName g)
-    {
-        return "CLOP.Factor";
-    }
-
-    static TParseTree AddExpr(TParseTree p)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.literal!("-"), pegged.peg.literal!("+")), Spacing), pegged.peg.wrapAround!(Spacing, Factor, Spacing)), "CLOP.AddExpr")(p);
-        }
-        else
-        {
-            if(auto m = tuple(`AddExpr`,p.end) in memo)
-                return *m;
-            else
-            {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.literal!("-"), pegged.peg.literal!("+")), Spacing), pegged.peg.wrapAround!(Spacing, Factor, Spacing)), "CLOP.AddExpr"), "AddExpr")(p);
-                memo[tuple(`AddExpr`,p.end)] = result;
-                return result;
-            }
-        }
-    }
-
-    static TParseTree AddExpr(string s)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.literal!("-"), pegged.peg.literal!("+")), Spacing), pegged.peg.wrapAround!(Spacing, Factor, Spacing)), "CLOP.AddExpr")(TParseTree("", false,[], s));
-        }
-        else
-        {
-            memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.literal!("-"), pegged.peg.literal!("+")), Spacing), pegged.peg.wrapAround!(Spacing, Factor, Spacing)), "CLOP.AddExpr"), "AddExpr")(TParseTree("", false,[], s));
-        }
-    }
-    static string AddExpr(GetName g)
-    {
-        return "CLOP.AddExpr";
-    }
-
-    static TParseTree Expression(TParseTree p)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Factor, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, AddExpr, Spacing))), "CLOP.Expression")(p);
-        }
-        else
-        {
-            if(auto m = tuple(`Expression`,p.end) in memo)
-                return *m;
-            else
-            {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Factor, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, AddExpr, Spacing))), "CLOP.Expression"), "Expression")(p);
-                memo[tuple(`Expression`,p.end)] = result;
-                return result;
-            }
-        }
-    }
-
-    static TParseTree Expression(string s)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Factor, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, AddExpr, Spacing))), "CLOP.Expression")(TParseTree("", false,[], s));
-        }
-        else
-        {
-            memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Factor, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, AddExpr, Spacing))), "CLOP.Expression"), "Expression")(TParseTree("", false,[], s));
-        }
-    }
-    static string Expression(GetName g)
-    {
-        return "CLOP.Expression";
-    }
-
-    static TParseTree AssignExpr(TParseTree p)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, UnaryExpr, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("="), Spacing), pegged.peg.wrapAround!(Spacing, AssignExpr, Spacing)), pegged.peg.wrapAround!(Spacing, ConditionalExpression, Spacing)), "CLOP.AssignExpr")(p);
-        }
-        else
-        {
-            if(auto m = tuple(`AssignExpr`,p.end) in memo)
-                return *m;
-            else
-            {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, UnaryExpr, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("="), Spacing), pegged.peg.wrapAround!(Spacing, AssignExpr, Spacing)), pegged.peg.wrapAround!(Spacing, ConditionalExpression, Spacing)), "CLOP.AssignExpr"), "AssignExpr")(p);
-                memo[tuple(`AssignExpr`,p.end)] = result;
-                return result;
-            }
-        }
-    }
-
-    static TParseTree AssignExpr(string s)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, UnaryExpr, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("="), Spacing), pegged.peg.wrapAround!(Spacing, AssignExpr, Spacing)), pegged.peg.wrapAround!(Spacing, ConditionalExpression, Spacing)), "CLOP.AssignExpr")(TParseTree("", false,[], s));
-        }
-        else
-        {
-            memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, UnaryExpr, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("="), Spacing), pegged.peg.wrapAround!(Spacing, AssignExpr, Spacing)), pegged.peg.wrapAround!(Spacing, ConditionalExpression, Spacing)), "CLOP.AssignExpr"), "AssignExpr")(TParseTree("", false,[], s));
-        }
-    }
-    static string AssignExpr(GetName g)
-    {
-        return "CLOP.AssignExpr";
-    }
-
-    static TParseTree RelationalExpression(TParseTree p)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, RelationalOperator, Spacing), pegged.peg.wrapAround!(Spacing, RelationalExpression, Spacing)), Spacing))), "CLOP.RelationalExpression")(p);
-        }
-        else
-        {
-            if(auto m = tuple(`RelationalExpression`,p.end) in memo)
-                return *m;
-            else
-            {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, RelationalOperator, Spacing), pegged.peg.wrapAround!(Spacing, RelationalExpression, Spacing)), Spacing))), "CLOP.RelationalExpression"), "RelationalExpression")(p);
-                memo[tuple(`RelationalExpression`,p.end)] = result;
-                return result;
-            }
-        }
-    }
-
-    static TParseTree RelationalExpression(string s)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, RelationalOperator, Spacing), pegged.peg.wrapAround!(Spacing, RelationalExpression, Spacing)), Spacing))), "CLOP.RelationalExpression")(TParseTree("", false,[], s));
-        }
-        else
-        {
-            memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, RelationalOperator, Spacing), pegged.peg.wrapAround!(Spacing, RelationalExpression, Spacing)), Spacing))), "CLOP.RelationalExpression"), "RelationalExpression")(TParseTree("", false,[], s));
-        }
-    }
-    static string RelationalExpression(GetName g)
-    {
-        return "CLOP.RelationalExpression";
-    }
-
-    static TParseTree RelationalOperator(TParseTree p)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("<="), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(">="), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("<"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(">"), Spacing)), "CLOP.RelationalOperator")(p);
-        }
-        else
-        {
-            if(auto m = tuple(`RelationalOperator`,p.end) in memo)
-                return *m;
-            else
-            {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("<="), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(">="), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("<"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(">"), Spacing)), "CLOP.RelationalOperator"), "RelationalOperator")(p);
-                memo[tuple(`RelationalOperator`,p.end)] = result;
-                return result;
-            }
-        }
-    }
-
-    static TParseTree RelationalOperator(string s)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("<="), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(">="), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("<"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(">"), Spacing)), "CLOP.RelationalOperator")(TParseTree("", false,[], s));
-        }
-        else
-        {
-            memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("<="), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(">="), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("<"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(">"), Spacing)), "CLOP.RelationalOperator"), "RelationalOperator")(TParseTree("", false,[], s));
-        }
-    }
-    static string RelationalOperator(GetName g)
-    {
-        return "CLOP.RelationalOperator";
-    }
-
-    static TParseTree EqualityExpression(TParseTree p)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, RelationalExpression, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, EqualityOperator, Spacing), pegged.peg.wrapAround!(Spacing, EqualityExpression, Spacing)), Spacing))), "CLOP.EqualityExpression")(p);
-        }
-        else
-        {
-            if(auto m = tuple(`EqualityExpression`,p.end) in memo)
-                return *m;
-            else
-            {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, RelationalExpression, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, EqualityOperator, Spacing), pegged.peg.wrapAround!(Spacing, EqualityExpression, Spacing)), Spacing))), "CLOP.EqualityExpression"), "EqualityExpression")(p);
-                memo[tuple(`EqualityExpression`,p.end)] = result;
-                return result;
-            }
-        }
-    }
-
-    static TParseTree EqualityExpression(string s)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, RelationalExpression, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, EqualityOperator, Spacing), pegged.peg.wrapAround!(Spacing, EqualityExpression, Spacing)), Spacing))), "CLOP.EqualityExpression")(TParseTree("", false,[], s));
-        }
-        else
-        {
-            memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, RelationalExpression, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, EqualityOperator, Spacing), pegged.peg.wrapAround!(Spacing, EqualityExpression, Spacing)), Spacing))), "CLOP.EqualityExpression"), "EqualityExpression")(TParseTree("", false,[], s));
-        }
-    }
-    static string EqualityExpression(GetName g)
-    {
-        return "CLOP.EqualityExpression";
-    }
-
-    static TParseTree EqualityOperator(TParseTree p)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("=="), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("!="), Spacing)), "CLOP.EqualityOperator")(p);
-        }
-        else
-        {
-            if(auto m = tuple(`EqualityOperator`,p.end) in memo)
-                return *m;
-            else
-            {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("=="), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("!="), Spacing)), "CLOP.EqualityOperator"), "EqualityOperator")(p);
-                memo[tuple(`EqualityOperator`,p.end)] = result;
-                return result;
-            }
-        }
-    }
-
-    static TParseTree EqualityOperator(string s)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("=="), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("!="), Spacing)), "CLOP.EqualityOperator")(TParseTree("", false,[], s));
-        }
-        else
-        {
-            memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("=="), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("!="), Spacing)), "CLOP.EqualityOperator"), "EqualityOperator")(TParseTree("", false,[], s));
-        }
-    }
-    static string EqualityOperator(GetName g)
-    {
-        return "CLOP.EqualityOperator";
-    }
-
-    static TParseTree ANDExpression(TParseTree p)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, EqualityExpression, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("&"), Spacing), pegged.peg.wrapAround!(Spacing, ANDExpression, Spacing)), Spacing))), "CLOP.ANDExpression")(p);
-        }
-        else
-        {
-            if(auto m = tuple(`ANDExpression`,p.end) in memo)
-                return *m;
-            else
-            {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, EqualityExpression, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("&"), Spacing), pegged.peg.wrapAround!(Spacing, ANDExpression, Spacing)), Spacing))), "CLOP.ANDExpression"), "ANDExpression")(p);
-                memo[tuple(`ANDExpression`,p.end)] = result;
-                return result;
-            }
-        }
-    }
-
-    static TParseTree ANDExpression(string s)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, EqualityExpression, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("&"), Spacing), pegged.peg.wrapAround!(Spacing, ANDExpression, Spacing)), Spacing))), "CLOP.ANDExpression")(TParseTree("", false,[], s));
-        }
-        else
-        {
-            memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, EqualityExpression, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("&"), Spacing), pegged.peg.wrapAround!(Spacing, ANDExpression, Spacing)), Spacing))), "CLOP.ANDExpression"), "ANDExpression")(TParseTree("", false,[], s));
-        }
-    }
-    static string ANDExpression(GetName g)
-    {
-        return "CLOP.ANDExpression";
-    }
-
-    static TParseTree ExclusiveORExpression(TParseTree p)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, ANDExpression, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("^"), Spacing), pegged.peg.wrapAround!(Spacing, ExclusiveORExpression, Spacing)), Spacing))), "CLOP.ExclusiveORExpression")(p);
-        }
-        else
-        {
-            if(auto m = tuple(`ExclusiveORExpression`,p.end) in memo)
-                return *m;
-            else
-            {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, ANDExpression, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("^"), Spacing), pegged.peg.wrapAround!(Spacing, ExclusiveORExpression, Spacing)), Spacing))), "CLOP.ExclusiveORExpression"), "ExclusiveORExpression")(p);
-                memo[tuple(`ExclusiveORExpression`,p.end)] = result;
-                return result;
-            }
-        }
-    }
-
-    static TParseTree ExclusiveORExpression(string s)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, ANDExpression, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("^"), Spacing), pegged.peg.wrapAround!(Spacing, ExclusiveORExpression, Spacing)), Spacing))), "CLOP.ExclusiveORExpression")(TParseTree("", false,[], s));
-        }
-        else
-        {
-            memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, ANDExpression, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("^"), Spacing), pegged.peg.wrapAround!(Spacing, ExclusiveORExpression, Spacing)), Spacing))), "CLOP.ExclusiveORExpression"), "ExclusiveORExpression")(TParseTree("", false,[], s));
-        }
-    }
-    static string ExclusiveORExpression(GetName g)
-    {
-        return "CLOP.ExclusiveORExpression";
-    }
-
-    static TParseTree InclusiveORExpression(TParseTree p)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, ExclusiveORExpression, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("|"), Spacing), pegged.peg.wrapAround!(Spacing, InclusiveORExpression, Spacing)), Spacing))), "CLOP.InclusiveORExpression")(p);
-        }
-        else
-        {
-            if(auto m = tuple(`InclusiveORExpression`,p.end) in memo)
-                return *m;
-            else
-            {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, ExclusiveORExpression, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("|"), Spacing), pegged.peg.wrapAround!(Spacing, InclusiveORExpression, Spacing)), Spacing))), "CLOP.InclusiveORExpression"), "InclusiveORExpression")(p);
-                memo[tuple(`InclusiveORExpression`,p.end)] = result;
-                return result;
-            }
-        }
-    }
-
-    static TParseTree InclusiveORExpression(string s)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, ExclusiveORExpression, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("|"), Spacing), pegged.peg.wrapAround!(Spacing, InclusiveORExpression, Spacing)), Spacing))), "CLOP.InclusiveORExpression")(TParseTree("", false,[], s));
-        }
-        else
-        {
-            memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, ExclusiveORExpression, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("|"), Spacing), pegged.peg.wrapAround!(Spacing, InclusiveORExpression, Spacing)), Spacing))), "CLOP.InclusiveORExpression"), "InclusiveORExpression")(TParseTree("", false,[], s));
-        }
-    }
-    static string InclusiveORExpression(GetName g)
-    {
-        return "CLOP.InclusiveORExpression";
-    }
-
-    static TParseTree LogicalANDExpression(TParseTree p)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, InclusiveORExpression, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("&&"), Spacing), pegged.peg.wrapAround!(Spacing, LogicalANDExpression, Spacing)), Spacing))), "CLOP.LogicalANDExpression")(p);
-        }
-        else
-        {
-            if(auto m = tuple(`LogicalANDExpression`,p.end) in memo)
-                return *m;
-            else
-            {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, InclusiveORExpression, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("&&"), Spacing), pegged.peg.wrapAround!(Spacing, LogicalANDExpression, Spacing)), Spacing))), "CLOP.LogicalANDExpression"), "LogicalANDExpression")(p);
-                memo[tuple(`LogicalANDExpression`,p.end)] = result;
-                return result;
-            }
-        }
-    }
-
-    static TParseTree LogicalANDExpression(string s)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, InclusiveORExpression, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("&&"), Spacing), pegged.peg.wrapAround!(Spacing, LogicalANDExpression, Spacing)), Spacing))), "CLOP.LogicalANDExpression")(TParseTree("", false,[], s));
-        }
-        else
-        {
-            memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, InclusiveORExpression, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("&&"), Spacing), pegged.peg.wrapAround!(Spacing, LogicalANDExpression, Spacing)), Spacing))), "CLOP.LogicalANDExpression"), "LogicalANDExpression")(TParseTree("", false,[], s));
-        }
-    }
-    static string LogicalANDExpression(GetName g)
-    {
-        return "CLOP.LogicalANDExpression";
-    }
-
-    static TParseTree LogicalORExpression(TParseTree p)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, LogicalANDExpression, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("||"), Spacing), pegged.peg.wrapAround!(Spacing, LogicalORExpression, Spacing)), Spacing))), "CLOP.LogicalORExpression")(p);
-        }
-        else
-        {
-            if(auto m = tuple(`LogicalORExpression`,p.end) in memo)
-                return *m;
-            else
-            {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, LogicalANDExpression, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("||"), Spacing), pegged.peg.wrapAround!(Spacing, LogicalORExpression, Spacing)), Spacing))), "CLOP.LogicalORExpression"), "LogicalORExpression")(p);
-                memo[tuple(`LogicalORExpression`,p.end)] = result;
-                return result;
-            }
-        }
-    }
-
-    static TParseTree LogicalORExpression(string s)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, LogicalANDExpression, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("||"), Spacing), pegged.peg.wrapAround!(Spacing, LogicalORExpression, Spacing)), Spacing))), "CLOP.LogicalORExpression")(TParseTree("", false,[], s));
-        }
-        else
-        {
-            memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, LogicalANDExpression, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("||"), Spacing), pegged.peg.wrapAround!(Spacing, LogicalORExpression, Spacing)), Spacing))), "CLOP.LogicalORExpression"), "LogicalORExpression")(TParseTree("", false,[], s));
-        }
-    }
-    static string LogicalORExpression(GetName g)
-    {
-        return "CLOP.LogicalORExpression";
-    }
-
-    static TParseTree ConditionalExpression(TParseTree p)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, LogicalORExpression, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("?"), Spacing), pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(":"), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpression, Spacing)), Spacing))), "CLOP.ConditionalExpression")(p);
-        }
-        else
-        {
-            if(auto m = tuple(`ConditionalExpression`,p.end) in memo)
-                return *m;
-            else
-            {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, LogicalORExpression, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("?"), Spacing), pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(":"), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpression, Spacing)), Spacing))), "CLOP.ConditionalExpression"), "ConditionalExpression")(p);
-                memo[tuple(`ConditionalExpression`,p.end)] = result;
-                return result;
-            }
-        }
-    }
-
-    static TParseTree ConditionalExpression(string s)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, LogicalORExpression, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("?"), Spacing), pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(":"), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpression, Spacing)), Spacing))), "CLOP.ConditionalExpression")(TParseTree("", false,[], s));
-        }
-        else
-        {
-            memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, LogicalORExpression, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("?"), Spacing), pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(":"), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpression, Spacing)), Spacing))), "CLOP.ConditionalExpression"), "ConditionalExpression")(TParseTree("", false,[], s));
-        }
-    }
-    static string ConditionalExpression(GetName g)
-    {
-        return "CLOP.ConditionalExpression";
-    }
-
-    static TParseTree ConstantExpression(TParseTree p)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.wrapAround!(Spacing, ConditionalExpression, Spacing), "CLOP.ConstantExpression")(p);
-        }
-        else
-        {
-            if(auto m = tuple(`ConstantExpression`,p.end) in memo)
-                return *m;
-            else
-            {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.wrapAround!(Spacing, ConditionalExpression, Spacing), "CLOP.ConstantExpression"), "ConstantExpression")(p);
-                memo[tuple(`ConstantExpression`,p.end)] = result;
-                return result;
-            }
-        }
-    }
-
-    static TParseTree ConstantExpression(string s)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.wrapAround!(Spacing, ConditionalExpression, Spacing), "CLOP.ConstantExpression")(TParseTree("", false,[], s));
-        }
-        else
-        {
-            memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.wrapAround!(Spacing, ConditionalExpression, Spacing), "CLOP.ConstantExpression"), "ConstantExpression")(TParseTree("", false,[], s));
-        }
-    }
-    static string ConstantExpression(GetName g)
-    {
-        return "CLOP.ConstantExpression";
+        return "CLOP.Statement";
     }
 
     static TParseTree CompoundStatement(TParseTree p)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("{"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("}"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("{"), Spacing), pegged.peg.wrapAround!(Spacing, DeclarationList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("}"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("{"), Spacing), pegged.peg.wrapAround!(Spacing, StatementList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("}"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("{"), Spacing), pegged.peg.wrapAround!(Spacing, DeclarationList, Spacing), pegged.peg.wrapAround!(Spacing, StatementList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("}"), Spacing))), "CLOP.CompoundStatement")(p);
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("{"), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, StatementList, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("}"), Spacing)), "CLOP.CompoundStatement")(p);
         }
         else
         {
@@ -1974,7 +1325,7 @@ struct GenericCLOP(TParseTree)
                 return *m;
             else
             {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("{"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("}"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("{"), Spacing), pegged.peg.wrapAround!(Spacing, DeclarationList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("}"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("{"), Spacing), pegged.peg.wrapAround!(Spacing, StatementList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("}"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("{"), Spacing), pegged.peg.wrapAround!(Spacing, DeclarationList, Spacing), pegged.peg.wrapAround!(Spacing, StatementList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("}"), Spacing))), "CLOP.CompoundStatement"), "CompoundStatement")(p);
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("{"), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, StatementList, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("}"), Spacing)), "CLOP.CompoundStatement"), "CompoundStatement")(p);
                 memo[tuple(`CompoundStatement`,p.end)] = result;
                 return result;
             }
@@ -1985,12 +1336,12 @@ struct GenericCLOP(TParseTree)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("{"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("}"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("{"), Spacing), pegged.peg.wrapAround!(Spacing, DeclarationList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("}"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("{"), Spacing), pegged.peg.wrapAround!(Spacing, StatementList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("}"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("{"), Spacing), pegged.peg.wrapAround!(Spacing, DeclarationList, Spacing), pegged.peg.wrapAround!(Spacing, StatementList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("}"), Spacing))), "CLOP.CompoundStatement")(TParseTree("", false,[], s));
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("{"), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, StatementList, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("}"), Spacing)), "CLOP.CompoundStatement")(TParseTree("", false,[], s));
         }
         else
         {
             memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("{"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("}"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("{"), Spacing), pegged.peg.wrapAround!(Spacing, DeclarationList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("}"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("{"), Spacing), pegged.peg.wrapAround!(Spacing, StatementList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("}"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("{"), Spacing), pegged.peg.wrapAround!(Spacing, DeclarationList, Spacing), pegged.peg.wrapAround!(Spacing, StatementList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("}"), Spacing))), "CLOP.CompoundStatement"), "CompoundStatement")(TParseTree("", false,[], s));
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("{"), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, StatementList, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("}"), Spacing)), "CLOP.CompoundStatement"), "CompoundStatement")(TParseTree("", false,[], s));
         }
     }
     static string CompoundStatement(GetName g)
@@ -2002,7 +1353,7 @@ struct GenericCLOP(TParseTree)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.option!(pegged.peg.wrapAround!(Spacing, AssignExpr, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(";"), Spacing)), "CLOP.ExpressionStatement")(p);
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(";"), Spacing)), "CLOP.ExpressionStatement")(p);
         }
         else
         {
@@ -2010,7 +1361,7 @@ struct GenericCLOP(TParseTree)
                 return *m;
             else
             {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.option!(pegged.peg.wrapAround!(Spacing, AssignExpr, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(";"), Spacing)), "CLOP.ExpressionStatement"), "ExpressionStatement")(p);
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(";"), Spacing)), "CLOP.ExpressionStatement"), "ExpressionStatement")(p);
                 memo[tuple(`ExpressionStatement`,p.end)] = result;
                 return result;
             }
@@ -2021,12 +1372,12 @@ struct GenericCLOP(TParseTree)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.option!(pegged.peg.wrapAround!(Spacing, AssignExpr, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(";"), Spacing)), "CLOP.ExpressionStatement")(TParseTree("", false,[], s));
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(";"), Spacing)), "CLOP.ExpressionStatement")(TParseTree("", false,[], s));
         }
         else
         {
             memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.option!(pegged.peg.wrapAround!(Spacing, AssignExpr, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(";"), Spacing)), "CLOP.ExpressionStatement"), "ExpressionStatement")(TParseTree("", false,[], s));
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(";"), Spacing)), "CLOP.ExpressionStatement"), "ExpressionStatement")(TParseTree("", false,[], s));
         }
     }
     static string ExpressionStatement(GetName g)
@@ -2038,7 +1389,7 @@ struct GenericCLOP(TParseTree)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("if"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, EqualityExpression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing), pegged.peg.wrapAround!(Spacing, Statement, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("else"), Spacing), pegged.peg.wrapAround!(Spacing, Statement, Spacing)), Spacing))), "CLOP.IfStatement")(p);
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("if"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing), pegged.peg.wrapAround!(Spacing, Statement, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("else"), Spacing), pegged.peg.wrapAround!(Spacing, Statement, Spacing)), Spacing))), "CLOP.IfStatement")(p);
         }
         else
         {
@@ -2046,7 +1397,7 @@ struct GenericCLOP(TParseTree)
                 return *m;
             else
             {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("if"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, EqualityExpression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing), pegged.peg.wrapAround!(Spacing, Statement, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("else"), Spacing), pegged.peg.wrapAround!(Spacing, Statement, Spacing)), Spacing))), "CLOP.IfStatement"), "IfStatement")(p);
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("if"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing), pegged.peg.wrapAround!(Spacing, Statement, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("else"), Spacing), pegged.peg.wrapAround!(Spacing, Statement, Spacing)), Spacing))), "CLOP.IfStatement"), "IfStatement")(p);
                 memo[tuple(`IfStatement`,p.end)] = result;
                 return result;
             }
@@ -2057,89 +1408,17 @@ struct GenericCLOP(TParseTree)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("if"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, EqualityExpression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing), pegged.peg.wrapAround!(Spacing, Statement, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("else"), Spacing), pegged.peg.wrapAround!(Spacing, Statement, Spacing)), Spacing))), "CLOP.IfStatement")(TParseTree("", false,[], s));
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("if"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing), pegged.peg.wrapAround!(Spacing, Statement, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("else"), Spacing), pegged.peg.wrapAround!(Spacing, Statement, Spacing)), Spacing))), "CLOP.IfStatement")(TParseTree("", false,[], s));
         }
         else
         {
             memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("if"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, EqualityExpression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing), pegged.peg.wrapAround!(Spacing, Statement, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("else"), Spacing), pegged.peg.wrapAround!(Spacing, Statement, Spacing)), Spacing))), "CLOP.IfStatement"), "IfStatement")(TParseTree("", false,[], s));
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("if"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing), pegged.peg.wrapAround!(Spacing, Statement, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("else"), Spacing), pegged.peg.wrapAround!(Spacing, Statement, Spacing)), Spacing))), "CLOP.IfStatement"), "IfStatement")(TParseTree("", false,[], s));
         }
     }
     static string IfStatement(GetName g)
     {
         return "CLOP.IfStatement";
-    }
-
-    static TParseTree WhileStatement(TParseTree p)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("while"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, EqualityExpression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing), pegged.peg.wrapAround!(Spacing, Statement, Spacing)), "CLOP.WhileStatement")(p);
-        }
-        else
-        {
-            if(auto m = tuple(`WhileStatement`,p.end) in memo)
-                return *m;
-            else
-            {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("while"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, EqualityExpression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing), pegged.peg.wrapAround!(Spacing, Statement, Spacing)), "CLOP.WhileStatement"), "WhileStatement")(p);
-                memo[tuple(`WhileStatement`,p.end)] = result;
-                return result;
-            }
-        }
-    }
-
-    static TParseTree WhileStatement(string s)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("while"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, EqualityExpression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing), pegged.peg.wrapAround!(Spacing, Statement, Spacing)), "CLOP.WhileStatement")(TParseTree("", false,[], s));
-        }
-        else
-        {
-            memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("while"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, EqualityExpression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing), pegged.peg.wrapAround!(Spacing, Statement, Spacing)), "CLOP.WhileStatement"), "WhileStatement")(TParseTree("", false,[], s));
-        }
-    }
-    static string WhileStatement(GetName g)
-    {
-        return "CLOP.WhileStatement";
-    }
-
-    static TParseTree ForStatement(TParseTree p)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("for"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, AssignExpr, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(";"), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, EqualityExpression, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(";"), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, AssignExpr, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing), pegged.peg.wrapAround!(Spacing, Statement, Spacing)), "CLOP.ForStatement")(p);
-        }
-        else
-        {
-            if(auto m = tuple(`ForStatement`,p.end) in memo)
-                return *m;
-            else
-            {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("for"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, AssignExpr, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(";"), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, EqualityExpression, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(";"), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, AssignExpr, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing), pegged.peg.wrapAround!(Spacing, Statement, Spacing)), "CLOP.ForStatement"), "ForStatement")(p);
-                memo[tuple(`ForStatement`,p.end)] = result;
-                return result;
-            }
-        }
-    }
-
-    static TParseTree ForStatement(string s)
-    {
-        if(__ctfe)
-        {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("for"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, AssignExpr, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(";"), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, EqualityExpression, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(";"), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, AssignExpr, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing), pegged.peg.wrapAround!(Spacing, Statement, Spacing)), "CLOP.ForStatement")(TParseTree("", false,[], s));
-        }
-        else
-        {
-            memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("for"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, AssignExpr, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(";"), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, EqualityExpression, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(";"), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, AssignExpr, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing), pegged.peg.wrapAround!(Spacing, Statement, Spacing)), "CLOP.ForStatement"), "ForStatement")(TParseTree("", false,[], s));
-        }
-    }
-    static string ForStatement(GetName g)
-    {
-        return "CLOP.ForStatement";
     }
 
     static TParseTree IterationStatement(TParseTree p)
@@ -2178,11 +1457,83 @@ struct GenericCLOP(TParseTree)
         return "CLOP.IterationStatement";
     }
 
+    static TParseTree WhileStatement(TParseTree p)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("while"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing), pegged.peg.wrapAround!(Spacing, Statement, Spacing)), "CLOP.WhileStatement")(p);
+        }
+        else
+        {
+            if(auto m = tuple(`WhileStatement`,p.end) in memo)
+                return *m;
+            else
+            {
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("while"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing), pegged.peg.wrapAround!(Spacing, Statement, Spacing)), "CLOP.WhileStatement"), "WhileStatement")(p);
+                memo[tuple(`WhileStatement`,p.end)] = result;
+                return result;
+            }
+        }
+    }
+
+    static TParseTree WhileStatement(string s)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("while"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing), pegged.peg.wrapAround!(Spacing, Statement, Spacing)), "CLOP.WhileStatement")(TParseTree("", false,[], s));
+        }
+        else
+        {
+            memo = null;
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("while"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing), pegged.peg.wrapAround!(Spacing, Statement, Spacing)), "CLOP.WhileStatement"), "WhileStatement")(TParseTree("", false,[], s));
+        }
+    }
+    static string WhileStatement(GetName g)
+    {
+        return "CLOP.WhileStatement";
+    }
+
+    static TParseTree ForStatement(TParseTree p)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("for"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, Expression, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(";"), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, Expression, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(";"), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, Expression, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing), pegged.peg.wrapAround!(Spacing, Statement, Spacing)), "CLOP.ForStatement")(p);
+        }
+        else
+        {
+            if(auto m = tuple(`ForStatement`,p.end) in memo)
+                return *m;
+            else
+            {
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("for"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, Expression, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(";"), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, Expression, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(";"), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, Expression, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing), pegged.peg.wrapAround!(Spacing, Statement, Spacing)), "CLOP.ForStatement"), "ForStatement")(p);
+                memo[tuple(`ForStatement`,p.end)] = result;
+                return result;
+            }
+        }
+    }
+
+    static TParseTree ForStatement(string s)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("for"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, Expression, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(";"), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, Expression, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(";"), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, Expression, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing), pegged.peg.wrapAround!(Spacing, Statement, Spacing)), "CLOP.ForStatement")(TParseTree("", false,[], s));
+        }
+        else
+        {
+            memo = null;
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("for"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, Expression, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(";"), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, Expression, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(";"), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, Expression, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing), pegged.peg.wrapAround!(Spacing, Statement, Spacing)), "CLOP.ForStatement"), "ForStatement")(TParseTree("", false,[], s));
+        }
+    }
+    static string ForStatement(GetName g)
+    {
+        return "CLOP.ForStatement";
+    }
+
     static TParseTree ReturnStatement(TParseTree p)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("return"), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(";"), Spacing)), "CLOP.ReturnStatement")(p);
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("return"), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, Expression, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(";"), Spacing)), "CLOP.ReturnStatement")(p);
         }
         else
         {
@@ -2190,7 +1541,7 @@ struct GenericCLOP(TParseTree)
                 return *m;
             else
             {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("return"), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(";"), Spacing)), "CLOP.ReturnStatement"), "ReturnStatement")(p);
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("return"), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, Expression, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(";"), Spacing)), "CLOP.ReturnStatement"), "ReturnStatement")(p);
                 memo[tuple(`ReturnStatement`,p.end)] = result;
                 return result;
             }
@@ -2201,12 +1552,12 @@ struct GenericCLOP(TParseTree)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("return"), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(";"), Spacing)), "CLOP.ReturnStatement")(TParseTree("", false,[], s));
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("return"), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, Expression, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(";"), Spacing)), "CLOP.ReturnStatement")(TParseTree("", false,[], s));
         }
         else
         {
             memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("return"), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(";"), Spacing)), "CLOP.ReturnStatement"), "ReturnStatement")(TParseTree("", false,[], s));
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("return"), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, Expression, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(";"), Spacing)), "CLOP.ReturnStatement"), "ReturnStatement")(TParseTree("", false,[], s));
         }
     }
     static string ReturnStatement(GetName g)
@@ -2214,76 +1565,1012 @@ struct GenericCLOP(TParseTree)
         return "CLOP.ReturnStatement";
     }
 
-    static TParseTree Statement(TParseTree p)
+    static TParseTree PrimaryExpr(TParseTree p)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, CompoundStatement, Spacing), pegged.peg.wrapAround!(Spacing, ExpressionStatement, Spacing), pegged.peg.wrapAround!(Spacing, IfStatement, Spacing), pegged.peg.wrapAround!(Spacing, IterationStatement, Spacing), pegged.peg.wrapAround!(Spacing, ReturnStatement, Spacing)), "CLOP.Statement")(p);
+            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.wrapAround!(Spacing, FloatLiteral, Spacing), pegged.peg.wrapAround!(Spacing, IntegerLiteral, Spacing), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing))), "CLOP.PrimaryExpr")(p);
         }
         else
         {
-            if(auto m = tuple(`Statement`,p.end) in memo)
+            if(auto m = tuple(`PrimaryExpr`,p.end) in memo)
                 return *m;
             else
             {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, CompoundStatement, Spacing), pegged.peg.wrapAround!(Spacing, ExpressionStatement, Spacing), pegged.peg.wrapAround!(Spacing, IfStatement, Spacing), pegged.peg.wrapAround!(Spacing, IterationStatement, Spacing), pegged.peg.wrapAround!(Spacing, ReturnStatement, Spacing)), "CLOP.Statement"), "Statement")(p);
-                memo[tuple(`Statement`,p.end)] = result;
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.wrapAround!(Spacing, FloatLiteral, Spacing), pegged.peg.wrapAround!(Spacing, IntegerLiteral, Spacing), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing))), "CLOP.PrimaryExpr"), "PrimaryExpr")(p);
+                memo[tuple(`PrimaryExpr`,p.end)] = result;
                 return result;
             }
         }
     }
 
-    static TParseTree Statement(string s)
+    static TParseTree PrimaryExpr(string s)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, CompoundStatement, Spacing), pegged.peg.wrapAround!(Spacing, ExpressionStatement, Spacing), pegged.peg.wrapAround!(Spacing, IfStatement, Spacing), pegged.peg.wrapAround!(Spacing, IterationStatement, Spacing), pegged.peg.wrapAround!(Spacing, ReturnStatement, Spacing)), "CLOP.Statement")(TParseTree("", false,[], s));
+            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.wrapAround!(Spacing, FloatLiteral, Spacing), pegged.peg.wrapAround!(Spacing, IntegerLiteral, Spacing), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing))), "CLOP.PrimaryExpr")(TParseTree("", false,[], s));
         }
         else
         {
             memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, CompoundStatement, Spacing), pegged.peg.wrapAround!(Spacing, ExpressionStatement, Spacing), pegged.peg.wrapAround!(Spacing, IfStatement, Spacing), pegged.peg.wrapAround!(Spacing, IterationStatement, Spacing), pegged.peg.wrapAround!(Spacing, ReturnStatement, Spacing)), "CLOP.Statement"), "Statement")(TParseTree("", false,[], s));
+            return hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.wrapAround!(Spacing, FloatLiteral, Spacing), pegged.peg.wrapAround!(Spacing, IntegerLiteral, Spacing), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing))), "CLOP.PrimaryExpr"), "PrimaryExpr")(TParseTree("", false,[], s));
         }
     }
-    static string Statement(GetName g)
+    static string PrimaryExpr(GetName g)
     {
-        return "CLOP.Statement";
+        return "CLOP.PrimaryExpr";
     }
 
-    static TParseTree StatementList(TParseTree p)
+    static TParseTree PostfixExpr(TParseTree p)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Statement, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.discard!(pegged.peg.wrapAround!(Spacing, Spacing, Spacing)), pegged.peg.wrapAround!(Spacing, Statement, Spacing)), Spacing))), "CLOP.StatementList")(p);
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, PrimaryExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("["), Spacing), pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("]"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, ArgumentExprList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("."), Spacing), pegged.peg.wrapAround!(Spacing, Identifier, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("++"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("--"), Spacing)), Spacing))), "CLOP.PostfixExpr")(p);
         }
         else
         {
-            if(auto m = tuple(`StatementList`,p.end) in memo)
+            if(auto m = tuple(`PostfixExpr`,p.end) in memo)
                 return *m;
             else
             {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Statement, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.discard!(pegged.peg.wrapAround!(Spacing, Spacing, Spacing)), pegged.peg.wrapAround!(Spacing, Statement, Spacing)), Spacing))), "CLOP.StatementList"), "StatementList")(p);
-                memo[tuple(`StatementList`,p.end)] = result;
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, PrimaryExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("["), Spacing), pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("]"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, ArgumentExprList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("."), Spacing), pegged.peg.wrapAround!(Spacing, Identifier, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("++"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("--"), Spacing)), Spacing))), "CLOP.PostfixExpr"), "PostfixExpr")(p);
+                memo[tuple(`PostfixExpr`,p.end)] = result;
                 return result;
             }
         }
     }
 
-    static TParseTree StatementList(string s)
+    static TParseTree PostfixExpr(string s)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Statement, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.discard!(pegged.peg.wrapAround!(Spacing, Spacing, Spacing)), pegged.peg.wrapAround!(Spacing, Statement, Spacing)), Spacing))), "CLOP.StatementList")(TParseTree("", false,[], s));
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, PrimaryExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("["), Spacing), pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("]"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, ArgumentExprList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("."), Spacing), pegged.peg.wrapAround!(Spacing, Identifier, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("++"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("--"), Spacing)), Spacing))), "CLOP.PostfixExpr")(TParseTree("", false,[], s));
         }
         else
         {
             memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Statement, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.discard!(pegged.peg.wrapAround!(Spacing, Spacing, Spacing)), pegged.peg.wrapAround!(Spacing, Statement, Spacing)), Spacing))), "CLOP.StatementList"), "StatementList")(TParseTree("", false,[], s));
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, PrimaryExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("["), Spacing), pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("]"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, ArgumentExprList, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing)), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("."), Spacing), pegged.peg.wrapAround!(Spacing, Identifier, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("++"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("--"), Spacing)), Spacing))), "CLOP.PostfixExpr"), "PostfixExpr")(TParseTree("", false,[], s));
         }
     }
-    static string StatementList(GetName g)
+    static string PostfixExpr(GetName g)
     {
-        return "CLOP.StatementList";
+        return "CLOP.PostfixExpr";
+    }
+
+    static TParseTree ArgumentExprList(TParseTree p)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, AssignmentExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, AssignmentExpr, Spacing)), Spacing))), "CLOP.ArgumentExprList")(p);
+        }
+        else
+        {
+            if(auto m = tuple(`ArgumentExprList`,p.end) in memo)
+                return *m;
+            else
+            {
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, AssignmentExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, AssignmentExpr, Spacing)), Spacing))), "CLOP.ArgumentExprList"), "ArgumentExprList")(p);
+                memo[tuple(`ArgumentExprList`,p.end)] = result;
+                return result;
+            }
+        }
+    }
+
+    static TParseTree ArgumentExprList(string s)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, AssignmentExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, AssignmentExpr, Spacing)), Spacing))), "CLOP.ArgumentExprList")(TParseTree("", false,[], s));
+        }
+        else
+        {
+            memo = null;
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, AssignmentExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, AssignmentExpr, Spacing)), Spacing))), "CLOP.ArgumentExprList"), "ArgumentExprList")(TParseTree("", false,[], s));
+        }
+    }
+    static string ArgumentExprList(GetName g)
+    {
+        return "CLOP.ArgumentExprList";
+    }
+
+    static TParseTree UnaryExpr(TParseTree p)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, PostfixExpr, Spacing), pegged.peg.wrapAround!(Spacing, IncrementExpr, Spacing), pegged.peg.wrapAround!(Spacing, DecrementExpr, Spacing), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, UnaryOperator, Spacing), pegged.peg.wrapAround!(Spacing, CastExpr, Spacing))), "CLOP.UnaryExpr")(p);
+        }
+        else
+        {
+            if(auto m = tuple(`UnaryExpr`,p.end) in memo)
+                return *m;
+            else
+            {
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, PostfixExpr, Spacing), pegged.peg.wrapAround!(Spacing, IncrementExpr, Spacing), pegged.peg.wrapAround!(Spacing, DecrementExpr, Spacing), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, UnaryOperator, Spacing), pegged.peg.wrapAround!(Spacing, CastExpr, Spacing))), "CLOP.UnaryExpr"), "UnaryExpr")(p);
+                memo[tuple(`UnaryExpr`,p.end)] = result;
+                return result;
+            }
+        }
+    }
+
+    static TParseTree UnaryExpr(string s)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, PostfixExpr, Spacing), pegged.peg.wrapAround!(Spacing, IncrementExpr, Spacing), pegged.peg.wrapAround!(Spacing, DecrementExpr, Spacing), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, UnaryOperator, Spacing), pegged.peg.wrapAround!(Spacing, CastExpr, Spacing))), "CLOP.UnaryExpr")(TParseTree("", false,[], s));
+        }
+        else
+        {
+            memo = null;
+            return hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, PostfixExpr, Spacing), pegged.peg.wrapAround!(Spacing, IncrementExpr, Spacing), pegged.peg.wrapAround!(Spacing, DecrementExpr, Spacing), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, UnaryOperator, Spacing), pegged.peg.wrapAround!(Spacing, CastExpr, Spacing))), "CLOP.UnaryExpr"), "UnaryExpr")(TParseTree("", false,[], s));
+        }
+    }
+    static string UnaryExpr(GetName g)
+    {
+        return "CLOP.UnaryExpr";
+    }
+
+    static TParseTree UnaryOperator(TParseTree p)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.literal!("-"), pegged.peg.literal!("+"), pegged.peg.literal!("~"), pegged.peg.literal!("!")), "CLOP.UnaryOperator")(p);
+        }
+        else
+        {
+            if(auto m = tuple(`UnaryOperator`,p.end) in memo)
+                return *m;
+            else
+            {
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.literal!("-"), pegged.peg.literal!("+"), pegged.peg.literal!("~"), pegged.peg.literal!("!")), "CLOP.UnaryOperator"), "UnaryOperator")(p);
+                memo[tuple(`UnaryOperator`,p.end)] = result;
+                return result;
+            }
+        }
+    }
+
+    static TParseTree UnaryOperator(string s)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.literal!("-"), pegged.peg.literal!("+"), pegged.peg.literal!("~"), pegged.peg.literal!("!")), "CLOP.UnaryOperator")(TParseTree("", false,[], s));
+        }
+        else
+        {
+            memo = null;
+            return hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.literal!("-"), pegged.peg.literal!("+"), pegged.peg.literal!("~"), pegged.peg.literal!("!")), "CLOP.UnaryOperator"), "UnaryOperator")(TParseTree("", false,[], s));
+        }
+    }
+    static string UnaryOperator(GetName g)
+    {
+        return "CLOP.UnaryOperator";
+    }
+
+    static TParseTree IncrementExpr(TParseTree p)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("++"), Spacing), pegged.peg.wrapAround!(Spacing, UnaryExpr, Spacing)), "CLOP.IncrementExpr")(p);
+        }
+        else
+        {
+            if(auto m = tuple(`IncrementExpr`,p.end) in memo)
+                return *m;
+            else
+            {
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("++"), Spacing), pegged.peg.wrapAround!(Spacing, UnaryExpr, Spacing)), "CLOP.IncrementExpr"), "IncrementExpr")(p);
+                memo[tuple(`IncrementExpr`,p.end)] = result;
+                return result;
+            }
+        }
+    }
+
+    static TParseTree IncrementExpr(string s)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("++"), Spacing), pegged.peg.wrapAround!(Spacing, UnaryExpr, Spacing)), "CLOP.IncrementExpr")(TParseTree("", false,[], s));
+        }
+        else
+        {
+            memo = null;
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("++"), Spacing), pegged.peg.wrapAround!(Spacing, UnaryExpr, Spacing)), "CLOP.IncrementExpr"), "IncrementExpr")(TParseTree("", false,[], s));
+        }
+    }
+    static string IncrementExpr(GetName g)
+    {
+        return "CLOP.IncrementExpr";
+    }
+
+    static TParseTree DecrementExpr(TParseTree p)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("--"), Spacing), pegged.peg.wrapAround!(Spacing, UnaryExpr, Spacing)), "CLOP.DecrementExpr")(p);
+        }
+        else
+        {
+            if(auto m = tuple(`DecrementExpr`,p.end) in memo)
+                return *m;
+            else
+            {
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("--"), Spacing), pegged.peg.wrapAround!(Spacing, UnaryExpr, Spacing)), "CLOP.DecrementExpr"), "DecrementExpr")(p);
+                memo[tuple(`DecrementExpr`,p.end)] = result;
+                return result;
+            }
+        }
+    }
+
+    static TParseTree DecrementExpr(string s)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("--"), Spacing), pegged.peg.wrapAround!(Spacing, UnaryExpr, Spacing)), "CLOP.DecrementExpr")(TParseTree("", false,[], s));
+        }
+        else
+        {
+            memo = null;
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("--"), Spacing), pegged.peg.wrapAround!(Spacing, UnaryExpr, Spacing)), "CLOP.DecrementExpr"), "DecrementExpr")(TParseTree("", false,[], s));
+        }
+    }
+    static string DecrementExpr(GetName g)
+    {
+        return "CLOP.DecrementExpr";
+    }
+
+    static TParseTree CastExpr(TParseTree p)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, UnaryExpr, Spacing), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, TypeName, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing), pegged.peg.wrapAround!(Spacing, CastExpr, Spacing))), "CLOP.CastExpr")(p);
+        }
+        else
+        {
+            if(auto m = tuple(`CastExpr`,p.end) in memo)
+                return *m;
+            else
+            {
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, UnaryExpr, Spacing), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, TypeName, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing), pegged.peg.wrapAround!(Spacing, CastExpr, Spacing))), "CLOP.CastExpr"), "CastExpr")(p);
+                memo[tuple(`CastExpr`,p.end)] = result;
+                return result;
+            }
+        }
+    }
+
+    static TParseTree CastExpr(string s)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, UnaryExpr, Spacing), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, TypeName, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing), pegged.peg.wrapAround!(Spacing, CastExpr, Spacing))), "CLOP.CastExpr")(TParseTree("", false,[], s));
+        }
+        else
+        {
+            memo = null;
+            return hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.wrapAround!(Spacing, UnaryExpr, Spacing), pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.wrapAround!(Spacing, TypeName, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing), pegged.peg.wrapAround!(Spacing, CastExpr, Spacing))), "CLOP.CastExpr"), "CastExpr")(TParseTree("", false,[], s));
+        }
+    }
+    static string CastExpr(GetName g)
+    {
+        return "CLOP.CastExpr";
+    }
+
+    static TParseTree MultiplicativeExpr(TParseTree p)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, CastExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, MultiplicativeOperator, Spacing), pegged.peg.wrapAround!(Spacing, MultiplicativeExpr, Spacing)), Spacing))), "CLOP.MultiplicativeExpr")(p);
+        }
+        else
+        {
+            if(auto m = tuple(`MultiplicativeExpr`,p.end) in memo)
+                return *m;
+            else
+            {
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, CastExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, MultiplicativeOperator, Spacing), pegged.peg.wrapAround!(Spacing, MultiplicativeExpr, Spacing)), Spacing))), "CLOP.MultiplicativeExpr"), "MultiplicativeExpr")(p);
+                memo[tuple(`MultiplicativeExpr`,p.end)] = result;
+                return result;
+            }
+        }
+    }
+
+    static TParseTree MultiplicativeExpr(string s)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, CastExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, MultiplicativeOperator, Spacing), pegged.peg.wrapAround!(Spacing, MultiplicativeExpr, Spacing)), Spacing))), "CLOP.MultiplicativeExpr")(TParseTree("", false,[], s));
+        }
+        else
+        {
+            memo = null;
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, CastExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, MultiplicativeOperator, Spacing), pegged.peg.wrapAround!(Spacing, MultiplicativeExpr, Spacing)), Spacing))), "CLOP.MultiplicativeExpr"), "MultiplicativeExpr")(TParseTree("", false,[], s));
+        }
+    }
+    static string MultiplicativeExpr(GetName g)
+    {
+        return "CLOP.MultiplicativeExpr";
+    }
+
+    static TParseTree MultiplicativeOperator(TParseTree p)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.literal!("*"), pegged.peg.literal!("%"), pegged.peg.literal!("/")), "CLOP.MultiplicativeOperator")(p);
+        }
+        else
+        {
+            if(auto m = tuple(`MultiplicativeOperator`,p.end) in memo)
+                return *m;
+            else
+            {
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.literal!("*"), pegged.peg.literal!("%"), pegged.peg.literal!("/")), "CLOP.MultiplicativeOperator"), "MultiplicativeOperator")(p);
+                memo[tuple(`MultiplicativeOperator`,p.end)] = result;
+                return result;
+            }
+        }
+    }
+
+    static TParseTree MultiplicativeOperator(string s)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.literal!("*"), pegged.peg.literal!("%"), pegged.peg.literal!("/")), "CLOP.MultiplicativeOperator")(TParseTree("", false,[], s));
+        }
+        else
+        {
+            memo = null;
+            return hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.literal!("*"), pegged.peg.literal!("%"), pegged.peg.literal!("/")), "CLOP.MultiplicativeOperator"), "MultiplicativeOperator")(TParseTree("", false,[], s));
+        }
+    }
+    static string MultiplicativeOperator(GetName g)
+    {
+        return "CLOP.MultiplicativeOperator";
+    }
+
+    static TParseTree AdditiveExpr(TParseTree p)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, MultiplicativeExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, AdditiveOperator, Spacing), pegged.peg.wrapAround!(Spacing, AdditiveExpr, Spacing)), Spacing))), "CLOP.AdditiveExpr")(p);
+        }
+        else
+        {
+            if(auto m = tuple(`AdditiveExpr`,p.end) in memo)
+                return *m;
+            else
+            {
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, MultiplicativeExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, AdditiveOperator, Spacing), pegged.peg.wrapAround!(Spacing, AdditiveExpr, Spacing)), Spacing))), "CLOP.AdditiveExpr"), "AdditiveExpr")(p);
+                memo[tuple(`AdditiveExpr`,p.end)] = result;
+                return result;
+            }
+        }
+    }
+
+    static TParseTree AdditiveExpr(string s)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, MultiplicativeExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, AdditiveOperator, Spacing), pegged.peg.wrapAround!(Spacing, AdditiveExpr, Spacing)), Spacing))), "CLOP.AdditiveExpr")(TParseTree("", false,[], s));
+        }
+        else
+        {
+            memo = null;
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, MultiplicativeExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, AdditiveOperator, Spacing), pegged.peg.wrapAround!(Spacing, AdditiveExpr, Spacing)), Spacing))), "CLOP.AdditiveExpr"), "AdditiveExpr")(TParseTree("", false,[], s));
+        }
+    }
+    static string AdditiveExpr(GetName g)
+    {
+        return "CLOP.AdditiveExpr";
+    }
+
+    static TParseTree AdditiveOperator(TParseTree p)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.literal!("-"), pegged.peg.literal!("+")), "CLOP.AdditiveOperator")(p);
+        }
+        else
+        {
+            if(auto m = tuple(`AdditiveOperator`,p.end) in memo)
+                return *m;
+            else
+            {
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.literal!("-"), pegged.peg.literal!("+")), "CLOP.AdditiveOperator"), "AdditiveOperator")(p);
+                memo[tuple(`AdditiveOperator`,p.end)] = result;
+                return result;
+            }
+        }
+    }
+
+    static TParseTree AdditiveOperator(string s)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.literal!("-"), pegged.peg.literal!("+")), "CLOP.AdditiveOperator")(TParseTree("", false,[], s));
+        }
+        else
+        {
+            memo = null;
+            return hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.literal!("-"), pegged.peg.literal!("+")), "CLOP.AdditiveOperator"), "AdditiveOperator")(TParseTree("", false,[], s));
+        }
+    }
+    static string AdditiveOperator(GetName g)
+    {
+        return "CLOP.AdditiveOperator";
+    }
+
+    static TParseTree ShiftExpr(TParseTree p)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, AdditiveExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, ShiftOperator, Spacing), pegged.peg.wrapAround!(Spacing, ShiftExpr, Spacing)), Spacing))), "CLOP.ShiftExpr")(p);
+        }
+        else
+        {
+            if(auto m = tuple(`ShiftExpr`,p.end) in memo)
+                return *m;
+            else
+            {
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, AdditiveExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, ShiftOperator, Spacing), pegged.peg.wrapAround!(Spacing, ShiftExpr, Spacing)), Spacing))), "CLOP.ShiftExpr"), "ShiftExpr")(p);
+                memo[tuple(`ShiftExpr`,p.end)] = result;
+                return result;
+            }
+        }
+    }
+
+    static TParseTree ShiftExpr(string s)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, AdditiveExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, ShiftOperator, Spacing), pegged.peg.wrapAround!(Spacing, ShiftExpr, Spacing)), Spacing))), "CLOP.ShiftExpr")(TParseTree("", false,[], s));
+        }
+        else
+        {
+            memo = null;
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, AdditiveExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, ShiftOperator, Spacing), pegged.peg.wrapAround!(Spacing, ShiftExpr, Spacing)), Spacing))), "CLOP.ShiftExpr"), "ShiftExpr")(TParseTree("", false,[], s));
+        }
+    }
+    static string ShiftExpr(GetName g)
+    {
+        return "CLOP.ShiftExpr";
+    }
+
+    static TParseTree ShiftOperator(TParseTree p)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.keywords!("<<", ">>"), "CLOP.ShiftOperator")(p);
+        }
+        else
+        {
+            if(auto m = tuple(`ShiftOperator`,p.end) in memo)
+                return *m;
+            else
+            {
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.keywords!("<<", ">>"), "CLOP.ShiftOperator"), "ShiftOperator")(p);
+                memo[tuple(`ShiftOperator`,p.end)] = result;
+                return result;
+            }
+        }
+    }
+
+    static TParseTree ShiftOperator(string s)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.keywords!("<<", ">>"), "CLOP.ShiftOperator")(TParseTree("", false,[], s));
+        }
+        else
+        {
+            memo = null;
+            return hooked!(pegged.peg.defined!(pegged.peg.keywords!("<<", ">>"), "CLOP.ShiftOperator"), "ShiftOperator")(TParseTree("", false,[], s));
+        }
+    }
+    static string ShiftOperator(GetName g)
+    {
+        return "CLOP.ShiftOperator";
+    }
+
+    static TParseTree RelationalExpr(TParseTree p)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, ShiftExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, RelationalOperator, Spacing), pegged.peg.wrapAround!(Spacing, RelationalExpr, Spacing)), Spacing))), "CLOP.RelationalExpr")(p);
+        }
+        else
+        {
+            if(auto m = tuple(`RelationalExpr`,p.end) in memo)
+                return *m;
+            else
+            {
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, ShiftExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, RelationalOperator, Spacing), pegged.peg.wrapAround!(Spacing, RelationalExpr, Spacing)), Spacing))), "CLOP.RelationalExpr"), "RelationalExpr")(p);
+                memo[tuple(`RelationalExpr`,p.end)] = result;
+                return result;
+            }
+        }
+    }
+
+    static TParseTree RelationalExpr(string s)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, ShiftExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, RelationalOperator, Spacing), pegged.peg.wrapAround!(Spacing, RelationalExpr, Spacing)), Spacing))), "CLOP.RelationalExpr")(TParseTree("", false,[], s));
+        }
+        else
+        {
+            memo = null;
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, ShiftExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, RelationalOperator, Spacing), pegged.peg.wrapAround!(Spacing, RelationalExpr, Spacing)), Spacing))), "CLOP.RelationalExpr"), "RelationalExpr")(TParseTree("", false,[], s));
+        }
+    }
+    static string RelationalExpr(GetName g)
+    {
+        return "CLOP.RelationalExpr";
+    }
+
+    static TParseTree RelationalOperator(TParseTree p)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.keywords!("<=", ">=", "<", ">"), "CLOP.RelationalOperator")(p);
+        }
+        else
+        {
+            if(auto m = tuple(`RelationalOperator`,p.end) in memo)
+                return *m;
+            else
+            {
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.keywords!("<=", ">=", "<", ">"), "CLOP.RelationalOperator"), "RelationalOperator")(p);
+                memo[tuple(`RelationalOperator`,p.end)] = result;
+                return result;
+            }
+        }
+    }
+
+    static TParseTree RelationalOperator(string s)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.keywords!("<=", ">=", "<", ">"), "CLOP.RelationalOperator")(TParseTree("", false,[], s));
+        }
+        else
+        {
+            memo = null;
+            return hooked!(pegged.peg.defined!(pegged.peg.keywords!("<=", ">=", "<", ">"), "CLOP.RelationalOperator"), "RelationalOperator")(TParseTree("", false,[], s));
+        }
+    }
+    static string RelationalOperator(GetName g)
+    {
+        return "CLOP.RelationalOperator";
+    }
+
+    static TParseTree EqualityExpr(TParseTree p)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, RelationalExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, EqualityOperator, Spacing), pegged.peg.wrapAround!(Spacing, EqualityExpr, Spacing)), Spacing))), "CLOP.EqualityExpr")(p);
+        }
+        else
+        {
+            if(auto m = tuple(`EqualityExpr`,p.end) in memo)
+                return *m;
+            else
+            {
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, RelationalExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, EqualityOperator, Spacing), pegged.peg.wrapAround!(Spacing, EqualityExpr, Spacing)), Spacing))), "CLOP.EqualityExpr"), "EqualityExpr")(p);
+                memo[tuple(`EqualityExpr`,p.end)] = result;
+                return result;
+            }
+        }
+    }
+
+    static TParseTree EqualityExpr(string s)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, RelationalExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, EqualityOperator, Spacing), pegged.peg.wrapAround!(Spacing, EqualityExpr, Spacing)), Spacing))), "CLOP.EqualityExpr")(TParseTree("", false,[], s));
+        }
+        else
+        {
+            memo = null;
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, RelationalExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, EqualityOperator, Spacing), pegged.peg.wrapAround!(Spacing, EqualityExpr, Spacing)), Spacing))), "CLOP.EqualityExpr"), "EqualityExpr")(TParseTree("", false,[], s));
+        }
+    }
+    static string EqualityExpr(GetName g)
+    {
+        return "CLOP.EqualityExpr";
+    }
+
+    static TParseTree EqualityOperator(TParseTree p)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.keywords!("==", "!="), "CLOP.EqualityOperator")(p);
+        }
+        else
+        {
+            if(auto m = tuple(`EqualityOperator`,p.end) in memo)
+                return *m;
+            else
+            {
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.keywords!("==", "!="), "CLOP.EqualityOperator"), "EqualityOperator")(p);
+                memo[tuple(`EqualityOperator`,p.end)] = result;
+                return result;
+            }
+        }
+    }
+
+    static TParseTree EqualityOperator(string s)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.keywords!("==", "!="), "CLOP.EqualityOperator")(TParseTree("", false,[], s));
+        }
+        else
+        {
+            memo = null;
+            return hooked!(pegged.peg.defined!(pegged.peg.keywords!("==", "!="), "CLOP.EqualityOperator"), "EqualityOperator")(TParseTree("", false,[], s));
+        }
+    }
+    static string EqualityOperator(GetName g)
+    {
+        return "CLOP.EqualityOperator";
+    }
+
+    static TParseTree ANDExpr(TParseTree p)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, EqualityExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("&"), Spacing), pegged.peg.wrapAround!(Spacing, ANDExpr, Spacing)), Spacing))), "CLOP.ANDExpr")(p);
+        }
+        else
+        {
+            if(auto m = tuple(`ANDExpr`,p.end) in memo)
+                return *m;
+            else
+            {
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, EqualityExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("&"), Spacing), pegged.peg.wrapAround!(Spacing, ANDExpr, Spacing)), Spacing))), "CLOP.ANDExpr"), "ANDExpr")(p);
+                memo[tuple(`ANDExpr`,p.end)] = result;
+                return result;
+            }
+        }
+    }
+
+    static TParseTree ANDExpr(string s)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, EqualityExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("&"), Spacing), pegged.peg.wrapAround!(Spacing, ANDExpr, Spacing)), Spacing))), "CLOP.ANDExpr")(TParseTree("", false,[], s));
+        }
+        else
+        {
+            memo = null;
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, EqualityExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("&"), Spacing), pegged.peg.wrapAround!(Spacing, ANDExpr, Spacing)), Spacing))), "CLOP.ANDExpr"), "ANDExpr")(TParseTree("", false,[], s));
+        }
+    }
+    static string ANDExpr(GetName g)
+    {
+        return "CLOP.ANDExpr";
+    }
+
+    static TParseTree ExclusiveORExpr(TParseTree p)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, ANDExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("^"), Spacing), pegged.peg.wrapAround!(Spacing, ExclusiveORExpr, Spacing)), Spacing))), "CLOP.ExclusiveORExpr")(p);
+        }
+        else
+        {
+            if(auto m = tuple(`ExclusiveORExpr`,p.end) in memo)
+                return *m;
+            else
+            {
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, ANDExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("^"), Spacing), pegged.peg.wrapAround!(Spacing, ExclusiveORExpr, Spacing)), Spacing))), "CLOP.ExclusiveORExpr"), "ExclusiveORExpr")(p);
+                memo[tuple(`ExclusiveORExpr`,p.end)] = result;
+                return result;
+            }
+        }
+    }
+
+    static TParseTree ExclusiveORExpr(string s)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, ANDExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("^"), Spacing), pegged.peg.wrapAround!(Spacing, ExclusiveORExpr, Spacing)), Spacing))), "CLOP.ExclusiveORExpr")(TParseTree("", false,[], s));
+        }
+        else
+        {
+            memo = null;
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, ANDExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("^"), Spacing), pegged.peg.wrapAround!(Spacing, ExclusiveORExpr, Spacing)), Spacing))), "CLOP.ExclusiveORExpr"), "ExclusiveORExpr")(TParseTree("", false,[], s));
+        }
+    }
+    static string ExclusiveORExpr(GetName g)
+    {
+        return "CLOP.ExclusiveORExpr";
+    }
+
+    static TParseTree InclusiveORExpr(TParseTree p)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, ExclusiveORExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("|"), Spacing), pegged.peg.wrapAround!(Spacing, InclusiveORExpr, Spacing)), Spacing))), "CLOP.InclusiveORExpr")(p);
+        }
+        else
+        {
+            if(auto m = tuple(`InclusiveORExpr`,p.end) in memo)
+                return *m;
+            else
+            {
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, ExclusiveORExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("|"), Spacing), pegged.peg.wrapAround!(Spacing, InclusiveORExpr, Spacing)), Spacing))), "CLOP.InclusiveORExpr"), "InclusiveORExpr")(p);
+                memo[tuple(`InclusiveORExpr`,p.end)] = result;
+                return result;
+            }
+        }
+    }
+
+    static TParseTree InclusiveORExpr(string s)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, ExclusiveORExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("|"), Spacing), pegged.peg.wrapAround!(Spacing, InclusiveORExpr, Spacing)), Spacing))), "CLOP.InclusiveORExpr")(TParseTree("", false,[], s));
+        }
+        else
+        {
+            memo = null;
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, ExclusiveORExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("|"), Spacing), pegged.peg.wrapAround!(Spacing, InclusiveORExpr, Spacing)), Spacing))), "CLOP.InclusiveORExpr"), "InclusiveORExpr")(TParseTree("", false,[], s));
+        }
+    }
+    static string InclusiveORExpr(GetName g)
+    {
+        return "CLOP.InclusiveORExpr";
+    }
+
+    static TParseTree LogicalANDExpr(TParseTree p)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, InclusiveORExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("&&"), Spacing), pegged.peg.wrapAround!(Spacing, LogicalANDExpr, Spacing)), Spacing))), "CLOP.LogicalANDExpr")(p);
+        }
+        else
+        {
+            if(auto m = tuple(`LogicalANDExpr`,p.end) in memo)
+                return *m;
+            else
+            {
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, InclusiveORExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("&&"), Spacing), pegged.peg.wrapAround!(Spacing, LogicalANDExpr, Spacing)), Spacing))), "CLOP.LogicalANDExpr"), "LogicalANDExpr")(p);
+                memo[tuple(`LogicalANDExpr`,p.end)] = result;
+                return result;
+            }
+        }
+    }
+
+    static TParseTree LogicalANDExpr(string s)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, InclusiveORExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("&&"), Spacing), pegged.peg.wrapAround!(Spacing, LogicalANDExpr, Spacing)), Spacing))), "CLOP.LogicalANDExpr")(TParseTree("", false,[], s));
+        }
+        else
+        {
+            memo = null;
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, InclusiveORExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("&&"), Spacing), pegged.peg.wrapAround!(Spacing, LogicalANDExpr, Spacing)), Spacing))), "CLOP.LogicalANDExpr"), "LogicalANDExpr")(TParseTree("", false,[], s));
+        }
+    }
+    static string LogicalANDExpr(GetName g)
+    {
+        return "CLOP.LogicalANDExpr";
+    }
+
+    static TParseTree LogicalORExpr(TParseTree p)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, LogicalANDExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("||"), Spacing), pegged.peg.wrapAround!(Spacing, LogicalORExpr, Spacing)), Spacing))), "CLOP.LogicalORExpr")(p);
+        }
+        else
+        {
+            if(auto m = tuple(`LogicalORExpr`,p.end) in memo)
+                return *m;
+            else
+            {
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, LogicalANDExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("||"), Spacing), pegged.peg.wrapAround!(Spacing, LogicalORExpr, Spacing)), Spacing))), "CLOP.LogicalORExpr"), "LogicalORExpr")(p);
+                memo[tuple(`LogicalORExpr`,p.end)] = result;
+                return result;
+            }
+        }
+    }
+
+    static TParseTree LogicalORExpr(string s)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, LogicalANDExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("||"), Spacing), pegged.peg.wrapAround!(Spacing, LogicalORExpr, Spacing)), Spacing))), "CLOP.LogicalORExpr")(TParseTree("", false,[], s));
+        }
+        else
+        {
+            memo = null;
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, LogicalANDExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("||"), Spacing), pegged.peg.wrapAround!(Spacing, LogicalORExpr, Spacing)), Spacing))), "CLOP.LogicalORExpr"), "LogicalORExpr")(TParseTree("", false,[], s));
+        }
+    }
+    static string LogicalORExpr(GetName g)
+    {
+        return "CLOP.LogicalORExpr";
+    }
+
+    static TParseTree ConditionalExpr(TParseTree p)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, LogicalORExpr, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("?"), Spacing), pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(":"), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing)), Spacing))), "CLOP.ConditionalExpr")(p);
+        }
+        else
+        {
+            if(auto m = tuple(`ConditionalExpr`,p.end) in memo)
+                return *m;
+            else
+            {
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, LogicalORExpr, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("?"), Spacing), pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(":"), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing)), Spacing))), "CLOP.ConditionalExpr"), "ConditionalExpr")(p);
+                memo[tuple(`ConditionalExpr`,p.end)] = result;
+                return result;
+            }
+        }
+    }
+
+    static TParseTree ConditionalExpr(string s)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, LogicalORExpr, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("?"), Spacing), pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(":"), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing)), Spacing))), "CLOP.ConditionalExpr")(TParseTree("", false,[], s));
+        }
+        else
+        {
+            memo = null;
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, LogicalORExpr, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("?"), Spacing), pegged.peg.wrapAround!(Spacing, Expression, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(":"), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing)), Spacing))), "CLOP.ConditionalExpr"), "ConditionalExpr")(TParseTree("", false,[], s));
+        }
+    }
+    static string ConditionalExpr(GetName g)
+    {
+        return "CLOP.ConditionalExpr";
+    }
+
+    static TParseTree AssignmentExpr(TParseTree p)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, UnaryExpr, Spacing), pegged.peg.wrapAround!(Spacing, AssignmentOperator, Spacing), pegged.peg.wrapAround!(Spacing, AssignmentExpr, Spacing)), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing)), "CLOP.AssignmentExpr")(p);
+        }
+        else
+        {
+            if(auto m = tuple(`AssignmentExpr`,p.end) in memo)
+                return *m;
+            else
+            {
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, UnaryExpr, Spacing), pegged.peg.wrapAround!(Spacing, AssignmentOperator, Spacing), pegged.peg.wrapAround!(Spacing, AssignmentExpr, Spacing)), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing)), "CLOP.AssignmentExpr"), "AssignmentExpr")(p);
+                memo[tuple(`AssignmentExpr`,p.end)] = result;
+                return result;
+            }
+        }
+    }
+
+    static TParseTree AssignmentExpr(string s)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, UnaryExpr, Spacing), pegged.peg.wrapAround!(Spacing, AssignmentOperator, Spacing), pegged.peg.wrapAround!(Spacing, AssignmentExpr, Spacing)), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing)), "CLOP.AssignmentExpr")(TParseTree("", false,[], s));
+        }
+        else
+        {
+            memo = null;
+            return hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, UnaryExpr, Spacing), pegged.peg.wrapAround!(Spacing, AssignmentOperator, Spacing), pegged.peg.wrapAround!(Spacing, AssignmentExpr, Spacing)), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing)), "CLOP.AssignmentExpr"), "AssignmentExpr")(TParseTree("", false,[], s));
+        }
+    }
+    static string AssignmentExpr(GetName g)
+    {
+        return "CLOP.AssignmentExpr";
+    }
+
+    static TParseTree AssignmentOperator(TParseTree p)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.keywords!("=", "*=", "/=", "%=", "+=", "-=", "<<=", ">>=", "&=", "^=", "|="), "CLOP.AssignmentOperator")(p);
+        }
+        else
+        {
+            if(auto m = tuple(`AssignmentOperator`,p.end) in memo)
+                return *m;
+            else
+            {
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.keywords!("=", "*=", "/=", "%=", "+=", "-=", "<<=", ">>=", "&=", "^=", "|="), "CLOP.AssignmentOperator"), "AssignmentOperator")(p);
+                memo[tuple(`AssignmentOperator`,p.end)] = result;
+                return result;
+            }
+        }
+    }
+
+    static TParseTree AssignmentOperator(string s)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.keywords!("=", "*=", "/=", "%=", "+=", "-=", "<<=", ">>=", "&=", "^=", "|="), "CLOP.AssignmentOperator")(TParseTree("", false,[], s));
+        }
+        else
+        {
+            memo = null;
+            return hooked!(pegged.peg.defined!(pegged.peg.keywords!("=", "*=", "/=", "%=", "+=", "-=", "<<=", ">>=", "&=", "^=", "|="), "CLOP.AssignmentOperator"), "AssignmentOperator")(TParseTree("", false,[], s));
+        }
+    }
+    static string AssignmentOperator(GetName g)
+    {
+        return "CLOP.AssignmentOperator";
+    }
+
+    static TParseTree Expression(TParseTree p)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, AssignmentExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, AssignmentExpr, Spacing)), Spacing))), "CLOP.Expression")(p);
+        }
+        else
+        {
+            if(auto m = tuple(`Expression`,p.end) in memo)
+                return *m;
+            else
+            {
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, AssignmentExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, AssignmentExpr, Spacing)), Spacing))), "CLOP.Expression"), "Expression")(p);
+                memo[tuple(`Expression`,p.end)] = result;
+                return result;
+            }
+        }
+    }
+
+    static TParseTree Expression(string s)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, AssignmentExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, AssignmentExpr, Spacing)), Spacing))), "CLOP.Expression")(TParseTree("", false,[], s));
+        }
+        else
+        {
+            memo = null;
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, AssignmentExpr, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, AssignmentExpr, Spacing)), Spacing))), "CLOP.Expression"), "Expression")(TParseTree("", false,[], s));
+        }
+    }
+    static string Expression(GetName g)
+    {
+        return "CLOP.Expression";
+    }
+
+    static TParseTree IdentifierList(TParseTree p)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, Identifier, Spacing)), Spacing))), "CLOP.IdentifierList")(p);
+        }
+        else
+        {
+            if(auto m = tuple(`IdentifierList`,p.end) in memo)
+                return *m;
+            else
+            {
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, Identifier, Spacing)), Spacing))), "CLOP.IdentifierList"), "IdentifierList")(p);
+                memo[tuple(`IdentifierList`,p.end)] = result;
+                return result;
+            }
+        }
+    }
+
+    static TParseTree IdentifierList(string s)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, Identifier, Spacing)), Spacing))), "CLOP.IdentifierList")(TParseTree("", false,[], s));
+        }
+        else
+        {
+            memo = null;
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.zeroOrMore!(pegged.peg.wrapAround!(Spacing, pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(","), Spacing), pegged.peg.wrapAround!(Spacing, Identifier, Spacing)), Spacing))), "CLOP.IdentifierList"), "IdentifierList")(TParseTree("", false,[], s));
+        }
+    }
+    static string IdentifierList(GetName g)
+    {
+        return "CLOP.IdentifierList";
     }
 
     static TParseTree Identifier(TParseTree p)
@@ -2326,7 +2613,7 @@ struct GenericCLOP(TParseTree)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.literal!("NDRange"), "CLOP.Keyword")(p);
+            return         pegged.peg.defined!(pegged.peg.keywords!("NDRange", "apply", "auto", "break", "case", "char", "const", "continue", "default", "double", "do", "else", "enum", "extern", "float", "for", "goto", "if", "inline", "int", "long", "register", "restrict", "return", "short", "signed", "sizeof", "static", "struct", "switch", "typedef", "union", "unsigned", "void", "volatile", "while"), "CLOP.Keyword")(p);
         }
         else
         {
@@ -2334,7 +2621,7 @@ struct GenericCLOP(TParseTree)
                 return *m;
             else
             {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.literal!("NDRange"), "CLOP.Keyword"), "Keyword")(p);
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.keywords!("NDRange", "apply", "auto", "break", "case", "char", "const", "continue", "default", "double", "do", "else", "enum", "extern", "float", "for", "goto", "if", "inline", "int", "long", "register", "restrict", "return", "short", "signed", "sizeof", "static", "struct", "switch", "typedef", "union", "unsigned", "void", "volatile", "while"), "CLOP.Keyword"), "Keyword")(p);
                 memo[tuple(`Keyword`,p.end)] = result;
                 return result;
             }
@@ -2345,12 +2632,12 @@ struct GenericCLOP(TParseTree)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.literal!("NDRange"), "CLOP.Keyword")(TParseTree("", false,[], s));
+            return         pegged.peg.defined!(pegged.peg.keywords!("NDRange", "apply", "auto", "break", "case", "char", "const", "continue", "default", "double", "do", "else", "enum", "extern", "float", "for", "goto", "if", "inline", "int", "long", "register", "restrict", "return", "short", "signed", "sizeof", "static", "struct", "switch", "typedef", "union", "unsigned", "void", "volatile", "while"), "CLOP.Keyword")(TParseTree("", false,[], s));
         }
         else
         {
             memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.literal!("NDRange"), "CLOP.Keyword"), "Keyword")(TParseTree("", false,[], s));
+            return hooked!(pegged.peg.defined!(pegged.peg.keywords!("NDRange", "apply", "auto", "break", "case", "char", "const", "continue", "default", "double", "do", "else", "enum", "extern", "float", "for", "goto", "if", "inline", "int", "long", "register", "restrict", "return", "short", "signed", "sizeof", "static", "struct", "switch", "typedef", "union", "unsigned", "void", "volatile", "while"), "CLOP.Keyword"), "Keyword")(TParseTree("", false,[], s));
         }
     }
     static string Keyword(GetName g)

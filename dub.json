@@ -15,11 +15,15 @@
             "targetType"   : "library",
             "targetPath"   : "./lib",
             "sourcePaths"  : ["clop"],
+            "dflags"       : ["-Jutils"],
             "dependencies" : {
                 "derelict-cl" : "~>1.2.2",
                 "pegged"      : "~>0.2.1"
             },
-            "excludedSourceFiles" : ["clop/rt/ctx.d"]
+            "excludedSourceFiles" : [
+                "clop/ct/grammar.d",
+                "clop/rt/ctx.d"
+            ]
         },
         {
             "name"         : "runtime",

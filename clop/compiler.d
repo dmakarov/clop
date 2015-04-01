@@ -35,7 +35,7 @@ import std.string;
 import std.traits;
 
 import clop.ct.analysis;
-import clop.ct.grammar;
+import clop.ct.parser;
 import clop.ct.program;
 import clop.ct.structs;
 import clop.ct.symbol;
@@ -890,8 +890,3 @@ string compile(string expr, string file = __FILE__, size_t line = __LINE__)
   auto dump = format("debug (VERBOSE) writeln(\"%s:\\n\",`%s`,\"%s:\");\n", head, code, tail);
   return dump ~ code;
 }
-
-// Local Variables:
-// hide-functions: ("dump_symtable" "dump_arraytab" "dump_intervals" \
-//                  "dump_parameters" "debug_node" "debug_leaf" "debug_tree")
-// End:
