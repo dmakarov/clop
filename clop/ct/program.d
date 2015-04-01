@@ -800,7 +800,7 @@ struct Program
         }
         else
         {
-          if (")" == t.matches[$ - 1])
+          if (t.matches.length > 2 && "(" == t.matches[$ - 2] && ")" == t.matches[$ - 1])
           {
             s ~= "()";
           }
