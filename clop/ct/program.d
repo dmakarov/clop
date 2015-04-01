@@ -53,8 +53,11 @@ struct Program
     auto kname = generate_kernel_name(); // we need to give the kernel a name
     auto params = set_params();
     auto kernel = "\"__kernel void " ~ kname ~ "(\" ~ kernel_params ~ \")\" ~\nq{\n" ~ kbody ~ "}";
-    auto clhost = format(template_create_opencl_kernel, params, external, kernel, generate_kernel_name());
-    clhost ~= set_args("clop_opencl_kernel") ~ code_to_invoke_kernel() ~ code_to_read_data_from_device();
+    auto clhost = format(template_create_opencl_kernel,
+                         suffix, suffix, suffix, suffix,
+                         params, external, kernel, suffix,
+                         generate_kernel_name());
+    clhost ~= set_args("clop_opencl_kernel_" ~ suffix) ~ code_to_invoke_kernel() ~ code_to_read_data_from_device();
     auto diagnostics = format("static if (\"%s\" != \"\")\n  pragma (msg, \"%s\");\n", errors, errors);
     return diagnostics ~ format(template_clop_unit, clhost, toString());
   }
@@ -76,6 +79,7 @@ struct Program
   string pattern;          ///
   string external;         ///
   string errors;           ///
+  string suffix;           ///
 
   string kernel;           ///
   string indent = "  ";    ///
@@ -628,7 +632,7 @@ struct Program
     if (pattern is null)
     {
       auto global = "[" ~ range.get_interval_sizes() ~ "]";
-      auto kernel = "clop_opencl_kernel"; // FIXME shouldn't be hard-coded.
+      auto kernel = "clop_opencl_kernel_" ~ suffix;
       auto dimensions = range.get_dimensions();
       return format(template_plain_invoke_kernel, global, kernel, dimensions);
     }
@@ -642,7 +646,7 @@ struct Program
           if (p.skip)
             argindex[n++] = i;
         auto gsz0 = range.intervals[0].get_max();
-        auto name = "clop_opencl_kernel";
+        auto name = "clop_opencl_kernel" ~ suffix;
         return format(template_antidiagonal_invoke_kernel,
                       gsz0, gsz0, gsz0, name, argindex[0], name);
       }
@@ -651,7 +655,7 @@ struct Program
         auto gsz0 = range.intervals[0].get_max();
         auto bsz0 = block_size;
         auto bsz1 = block_size;
-        auto name = "clop_opencl_kernel";
+        auto name = "clop_opencl_kernel" ~ suffix;
         auto n = 0;
         ulong[2] argindex;
         foreach (i, p; parameters)

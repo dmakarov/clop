@@ -56,6 +56,7 @@ struct Compiler
   Symbol[string] symtable;  /// the symbol table
   Set!Transformation trans; /// set of optimizing transformations
 
+  string suffix;
   string errors;
   string pattern;
   string external;
@@ -71,6 +72,8 @@ struct Compiler
    +/
   this(string expr, string file, size_t line)
   {
+    import std.path : baseName, stripExtension;
+    suffix = format("%s_%s", baseName(stripExtension(file)), line);
     errors = "";
     external = "";
     source_file = file;
@@ -518,15 +521,15 @@ struct Compiler
   {
     auto items = trans.get_items_as_array();
     auto length = items.length;
-    variants ~= Program(symtable, [], parameters, t.dup, range, pattern, external, errors);
+    variants ~= Program(symtable, [], parameters, t.dup, range, pattern, external, errors, suffix);
     for (auto i = 0; i < length; ++i)
     {
       auto set = [items[i]];
-      variants ~= Program(symtable, set, parameters, t.dup, range, pattern, external, errors);
+      variants ~= Program(symtable, set, parameters, t.dup, range, pattern, external, errors, suffix);
       for (auto j = i + 1; j < length; ++j)
       {
         set ~= items[j];
-        variants ~= Program(symtable, set, parameters, t.dup, range, pattern, external, errors);
+        variants ~= Program(symtable, set, parameters, t.dup, range, pattern, external, errors, suffix);
       }
     }
   }

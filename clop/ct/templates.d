@@ -20,11 +20,11 @@ template_clop_unit = q{
 },
 
 template_create_opencl_kernel = q{
-    //static bool kernel_has_been_created_;
-    cl_kernel clop_opencl_kernel;
-    //if (!kernel_has_been_created)
+    static cl_kernel clop_opencl_kernel_%s;
+    static bool kernel_has_been_created_%s;
+    if (!kernel_has_been_created_%s)
     {
-      //kernel_has_been_created = true;
+      kernel_has_been_created_%s = true;
       %s
       char[] clop_opencl_program_source = (q{
           %s
@@ -42,7 +42,7 @@ template_create_opencl_kernel = q{
         writeln("CL_PROGRAM_BUILD_LOG:\n", log, "\nEOD");
       }
       assert(runtime.status == CL_SUCCESS, "clBuildProgram failed " ~ cl_strerror(runtime.status));
-      clop_opencl_kernel = clCreateKernel(program, "%s", &runtime.status);
+      clop_opencl_kernel_%s = clCreateKernel(program, "%s", &runtime.status);
       assert(runtime.status == CL_SUCCESS, "clCreateKernel failed " ~ cl_strerror(runtime.status));
     }
 },
