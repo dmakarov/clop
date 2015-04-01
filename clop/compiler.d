@@ -25,6 +25,7 @@
 module clop.compiler;
 
 public import clop.rt.ctx;
+public import std.traits;
 
 private:
 
@@ -32,7 +33,6 @@ import std.algorithm : reduce;
 import std.container;
 import std.conv;
 import std.string;
-import std.traits;
 
 import clop.ct.analysis;
 import clop.ct.parser;
