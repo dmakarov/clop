@@ -894,6 +894,16 @@ string compile(string expr, string file = __FILE__, size_t line = __LINE__)
   auto flln = file ~ ":" ~ to!string(line);
   auto head = "CLOP MIXIN at " ~ flln;
   auto tail = "END OF CLOP " ~ flln;
-  auto dump = format("debug (VERBOSE) writeln(\"%s:\\n\",`%s`,\"%s:\");\n", head, code, tail);
+  auto dump = format(q{
+      debug (VERBOSE)
+      {
+        static bool clop_instance_%s;
+        if (!clop_instance_%s)
+        {
+          clop_instance_%s = true;
+          writeln("%s:\n",`%s`,"%s:");
+        }
+      }
+    }, compiler.suffix, compiler.suffix, compiler.suffix, head, code, tail);
   return dump ~ code;
 }
