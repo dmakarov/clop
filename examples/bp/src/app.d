@@ -221,9 +221,9 @@ class Application {
     mixin (compile(q{
           NDRange(j : 1 .. hidden_n, i : 1 .. input_n)
           {
-            FP adjust = MOMENTUM * changes[j, i] + (ONEF - MOMENTUM) * ETA * o[i] * deltas[j];
-            weights[j, i] += adjust;
-            changes[j, i]  = adjust;
+            float adjust = MOMENTUM * i2h_changes[j, i] + (ONEF - MOMENTUM) * ETA * input_units[i] * hidden_deltas[j];
+            i2h_weights[j, i] += adjust;
+            i2h_changes[j, i]  = adjust;
           }
         }));
 
