@@ -646,7 +646,7 @@ struct Program
           if (p.skip)
             argindex[n++] = i;
         auto gsz0 = range.intervals[0].get_max();
-        auto name = "clop_opencl_kernel" ~ suffix;
+        auto name = "clop_opencl_kernel_" ~ suffix;
         return format(template_antidiagonal_invoke_kernel,
                       gsz0, gsz0, gsz0, name, argindex[0], name);
       }
@@ -655,7 +655,7 @@ struct Program
         auto gsz0 = range.intervals[0].get_max();
         auto bsz0 = block_size;
         auto bsz1 = block_size;
-        auto name = "clop_opencl_kernel" ~ suffix;
+        auto name = "clop_opencl_kernel_" ~ suffix;
         auto n = 0;
         ulong[2] argindex;
         foreach (i, p; parameters)
