@@ -30,7 +30,7 @@ template_create_opencl_kernel = q{
       // macros
       %s
       char[] clop_opencl_program_source = (%s).dup;
-      debug (DEBUG) writeln("OpenCL program:\n", clop_opencl_program_source, "EOF");
+      debug (VERBOSE) writeln("OpenCL program:\n", clop_opencl_program_source, "EOF");
       size_t clop_opencl_program_source_size = clop_opencl_program_source.length;
       char* clop_opencl_program_source_pointer = clop_opencl_program_source.ptr;
       auto program = clCreateProgramWithSource(runtime.context, 1, &clop_opencl_program_source_pointer, &clop_opencl_program_source_size, &runtime.status);
