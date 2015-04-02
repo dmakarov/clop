@@ -436,12 +436,9 @@ class Application {
     if (!valid)
       writefln("bp: out error %f, hidden error %f", eo, eh);
 
-    version(DISABLED)
-    {
     valid = clop_train_kernel(eo, eh);
     if (!valid)
       writefln("bp: out error %f, hidden error %f", eo, eh);
-    }
   }
 }
 
