@@ -25,10 +25,11 @@ template_create_opencl_kernel = q{
     if (!kernel_has_been_created_%s)
     {
       kernel_has_been_created_%s = true;
+      // params
       %s
-      char[] clop_opencl_program_source = (q{
-          %s
-      } ~ %s).dup;
+      // macros
+      %s
+      char[] clop_opencl_program_source = (%s).dup;
       debug (DEBUG) writeln("OpenCL program:\n", clop_opencl_program_source, "EOF");
       size_t clop_opencl_program_source_size = clop_opencl_program_source.length;
       char* clop_opencl_program_source_pointer = clop_opencl_program_source.ptr;
