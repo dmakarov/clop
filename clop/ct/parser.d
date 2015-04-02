@@ -1,7 +1,6 @@
 /++
 This module was automatically generated from the following grammar:
 
-# -*- bison -*-
 #  The MIT License (MIT)
 #  =====================
 #
@@ -123,6 +122,10 @@ CLOP:
  IntegerSuffix          <- "Lu" / "LU" / "uL" / "UL" / "L" / "u" / "U"
  FloatLiteral           <~ Sign? Integer "." Integer? (("e" / "E") Sign? Integer)?
  Sign                   <- "-" / "+"
+
+# Local Variables:
+# mode: bison
+# End:
 
 
 +/
