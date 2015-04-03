@@ -25,6 +25,7 @@
 module clop.compiler;
 
 public import clop.rt.ctx;
+public import std.format;
 public import std.traits;
 
 private:
