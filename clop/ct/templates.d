@@ -27,8 +27,7 @@ template_create_opencl_kernel = q{
       kernel_has_been_created_%s = true;
       // params
       %s
-      // macros
-      %s
+      // kernel
       char[] clop_opencl_program_source = (%s).dup;
       debug (VERBOSE) writeln("OpenCL program:\n", clop_opencl_program_source, "EOF");
       size_t clop_opencl_program_source_size = clop_opencl_program_source.length;

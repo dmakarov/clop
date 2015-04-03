@@ -868,7 +868,7 @@ auto set_kernel_arg(T)(string kernel, string arg, string name, string back, stri
   {
     code = (null == size || size == "")
          ? format(q{
-           cl_mem clop_opencl_device_buffer_%s = clCreateBuffer(runtime.context, CL_MEM_READ_WRITE, typeid(*%s.ptr).tsize * %s.length, null, &runtime.status);
+           clop_opencl_device_buffer_%s = clCreateBuffer(runtime.context, CL_MEM_READ_WRITE, typeid(*%s.ptr).tsize * %s.length, null, &runtime.status);
            assert(runtime.status == CL_SUCCESS, "clCreateBuffer failed " ~ cl_strerror(runtime.status));
            runtime.status = clEnqueueWriteBuffer(runtime.queue, clop_opencl_device_buffer_%s, CL_TRUE, 0, typeid(*%s.ptr).tsize * %s.length, %s.ptr, 0, null, null);
            assert(runtime.status == CL_SUCCESS, "clEnqueueWriteBuffer failed " ~ cl_strerror(runtime.status));
