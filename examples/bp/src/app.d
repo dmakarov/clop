@@ -186,19 +186,37 @@ class Application {
       }
   }
 
+  /++
+   + This function ensures that elements of s are summed in the same
+   + order they are summed in layerforward_parallel() so that the
+   + results are the same exactly.
+   +/
+  auto mysum(CL_FP[] s)
+  {
+    for (auto i = 1; i < s.length; i *= 2)
+    {
+      foreach (j; 0 .. s.length)
+        if (j % (2 * i) == 0)
+          s[j] += s[j + i];
+    }
+    return s[0];
+  }
+
   bool clop_train_kernel(ref CL_FP eo, ref CL_FP eh)
   {
     import std.algorithm : sum;
+    foreach (i; 0 .. i2h_changes.length) i2h_changes[i] = 0;
+    foreach (i; 0 .. h2o_changes.length) h2o_changes[i] = 0;
     auto s = new CL_FP[input_n];
-    foreach (j; 0 .. hidden_n)
+    foreach (i; 1 .. hidden_units.length)
     {
       mixin (compile(q{
-            NDRange(i : 0 .. input_n)
+            NDRange(j : 0 .. input_n)
             {
-              s[i] = input_units[i] * i2h_weights[i, j];
+              s[j] = input_units[j + 1] * i2h_weights[i * (input_n + 1) + j + 1];
             }
           }));
-      hidden_units[j] = ONEF / (ONEF + exp(-sum(s)));
+      hidden_units[i] = ONEF / (ONEF + exp(-mysum(s) - i2h_weights[i, 0]));
     }
 
     layerforward(hidden_units, output_units, h2o_weights);
@@ -210,11 +228,12 @@ class Application {
     adjust_weights(output_deltas, hidden_units, h2o_weights, h2o_changes);
 
     mixin (compile(q{
-          NDRange(i : 1 .. input_n, j : 1 .. hidden_n)
+          NDRange(i : 0 .. hidden_n, j : 0 .. input_n)
           {
-            float adjust = MOMENTUM * i2h_changes[i, j] + (ONEF - MOMENTUM) * ETA * input_units[i] * hidden_deltas[j];
-            i2h_weights[i, j] += adjust;
-            i2h_changes[i, j]  = adjust;
+            int index = (i + 1) * (input_n + 1) + j + 1;
+            float adjust = MOMENTUM * i2h_changes[index] + (ONEF - MOMENTUM) * ETA * input_units[j + 1] * hidden_deltas[i + 1];
+            i2h_changes[index]  = adjust;
+            i2h_weights[index] += adjust;
           }
         }));
 
@@ -436,7 +455,7 @@ class Application {
           debug (DEBUG) writefln("summands[%2d, %2d] <- w[%2d, %2d] * f[%2d]", row, col, row + 1, gid * hidden_n + col + 1, gid * hidden_n + col + 1);
         }
       }
-      for (auto i = 1; i < hidden_n; i = i * 2)
+      for (auto i = 1; i < hidden_n; i *= 2)
       {
         foreach (row; 0 .. hidden_n)
         {
@@ -543,14 +562,18 @@ class Application {
     if (!valid)
       writefln("bp: out error %f, hidden error %f", eo, eh);
 
+    timer.reset();
+    timer.start();
     valid = clop_train_kernel(eo, eh);
+    timer.stop();
+    ticks = timer.peek();
+    writefln("CLOPs %5.3f [s]", ticks.usecs / 1E6);
     if (!valid)
       writefln("bp: out error %f, hidden error %f", eo, eh);
   }
 }
 
-int
-main(string[] args)
+int main(string[] args)
 {
   auto platforms = runtime.get_platforms();
   foreach (p; 0 .. platforms.length)
