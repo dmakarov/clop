@@ -1,0 +1,10 @@
+* CLOP Examples
+
+  - algebra basic liner algebra operations
+  - bf bellman-ford algorithm not implemented
+  - bp back propagation step of a neural network training algorithm
+  - fe finite elements not implemented
+  - nw Needleman-Wunsch sequence alignment algorithm
+  - pf pathfinder algorithm
+  - stencil sample stencil kernels
+  - viterbi not implemented
