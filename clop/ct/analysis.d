@@ -48,6 +48,12 @@ struct Box
     return reduce!((a, b) => a ~ ", " ~ b.get_size())(intervals[0].get_size(), intervals[1 .. $]);
   }
 
+  string get_lower_bounds()
+  {
+    import std.algorithm : reduce;
+    return reduce!((a, b) => a ~ ", " ~ b.get_min())(intervals[0].get_min(), intervals[1 .. $]);
+  }
+
   string toString()
   {
     auto s = "";

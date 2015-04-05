@@ -48,8 +48,8 @@ template_create_opencl_kernel = q{
 },
 
 template_plain_invoke_kernel = q{
-    size_t[] global = %s;
-    runtime.status = clEnqueueNDRangeKernel(runtime.queue, %s, %s, null, global.ptr, null, 0, null, null);
+    size_t[] offset = %s, global = %s;
+    runtime.status = clEnqueueNDRangeKernel(runtime.queue, %s, %s, offset.ptr, global.ptr, null, 0, null, null);
     assert(runtime.status == CL_SUCCESS, "clEnqueueNDRangeKernel " ~ cl_strerror(runtime.status));
 },
 

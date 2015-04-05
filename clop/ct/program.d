@@ -649,9 +649,10 @@ struct Program
     if (pattern is null)
     {
       auto global = "[" ~ range.get_interval_sizes() ~ "]";
+      auto offset = "[" ~ range.get_lower_bounds() ~ "]";
       auto kernel = "clop_opencl_kernel_" ~ suffix;
       auto dimensions = range.get_dimensions();
-      return format(template_plain_invoke_kernel, global, kernel, dimensions);
+      return format(template_plain_invoke_kernel, offset, global, kernel, dimensions);
     }
     if (pattern == "Antidiagonal")
     {

@@ -208,12 +208,14 @@ class Application {
     foreach (i; 0 .. i2h_changes.length) i2h_changes[i] = 0;
     foreach (i; 0 .. h2o_changes.length) h2o_changes[i] = 0;
     auto s = new CL_FP[input_n];
+    auto n = input_units.length;
+    auto h = hidden_units.length;
     foreach (i; 1 .. hidden_units.length)
     {
       mixin (compile(q{
-            NDRange(j : 0 .. input_n)
+            NDRange(j : 1 .. n)
             {
-              s[j] = input_units[j + 1] * i2h_weights[i * (input_n + 1) + j + 1];
+              s[j - 1] = input_units[j] * i2h_weights[i * n + j];
             }
           }));
       hidden_units[i] = ONEF / (ONEF + exp(-mysum(s) - i2h_weights[i, 0]));
@@ -228,10 +230,10 @@ class Application {
     adjust_weights(output_deltas, hidden_units, h2o_weights, h2o_changes);
 
     mixin (compile(q{
-          NDRange(i : 0 .. hidden_n, j : 0 .. input_n)
+          NDRange(i : 1 .. h, j : 1 .. n)
           {
-            int index = (i + 1) * (input_n + 1) + j + 1;
-            float adjust = MOMENTUM * i2h_changes[index] + (ONEF - MOMENTUM) * ETA * input_units[j + 1] * hidden_deltas[i + 1];
+            int index = i * n + j;
+            float adjust = MOMENTUM * i2h_changes[index] + (ONEF - MOMENTUM) * ETA * input_units[j] * hidden_deltas[i];
             i2h_changes[index]  = adjust;
             i2h_weights[index] += adjust;
           }
@@ -577,7 +579,7 @@ int main(string[] args)
 {
   auto platforms = runtime.get_platforms();
   foreach (p; 0 .. platforms.length)
-    foreach (d; 0 .. platforms[p])
+    foreach (d; 1 .. platforms[p])
     {
       try
       {
