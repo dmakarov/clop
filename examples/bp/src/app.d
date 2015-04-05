@@ -579,7 +579,7 @@ int main(string[] args)
 {
   auto platforms = runtime.get_platforms();
   foreach (p; 0 .. platforms.length)
-    foreach (d; 1 .. platforms[p])
+    foreach (d; 0 .. platforms[p])
     {
       try
       {
