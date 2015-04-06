@@ -31,6 +31,8 @@ import std.string;
 
 import derelict.opencl.cl;
 
+import clop.rt.instance;
+
 struct Runtime
 {
   static bool has_platform_ids = false;
@@ -44,6 +46,8 @@ struct Runtime
 
   cl_kernel kernel_copy;
   cl_kernel kernel_madd;
+
+  Instance[] clops;
 
   /++
    +/
@@ -71,7 +75,7 @@ struct Runtime
     assert( status == CL_SUCCESS, "Can't create OpenCL context: " ~ cl_strerror( status ) );
     queue = clCreateCommandQueue( context, device, CL_QUEUE_PROFILING_ENABLE, &status );
     assert( status == CL_SUCCESS, "Can't create OpenCL command queue:" ~ cl_strerror( status ) );
-    if ( verbose )
+    if (verbose)
     {
       size_t value_size;
       status = clGetDeviceInfo( device, CL_DEVICE_NAME, 0, null, &value_size );
@@ -149,7 +153,7 @@ struct Runtime
     return platforms;
   }
 
-  double benchmark( cl_int size )
+  double benchmark(cl_int size)
   {
     double result;
     cl_int status;
