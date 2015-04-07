@@ -53,11 +53,15 @@ struct Program
     auto kname = generate_kernel_name(); // we need to give the kernel a name
     auto params = set_params();
     auto kernel = "macros ~ q{" ~ external ~ "} ~ " ~ "\"__kernel void " ~ kname ~ "(\" ~ kernel_params ~ \")\" ~\nq{\n" ~ kbody ~ "}";
-    auto clhost = format(template_create_opencl_kernel,
-                         suffix, suffix, suffix, suffix,
+    auto clhost = format(template_create_opencl_kernel, suffix,
+                         suffix, suffix, suffix,
+                         suffix, suffix, suffix,
                          params, kernel, suffix,
                          generate_kernel_name());
-    clhost ~= set_args("clop_opencl_kernel_" ~ suffix) ~ code_to_invoke_kernel() ~ code_to_read_data_from_device();
+    clhost ~= set_args("clop_opencl_kernel_" ~ suffix)
+            ~ code_to_invoke_kernel()
+            ~ code_to_read_data_from_device()
+            ~ code_to_release_buffers();
     auto diagnostics = format("static if (\"%s\" != \"\")\n  pragma (msg, \"%s\");\n", errors, errors);
     return diagnostics ~ format(template_clop_unit, clhost, toString());
   }
@@ -599,7 +603,20 @@ struct Program
 
   string set_args(string kernel)
   {
-    auto result = "auto kernel_argument_counter = 0;\n";
+    auto result = format(q{
+        auto kernel_argument_counter = 0;
+        static bool kernel_arguments_have_been_set_%s;
+      }, suffix);
+    foreach(p; parameters)
+    {
+      result ~= format(q{
+        cl_mem clop_opencl_device_buffer_%s;}, p.name);
+    }
+    debug(NEVER)
+    result ~= format(`
+          if (!kernel_arguments_have_been_set_%s)
+          {
+            kernel_arguments_have_been_set_%s = true;`, suffix, suffix);
     foreach(i, p; parameters)
     {
       if (!p.skip)
@@ -607,21 +624,23 @@ struct Program
         if (p.back == "")
         {
           result ~= format(q{
-              cl_mem clop_opencl_device_buffer_%s;
-              if (isMutable!(typeof(%s)))
-              {
-                mixin(set_kernel_arg!(typeof(%s))("%s", "kernel_argument_counter++", "%s", "", ""));
-              }
-            }, p.name, p.name, p.name, kernel, p.name);
+            if (isMutable!(typeof(%s)))
+            {
+              mixin(set_kernel_arg!(typeof(%s))("%s", "kernel_argument_counter++", "%s", "", ""));
+            }
+          }, p.name, p.name, kernel, p.name);
         }
         else
         {
           result ~= format(q{
-              mixin(set_kernel_arg!(typeof(%s))("%s", "%d", "null", "%s", "%s"));
-            }, p.back, kernel, i, p.back, p.size);
+            mixin(set_kernel_arg!(typeof(%s))("%s", "%d", "null", "%s", "%s"));
+          }, p.back, kernel, i, p.back, p.size);
         }
       }
     }
+    debug(NEVER)
+    result ~= `
+        }`;
     return result;
   }
 
@@ -632,7 +651,30 @@ struct Program
     {
       if (!v.is_local && v.type == "" && v.defs.length > 0)
       {
-        result ~= "mixin(read_device_buffer!(typeof(" ~ k ~ "))(\"" ~ k ~ "\"));\n";
+        result ~= format(q{
+            mixin(read_device_buffer!(typeof(%s))("%s"));
+          }, k, k);
+      }
+    }
+    return result;
+  }
+
+  string code_to_release_buffers()
+  {
+    auto result = "";
+    foreach(p; parameters)
+    {
+      if (!p.skip)
+      {
+        if (p.back == "")
+        {
+          result ~= format(q{
+            if (isMutable!(typeof(%s)))
+            {
+              mixin(release_buffer!(typeof(%s))("%s"));
+            }
+            }, p.name, p.name, p.name);
+        }
       }
     }
     return result;

@@ -29,7 +29,7 @@ import derelict.opencl.cl;
 /++
  +
  +/
-struct Instance
+class Instance
 {
   string program;
   cl_mem[] buffers;

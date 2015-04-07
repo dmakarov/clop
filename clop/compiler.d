@@ -25,6 +25,7 @@
 module clop.compiler;
 
 public import clop.rt.ctx;
+public import clop.rt.instance;
 public import std.format;
 public import std.traits;
 
@@ -870,17 +871,33 @@ auto set_kernel_arg(T)(string kernel, string arg, string name, string back, stri
     code = (null == size || size == "")
          ? format(q{
            clop_opencl_device_buffer_%s = clCreateBuffer(runtime.context, CL_MEM_READ_WRITE, typeid(*%s.ptr).tsize * %s.length, null, &runtime.status);
-           assert(runtime.status == CL_SUCCESS, "clCreateBuffer failed " ~ cl_strerror(runtime.status));
+           assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clCreateBuffer"));
            runtime.status = clEnqueueWriteBuffer(runtime.queue, clop_opencl_device_buffer_%s, CL_TRUE, 0, typeid(*%s.ptr).tsize * %s.length, %s.ptr, 0, null, null);
-           assert(runtime.status == CL_SUCCESS, "clEnqueueWriteBuffer failed " ~ cl_strerror(runtime.status));
+           assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clEnqueueWriteBuffer"));
            runtime.status = clSetKernelArg(%s, %s, cl_mem.sizeof, &clop_opencl_device_buffer_%s);
-           assert(runtime.status == CL_SUCCESS, "clSetKernelArg failed " ~ cl_strerror(runtime.status));
+           assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clSetKernelArg"));
            debug (VERBOSE) writefln("clCreateBuffer(%%s at %%s)", typeid(*%s.ptr).tsize * %s.length, %s.ptr);
            }, name, name, name, name, name, name, name, kernel, arg, name, name, name, name)
          : format(q{
            runtime.status = clSetKernelArg(%s, %s, %s * typeid(*%s.ptr).tsize, %s);
-           assert(runtime.status == CL_SUCCESS, "clSetKernelArg failed " ~ cl_strerror(runtime.status));
+           assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clSetKernelArg"));
            }, kernel, arg, size, back, name);
+  }
+  return "debug (VERBOSE) writefln(\"%s\", q{" ~ code ~ "});\n" ~ code;
+}
+
+/++
+ +
+ +/
+auto release_buffer(T)(string name)
+{
+  auto code = "";
+  static if (isDynamicArray!T || isStaticArray!T || !isBasicType!T && __traits(isSame, TemplateOf!(T), NDArray))
+  {
+    code = format(q{
+           runtime.status = clReleaseMemObject(clop_opencl_device_buffer_%s);
+           assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clCreateBuffer"));
+           }, name);
   }
   return "debug (VERBOSE) writefln(\"%s\", q{" ~ code ~ "});\n" ~ code;
 }
@@ -892,9 +909,10 @@ auto read_device_buffer(T)(string name)
 {
   auto code = "";
   static if (isDynamicArray!T || isStaticArray!T || __traits(isSame, TemplateOf!(T), NDArray))
-    code = "runtime.status = clEnqueueReadBuffer(runtime.queue, clop_opencl_device_buffer_"
-           ~ name ~ ", CL_TRUE, 0, typeid(*" ~ name ~ ".ptr).tsize * " ~ name ~ ".length, " ~ name ~
-           ".ptr, 0, null, null);\nassert(runtime.status == CL_SUCCESS, \"clEnqueueReadBuffer failed.\");";
+    code = format(q{
+        runtime.status = clEnqueueReadBuffer(runtime.queue, clop_opencl_device_buffer_%s, CL_TRUE, 0, typeid(*%s.ptr).tsize * %s.length, %s.ptr, 0, null, null);
+        assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clEnqueueReadBuffer"));
+      }, name, name, name, name);
   return "debug (VERBOSE) writefln(\"%s\", q{" ~ code ~ "});\n" ~ code;
 }
 

@@ -153,6 +153,14 @@ struct Runtime
     return platforms;
   }
 
+  void register_instance(Instance instance)
+  {
+    clops ~= instance;
+  }
+
+  /++
+   +
+   +/
   double benchmark(cl_int size)
   {
     double result;

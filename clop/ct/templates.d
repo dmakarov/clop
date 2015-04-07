@@ -22,8 +22,11 @@ template_clop_unit = q{
 template_create_opencl_kernel = q{
     static cl_kernel clop_opencl_kernel_%s;
     static bool kernel_has_been_created_%s;
+    static Instance instance_%s;
     if (!kernel_has_been_created_%s)
     {
+      instance_%s = new Instance;
+      runtime.register_instance(instance_%s);
       kernel_has_been_created_%s = true;
       // params
       %s
