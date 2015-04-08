@@ -24,13 +24,46 @@
  */
 module clop.rt.instance;
 
+import std.stdio;
 import derelict.opencl.cl;
+import clop.rt.ctx;
 
 /++
  +
  +/
-class Instance
+final class Instance
 {
+  string name;
   string program;
   cl_mem[] buffers;
+  cl_kernel kernel;
+
+  this(string n, cl_kernel k)
+  {
+    name = n;
+    kernel = k;
+  }
+
+  @property override
+  string toString()
+  {
+    return name;
+  }
+
+  void release_resources()
+  {
+    cl_int status;
+    foreach (buffer; buffers)
+    {
+      status = clReleaseMemObject(buffer);
+      assert(status == CL_SUCCESS, cl_strerror(status, "clReleaseMemObject"));
+    }
+    status = clReleaseKernel(kernel);
+    assert(status == CL_SUCCESS, cl_strerror(status, "clReleaseKernel"));
+    writeln("CLOP Instance " ~ name ~ " released all resources.");
+  }
 }
+
+// Local Variables:
+// flycheck-dmd-include-path: ("~/.dub/packages/derelict-cl-1.2.2/source")
+// End:

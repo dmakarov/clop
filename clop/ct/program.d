@@ -53,11 +53,11 @@ struct Program
     auto kname = generate_kernel_name(); // we need to give the kernel a name
     auto params = set_params();
     auto kernel = "macros ~ q{" ~ external ~ "} ~ " ~ "\"__kernel void " ~ kname ~ "(\" ~ kernel_params ~ \")\" ~\nq{\n" ~ kbody ~ "}";
-    auto clhost = format(template_create_opencl_kernel, suffix,
-                         suffix, suffix, suffix,
-                         suffix, suffix, suffix,
-                         params, kernel, suffix,
-                         generate_kernel_name());
+    auto clhost = format(template_create_opencl_kernel,
+                         suffix, suffix, suffix, suffix,
+                         suffix, params, kernel, suffix,
+                         generate_kernel_name(),
+                         suffix, suffix, suffix, suffix);
     clhost ~= set_args("clop_opencl_kernel_" ~ suffix)
             ~ code_to_invoke_kernel()
             ~ code_to_read_data_from_device()
@@ -972,3 +972,7 @@ struct Program
   }
 
 } // Program struct
+
+// Local Variables:
+// flycheck-dmd-include-path: ("~/.dub/packages/pegged-0.2.1")
+// End:

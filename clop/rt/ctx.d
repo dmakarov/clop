@@ -155,6 +155,7 @@ struct Runtime
 
   void register_instance(Instance instance)
   {
+    writeln("The CLOP runtime registered a new instance " ~ instance.toString);
     clops ~= instance;
   }
 
@@ -258,6 +259,9 @@ struct Runtime
    +/
   void shutdown()
   {
+    foreach (instance; clops)
+      instance.release_resources();
+    clops.length = 0;
     status = clReleaseCommandQueue( queue );
     assert( status == CL_SUCCESS, "clReleaseCommandQueue failed." );
     status = clReleaseContext( context );
