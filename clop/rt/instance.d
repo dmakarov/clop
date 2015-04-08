@@ -111,7 +111,7 @@ final class Instance
       assert(status == CL_SUCCESS, cl_strerror(status, "clReleaseKernel"));
       status = clReleaseProgram(program);
       assert(status == CL_SUCCESS, cl_strerror(status, "clReleaseProgram"));
-      writeln("CLOP Instance " ~ name ~ " released all resources.");
+      debug (VERBOSE) writeln("CLOP Instance " ~ name ~ " released all resources.");
     }
   }
 }
