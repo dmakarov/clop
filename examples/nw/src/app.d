@@ -1485,25 +1485,11 @@ class Application {
       validate();
 
       reset();
-      timer.reset();
-      timer.start();
       clop_dsl();
-      timer.stop();
-      ticks = timer.peek();
-      writefln( "%2.0f MI CLOP DSL   %5.3f [s]",
-                (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
-                ticks.usecs / 1E6 );
       validate();
 
       reset();
-      timer.reset();
-      timer.start();
       clop_dsl_indirectS();
-      timer.stop();
-      ticks = timer.peek();
-      writefln( "%2.0f MI CLOP DSL I %5.3f [s]",
-                (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
-                ticks.usecs / 1E6 );
       validate();
     }
     save();
