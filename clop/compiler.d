@@ -824,48 +824,29 @@ auto generate_kernel_parameter(T)(string name, string back)
  +/
 auto set_kernel_arg(T)(string kernel, string arg, string name, string back, string size)
 {
-  auto code = "";
+  auto code = "cl_uint arg;";
+  auto fmt = q{
+      arg = %s;
+      runtime.status = clSetKernelArg(%s, arg, %s, &%s);
+      assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clSetKernelArg:" ~ to!string(arg)));
+  };
   static if (!isMutable!(T))
   {
-    code = "Unqual!(typeof(" ~ name ~ ")) clop_mutable_copy_of_" ~ name ~ " = " ~ name ~ ";\n";
+    code ~= "Unqual!(typeof(" ~ name ~ ")) clop_mutable_copy_of_" ~ name ~ " = " ~ name ~ ";\n";
     name = "clop_mutable_copy_of_" ~ name;
   }
-  static      if (is (Unqual!(T) == bool))
-    code ~= "runtime.status = clSetKernelArg(" ~ kernel ~ ", " ~ arg  ~ ", cl_char.sizeof, &" ~ name ~ ");\n"
-         ~ "assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, \"clSetKernelArg\"));";
-  else static if (is (Unqual!(T) == char))
-    code ~= "runtime.status = clSetKernelArg(" ~ kernel ~ ", " ~ arg  ~ ", cl_char.sizeof, &" ~ name ~ ");\n"
-         ~ "assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, \"clSetKernelArg\"));";
-  else static if (is (Unqual!(T) == byte))
-    code ~= "runtime.status = clSetKernelArg(" ~ kernel ~ ", " ~ arg  ~ ", cl_char.sizeof, &" ~ name ~ ");\n"
-         ~ "assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, \"clSetKernelArg\"));";
-  else static if (is (Unqual!(T) == ubyte))
-    code ~= "runtime.status = clSetKernelArg(" ~ kernel ~ ", " ~ arg  ~ ", cl_uchar.sizeof, &" ~ name ~ ");\n"
-         ~ "assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, \"clSetKernelArg\"));";
-  else static if (is (Unqual!(T) == short))
-    code ~= "runtime.status = clSetKernelArg(" ~ kernel ~ ", " ~ arg  ~ ", cl_short.sizeof, &" ~ name ~ ");\n"
-         ~ "assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, \"clSetKernelArg\"));";
-  else static if (is (Unqual!(T) == ushort))
-    code ~= "runtime.status = clSetKernelArg(" ~ kernel ~ ", " ~ arg  ~ ", cl_ushort.sizeof, &" ~ name ~ ");\n"
-         ~ "assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, \"clSetKernelArg\"));";
-  else static if (is (Unqual!(T) == int))
-    code ~= "runtime.status = clSetKernelArg(" ~ kernel ~ ", " ~ arg  ~ ", cl_int.sizeof, &" ~ name ~ ");\n"
-         ~ "assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, \"clSetKernelArg\"));";
-  else static if (is (Unqual!(T) == uint))
-    code ~= "runtime.status = clSetKernelArg(" ~ kernel ~ ", " ~ arg  ~ ", cl_uint.sizeof, &" ~ name ~ ");\n"
-         ~ "assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, \"clSetKernelArg\"));";
-  else static if (is (Unqual!(T) == long))
-    code ~= "runtime.status = clSetKernelArg(" ~ kernel ~ ", " ~ arg  ~ ", cl_long.sizeof, &" ~ name ~ ");\n"
-         ~ "assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, \"clSetKernelArg\"));";
-  else static if (is (Unqual!(T) == ulong))
-    code ~= "runtime.status = clSetKernelArg(" ~ kernel ~ ", " ~ arg  ~ ", cl_ulong.sizeof, &" ~ name ~ ");\n"
-         ~ "assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, \"clSetKernelArg\"));";
-  else static if (is (Unqual!(T) == float))
-    code ~= "runtime.status = clSetKernelArg(" ~ kernel ~ ", " ~ arg  ~ ", cl_float.sizeof, &" ~ name ~ ");\n"
-         ~ "assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, \"clSetKernelArg\"));";
-  else static if (is (Unqual!(T) == double))
-    code ~= "runtime.status = clSetKernelArg(" ~ kernel ~ ", " ~ arg  ~ ", cl_double.sizeof, &" ~ name ~ ");\n"
-         ~ "assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, \"clSetKernelArg\"));";
+  static      if (is (Unqual!(T) == bool))    code ~= format(fmt, arg, kernel, "cl_char.sizeof"  , name);
+  else static if (is (Unqual!(T) == char))    code ~= format(fmt, arg, kernel, "cl_char.sizeof"  , name);
+  else static if (is (Unqual!(T) == byte))    code ~= format(fmt, arg, kernel, "cl_char.sizeof"  , name);
+  else static if (is (Unqual!(T) == ubyte))   code ~= format(fmt, arg, kernel, "cl_uchar.sizeof" , name);
+  else static if (is (Unqual!(T) == short))   code ~= format(fmt, arg, kernel, "cl_short.sizeof" , name);
+  else static if (is (Unqual!(T) == ushort))  code ~= format(fmt, arg, kernel, "cl_ushort.sizeof", name);
+  else static if (is (Unqual!(T) == int))     code ~= format(fmt, arg, kernel, "cl_int.sizeof"   , name);
+  else static if (is (Unqual!(T) == uint))    code ~= format(fmt, arg, kernel, "cl_uint.sizeof"  , name);
+  else static if (is (Unqual!(T) == long))    code ~= format(fmt, arg, kernel, "cl_long.sizeof"  , name);
+  else static if (is (Unqual!(T) == ulong))   code ~= format(fmt, arg, kernel, "cl_ulong.sizeof" , name);
+  else static if (is (Unqual!(T) == float))   code ~= format(fmt, arg, kernel, "cl_float.sizeof" , name);
+  else static if (is (Unqual!(T) == double))  code ~= format(fmt, arg, kernel, "cl_double.sizeof", name);
   else static if (isDynamicArray!T || isStaticArray!T || __traits(isSame, TemplateOf!(T), NDArray))
   {
     code = (null == size || size == "")
