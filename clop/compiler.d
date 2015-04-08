@@ -832,40 +832,40 @@ auto set_kernel_arg(T)(string kernel, string arg, string name, string back, stri
   }
   static      if (is (Unqual!(T) == bool))
     code ~= "runtime.status = clSetKernelArg(" ~ kernel ~ ", " ~ arg  ~ ", cl_char.sizeof, &" ~ name ~ ");\n"
-         ~ "assert(runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\");";
+         ~ "assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, \"clSetKernelArg\"));";
   else static if (is (Unqual!(T) == char))
     code ~= "runtime.status = clSetKernelArg(" ~ kernel ~ ", " ~ arg  ~ ", cl_char.sizeof, &" ~ name ~ ");\n"
-         ~ "assert(runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\");";
+         ~ "assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, \"clSetKernelArg\"));";
   else static if (is (Unqual!(T) == byte))
     code ~= "runtime.status = clSetKernelArg(" ~ kernel ~ ", " ~ arg  ~ ", cl_char.sizeof, &" ~ name ~ ");\n"
-         ~ "assert(runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\");";
+         ~ "assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, \"clSetKernelArg\"));";
   else static if (is (Unqual!(T) == ubyte))
     code ~= "runtime.status = clSetKernelArg(" ~ kernel ~ ", " ~ arg  ~ ", cl_uchar.sizeof, &" ~ name ~ ");\n"
-         ~ "assert(runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\");";
+         ~ "assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, \"clSetKernelArg\"));";
   else static if (is (Unqual!(T) == short))
     code ~= "runtime.status = clSetKernelArg(" ~ kernel ~ ", " ~ arg  ~ ", cl_short.sizeof, &" ~ name ~ ");\n"
-         ~ "assert(runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\");";
+         ~ "assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, \"clSetKernelArg\"));";
   else static if (is (Unqual!(T) == ushort))
     code ~= "runtime.status = clSetKernelArg(" ~ kernel ~ ", " ~ arg  ~ ", cl_ushort.sizeof, &" ~ name ~ ");\n"
-         ~ "assert(runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\");";
+         ~ "assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, \"clSetKernelArg\"));";
   else static if (is (Unqual!(T) == int))
     code ~= "runtime.status = clSetKernelArg(" ~ kernel ~ ", " ~ arg  ~ ", cl_int.sizeof, &" ~ name ~ ");\n"
-         ~ "assert(runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\");";
+         ~ "assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, \"clSetKernelArg\"));";
   else static if (is (Unqual!(T) == uint))
     code ~= "runtime.status = clSetKernelArg(" ~ kernel ~ ", " ~ arg  ~ ", cl_uint.sizeof, &" ~ name ~ ");\n"
-         ~ "assert(runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\");";
+         ~ "assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, \"clSetKernelArg\"));";
   else static if (is (Unqual!(T) == long))
     code ~= "runtime.status = clSetKernelArg(" ~ kernel ~ ", " ~ arg  ~ ", cl_long.sizeof, &" ~ name ~ ");\n"
-         ~ "assert(runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\");";
+         ~ "assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, \"clSetKernelArg\"));";
   else static if (is (Unqual!(T) == ulong))
     code ~= "runtime.status = clSetKernelArg(" ~ kernel ~ ", " ~ arg  ~ ", cl_ulong.sizeof, &" ~ name ~ ");\n"
-         ~ "assert(runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\");";
+         ~ "assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, \"clSetKernelArg\"));";
   else static if (is (Unqual!(T) == float))
     code ~= "runtime.status = clSetKernelArg(" ~ kernel ~ ", " ~ arg  ~ ", cl_float.sizeof, &" ~ name ~ ");\n"
-         ~ "assert(runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\");";
+         ~ "assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, \"clSetKernelArg\"));";
   else static if (is (Unqual!(T) == double))
     code ~= "runtime.status = clSetKernelArg(" ~ kernel ~ ", " ~ arg  ~ ", cl_double.sizeof, &" ~ name ~ ");\n"
-         ~ "assert(runtime.status == CL_SUCCESS, \"clSetKernelArg failed.\");";
+         ~ "assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, \"clSetKernelArg\"));";
   else static if (isDynamicArray!T || isStaticArray!T || __traits(isSame, TemplateOf!(T), NDArray))
   {
     code = (null == size || size == "")
