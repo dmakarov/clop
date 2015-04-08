@@ -52,13 +52,13 @@ struct Program
     auto kbody = translate(t);  // generate OpenCL kernel source code from the AST
     auto kname = generate_kernel_name(); // we need to give the kernel a name
     auto params = set_params();
-    auto kernel = "macros ~ q{" ~ external ~ "} ~ " ~ "\"__kernel void " ~ kname ~ "(\" ~ kernel_params ~ \")\" ~\nq{\n" ~ kbody ~ "}";
+    auto kernel = "macros ~ q{" ~ external ~ "} ~ "
+                ~ "\"__kernel void " ~ kname
+                ~ "(\" ~ kernel_params ~ \")\" ~\nq{\n" ~ kbody ~ "}";
     auto clhost = format(template_create_opencl_kernel,
-                         suffix, suffix, suffix, suffix,
-                         suffix, params, kernel, suffix,
-                         generate_kernel_name(),
-                         suffix, suffix, suffix, suffix);
-    clhost ~= set_args("clop_opencl_kernel_" ~ suffix)
+                         suffix, suffix, suffix, suffix, suffix,
+                         suffix, params, suffix, kname , kernel);
+    clhost ~= set_args("instance_" ~ suffix ~ ".kernel")
             ~ code_to_invoke_kernel()
             ~ code_to_read_data_from_device()
             ~ code_to_release_buffers();
@@ -70,7 +70,12 @@ struct Program
   string toString()
   {
     import std.algorithm : map, reduce;
-    return pattern ~ reduce!((a, b) => a ~ "_" ~ b)("", map!(a => a.toString)(trans));
+    auto prefix = suffix;
+    if (pattern !is null)
+    {
+      prefix ~= "_" ~ pattern;
+    }
+    return prefix ~ reduce!((a, b) => a ~ "_" ~ b)("", map!(a => a.toString)(trans));
   }
 
  private:
@@ -692,7 +697,7 @@ struct Program
     {
       auto global = "[" ~ range.get_interval_sizes() ~ "]";
       auto offset = "[" ~ range.get_lower_bounds() ~ "]";
-      auto kernel = "clop_opencl_kernel_" ~ suffix;
+      auto kernel = "instance_" ~ suffix ~ ".kernel";
       auto dimensions = range.get_dimensions();
       return format(template_plain_invoke_kernel, offset, global, kernel, dimensions);
     }
@@ -700,22 +705,17 @@ struct Program
     {
       if (true) // plain anti-diagonal pattern, no blocking.
       {
-        auto n = 0;
-        ulong[2] argindex;
-        foreach (i, p; parameters)
-          if (p.skip)
-            argindex[n++] = i;
         auto gsz0 = range.intervals[0].get_max();
-        auto name = "clop_opencl_kernel_" ~ suffix;
+        auto name = "instance_" ~ suffix ~ ".kernel";
         return format(template_antidiagonal_invoke_kernel,
-                      gsz0, gsz0, gsz0, name, argindex[0], name);
+                      gsz0, gsz0, gsz0, name, name);
       }
       else
       {
         auto gsz0 = range.intervals[0].get_max();
         auto bsz0 = block_size;
         auto bsz1 = block_size;
-        auto name = "clop_opencl_kernel_" ~ suffix;
+        auto name = "instance_" ~ suffix ~ ".kernel";
         auto n = 0;
         ulong[2] argindex;
         foreach (i, p; parameters)

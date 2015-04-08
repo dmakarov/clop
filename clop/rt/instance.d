@@ -24,6 +24,7 @@
  */
 module clop.rt.instance;
 
+import std.exception;
 import std.stdio;
 import derelict.opencl.cl;
 import clop.rt.ctx;
@@ -33,15 +34,17 @@ import clop.rt.ctx;
  +/
 final class Instance
 {
+  bool ready;
   string name;
-  string program;
+  string kname;
+  cl_int status;
   cl_mem[] buffers;
   cl_kernel kernel;
+  cl_program program;
 
-  this(string n, cl_kernel k)
+  this(string n)
   {
     name = n;
-    kernel = k;
   }
 
   @property override
@@ -50,20 +53,70 @@ final class Instance
     return name;
   }
 
+  bool is_ready(string kernel_name)
+  {
+    return false;
+  }
+
+  void prepare_resources(string kernel_name, string program_source)
+  {
+    kname = kernel_name ~ "\0"; // clCreateKernel expects 0 terminated strings
+    debug (VERBOSE) writeln("OpenCL program:\n", program_source, "EOF");
+    char[] program_source_array = program_source.dup;
+    size_t program_source_size = program_source_array.length;
+    char* program_source_ptr = program_source_array.ptr;
+    /++
+     + runtime.context      - a valid OpenCL context
+     + 1                    - number of elements in &program_source_ptr array
+     + &program_source_ptr  - array of pointers to strings that make up the program source code
+     + &program_source_size - array with the number of chars in each string (the string length)
+     + &status              - returns an appropriate error code
+     +/
+    program = clCreateProgramWithSource(runtime.context, 1, &program_source_ptr, &program_source_size, &status);
+    assert(status == CL_SUCCESS, cl_strerror(status, "clCreateProgramWithSource"));
+    status = clBuildProgram(program, 1, &runtime.device, "", null, null);
+    if (status != CL_SUCCESS)
+    {
+      immutable size_t size = 3072;
+      size_t actual_size;
+      char[size] buffer;
+      auto status = clGetProgramBuildInfo(program, runtime.device, CL_PROGRAM_BUILD_LOG, size, buffer.ptr, &actual_size);
+      if (status == CL_SUCCESS)
+      {
+        char[] log = buffer[0 .. actual_size];
+        writeln("CL_PROGRAM_BUILD_LOG:\n", log, "\nEOF");
+      }
+      else
+      {
+        writeln("Program did not build and clGetProgramBuildInfo returned", cl_strerror(status));
+      }
+    }
+    enforce(status == CL_SUCCESS, cl_strerror(status, "clBuildProgram"));
+    kernel = clCreateKernel(program, cast(char*)kname, &status);
+    assert(status == CL_SUCCESS, cl_strerror(status, "clCreateKernel"));
+    ready = true;
+  }
+
   void release_resources()
   {
-    cl_int status;
-    foreach (buffer; buffers)
+    if (ready)
     {
-      status = clReleaseMemObject(buffer);
-      assert(status == CL_SUCCESS, cl_strerror(status, "clReleaseMemObject"));
+      ready = false;
+      foreach (buffer; buffers)
+      {
+        status = clReleaseMemObject(buffer);
+        assert(status == CL_SUCCESS, cl_strerror(status, "clReleaseMemObject"));
+      }
+      status = clReleaseKernel(kernel);
+      assert(status == CL_SUCCESS, cl_strerror(status, "clReleaseKernel"));
+      status = clReleaseProgram(program);
+      assert(status == CL_SUCCESS, cl_strerror(status, "clReleaseProgram"));
+      writeln("CLOP Instance " ~ name ~ " released all resources.");
     }
-    status = clReleaseKernel(kernel);
-    assert(status == CL_SUCCESS, cl_strerror(status, "clReleaseKernel"));
-    writeln("CLOP Instance " ~ name ~ " released all resources.");
   }
 }
 
 // Local Variables:
+// coding: utf-8
 // flycheck-dmd-include-path: ("~/.dub/packages/derelict-cl-1.2.2/source")
 // End:
