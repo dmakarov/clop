@@ -13,6 +13,7 @@
     },
     "buildTypes"    : {
         "verbose"      : { "debugVersions" : ["VERBOSE"] },
-        "grammar"      : { "debugVersions" : ["GRAMMAR"] }
+        "grammar"      : { "debugVersions" : ["GRAMMAR"] },
+        "profile"      : { "buildOptions"  : ["releaseMode", "coverage"] }
     }
 }
