@@ -9,9 +9,9 @@ install:
   - sudo apt-get install -qq fglrx=2:8.960-0ubuntu1 opencl-headers
 
 script:
-  - dub run --build=profile --compiler=${DC} :algebra -- 32
-  - dub run --build=profile --compiler=${DC} :bp -- 32
-  - dub run --build=profile --compiler=${DC} :nw -- 32 10
+  - dub run --build=release --compiler=${DC} :algebra -- 32
+  - dub run --build=release --compiler=${DC} :bp -- 32
+  - dub run --build=release --compiler=${DC} :nw -- 32 10
 
 # Local Variables:
 # compile-command: "dub --build=verbose :nw -- 32 10"
