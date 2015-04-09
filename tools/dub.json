@@ -1,0 +1,8 @@
+{
+    "name"          : "coverall",
+    "authors"       : ["Dmitri Makarov"],
+    "description"   : "Convert D -cov listing to coverall.io format.",
+    "sourcePaths"   : ["."],
+    "targetType"    : "executable",
+    "targetPath"    : "."
+}
