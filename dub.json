@@ -32,6 +32,7 @@
             "sourcePaths"  : ["clop/rt"],
             "dependencies" : { "derelict-cl" : "~>1.2.2" }
         },
+        "./tools/coverall",
         "./examples/algebra",
         "./examples/bp",
         "./examples/nw",
