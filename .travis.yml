@@ -4,7 +4,7 @@ d:
   - dmd-2.067.0
 #  - ldc-0.15.1
 
-before_install:
+install:
   - sudo apt-get update -qq
   - sudo apt-get install -qq fglrx=2:8.960-0ubuntu1 opencl-headers
 
