@@ -123,9 +123,7 @@ void send_json_file_to_coveralls()
       if (rc != -1)
       {
         // timeout or readable/writable sockets
-        writeln("perform!");
         curl_multi_perform(multi_handle, &still_running);
-        writefln("running: %d!", still_running);
       }
     } while (still_running);
 
@@ -133,6 +131,7 @@ void send_json_file_to_coveralls()
     curl_easy_cleanup(curl);
     curl_formfree(formpost);
     curl_slist_free_all(headerlist);
+    writeln();
   }
 }
 
@@ -146,8 +145,9 @@ void main(string[] args)
   immutable coverage_filename_predicate = `endsWith(a.name, ".lst") && find(a.name, ".dub-packages").empty`;
   auto coverage_files = dirEntries(".", SpanMode.depth).filter!coverage_filename_predicate;
   auto whole_line_regex = regex(`^( *)([0-9]*)\|.*$`, "g");
+  auto all_zeros_regex = regex(`^ *0+$`, "g");
   auto output_file = File("json_file", "w");
-  auto job_id = environment.get("TRAVIS_JOB_ID", "");
+  auto job_id = environment.get("TRAVIS_JOB_ID", "57989228");
   output_file.writef(`{
   "service_job_id" : "%s",
   "service_name" : "travis-ci",
@@ -172,7 +172,7 @@ void main(string[] args)
       auto captures = line.matchFirst(whole_line_regex);
       if (!captures.empty())
       {
-        auto line_coverage = captures[2].empty ? "null" : captures[2];
+        auto line_coverage = captures[2].empty ? "null" : captures[2].match(all_zeros_regex) ? "0" : captures[2];
         output_file.writef("%s%s", coverage_item_comma, line_coverage);
       }
       coverage_item_comma = ", ";
