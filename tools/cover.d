@@ -68,6 +68,15 @@ void main(string[] args)
     file_block_comma = ",";
   }
   output_buffer ~= format("\n  ]\n}\n");
-  auto content = post("https://coveralls.io/api/v1/jobs", output_buffer);
-  writeln("coveralls responded: ", content);
+  writeln(output_buffer);
+  try
+  {
+    auto content = post("https://coveralls.io/api/v1/jobs", output_buffer);
+    writeln("coveralls responded: ", content);
+  }
+  catch (Exception ex)
+  {
+    writeln("HTTP POST failed.");
+    writeln(ex);
+  }
 }
