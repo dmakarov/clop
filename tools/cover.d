@@ -27,7 +27,7 @@ import std.stdio;
 import etc.c.curl;
 import core.sys.posix.sys.time;
 
-void post()
+void send_json_file_to_coveralls()
 {
   CURL *curl;
   CURLM *multi_handle;
@@ -86,22 +86,14 @@ void post()
 
     do
     {
+      // set a suitable timeout to play around with
       timeval timeout;
-      int rc; /* select() return code */
-      CURLMcode mc; /* curl_multi_fdset() return code */
-
-      core.sys.posix.sys.select.fd_set fdread;
-      core.sys.posix.sys.select.fd_set fdwrite;
-      core.sys.posix.sys.select.fd_set fdexcep;
-      int maxfd = -1;
-
-      long curl_timeo = -1;
-
-      /* set a suitable timeout to play around with */
       timeout.tv_sec = 1;
       timeout.tv_usec = 0;
+      long curl_timeo = -1;
 
       curl_multi_timeout(multi_handle, &curl_timeo);
+
       if (curl_timeo >= 0)
       {
         timeout.tv_sec = curl_timeo / 1000;
@@ -115,12 +107,12 @@ void post()
         }
       }
 
-      /* get file descriptors from the transfers */
-      mc = curl_multi_fdset(multi_handle,
-                            cast(int*) &fdread,
-                            cast(int*) &fdwrite,
-                            cast(int*) &fdexcep,
-                            &maxfd);
+      // get file descriptors from the transfers
+      core.sys.posix.sys.select.fd_set fdread;
+      core.sys.posix.sys.select.fd_set fdwrite;
+      core.sys.posix.sys.select.fd_set fdexcep;
+      int maxfd = -1;
+      CURLMcode mc = curl_multi_fdset(multi_handle, cast(int*) &fdread, cast(int*) &fdwrite, cast(int*) &fdexcep, &maxfd);
 
       if (mc != CurlM.ok)
       {
@@ -128,16 +120,16 @@ void post()
         break;
       }
 
-      /* On success the value of maxfd is guaranteed to be >= -1. We call
-         select(maxfd + 1, ...); specially in case of (maxfd == -1) there are
-         no fds ready yet so we call select(0, ...) --or Sleep() on Windows--
-         to sleep 100ms, which is the minimum suggested value in the
+      /* On success the value of maxfd is guaranteed to be >= -1. We
+         call select(maxfd + 1, ...); specially in case of (maxfd ==
+         -1) there are no fds ready yet so we call select(0, ...) to
+         sleep 100ms, which is the minimum suggested value in the
          curl_multi_fdset() doc. */
-
+      int rc; // select() return code
       if (maxfd == -1)
       {
-        /* Portable sleep for platforms other than Windows. */
-        timeval wait = { 0, 100 * 1000 }; /* 100ms */
+        // Portable sleep for platforms other than Windows.
+        timeval wait = { 0, 100 * 1000 }; // 100 ms
         rc = select(0, null, null, null, &wait);
       }
       else
@@ -149,23 +141,17 @@ void post()
 
       if (rc != -1)
       {
-        /* timeout or readable/writable sockets */
+        // timeout or readable/writable sockets
         writeln("perform!");
         curl_multi_perform(multi_handle, &still_running);
         writefln("running: %d!", still_running);
       }
-    } while(still_running);
+    } while (still_running);
 
     curl_multi_cleanup(multi_handle);
-
-    // always cleanup
     curl_easy_cleanup(curl);
-
-    // then cleanup the formpost chain
     curl_formfree(formpost);
-
-    // free slist
-    curl_slist_free_all (headerlist);
+    curl_slist_free_all(headerlist);
   }
 }
 
@@ -215,5 +201,5 @@ void main(string[] args)
   }
   output_file.writef("\n  ]\n}\n");
   output_file.close();
-  post();
+  send_json_file_to_coveralls();
 }
