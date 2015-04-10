@@ -27,14 +27,15 @@ void main(string[] args)
 {
   import std.algorithm.iteration : filter;
   import std.algorithm.searching : endsWith, find;
-  import std.array, std.digest.md, std.file, std.process, std.range, std.regex, std.stdio;
+  import std.array, std.digest.md, std.file, std.format;
+  import std.net.curl, std.process, std.range, std.regex, std.stdio;
 
   immutable coverage_filename_predicate = `endsWith(a.name, ".lst") && find(a.name, ".dub-packages").empty`;
   auto coverage_files = dirEntries(".", SpanMode.depth).filter!coverage_filename_predicate;
   auto whole_line_regex = regex(`^( *)([0-9]*)\|.*$`, "g");
-  auto output_file = File("json_file", "w");
+  //auto output_file = File("json_file", "w");
   auto job_id = environment.get("TRAVIS_JOB_ID", "N/A");
-  output_file.writef(`{
+  auto output_buffer = format(`json_file: {
   "service_job_id" : "%s",
   "service_name" : "travis-ci",
   "source_files" : [`, job_id);
@@ -47,7 +48,7 @@ void main(string[] args)
     source_digest.start();
     auto source_file = File(source_filename, "rb");
     put(source_digest, source_file.byChunk(1024));
-    output_file.writef(`%s
+    output_buffer ~= format(`%s
     {
       "name" : "%s",
       "source_digest" : "%s",
@@ -59,12 +60,14 @@ void main(string[] args)
       if (!captures.empty())
       {
         auto line_coverage = captures[2].empty ? "null" : captures[2];
-        output_file.writef("%s%s", coverage_item_comma, line_coverage);
+        output_buffer ~= format("%s%s", coverage_item_comma, line_coverage);
       }
       coverage_item_comma = ", ";
     }
-    output_file.write("]\n    }");
+    output_buffer ~= format("]\n    }");
     file_block_comma = ",";
   }
-  output_file.writeln("\n  ]\n}");
+  output_buffer ~= format("\n  ]\n}\n");
+  auto content = post("https://coveralls.io/api/v1/jobs", output_buffer);
+  writeln("coveralls responded: ", content);
 }
