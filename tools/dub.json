@@ -4,5 +4,5 @@
     "description"   : "Convert D -cov listing to coverall.io format.",
     "sourcePaths"   : ["."],
     "targetType"    : "executable",
-    "targetPath"    : "."
+    "targetPath"    : "./bin",
 }

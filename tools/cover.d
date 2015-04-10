@@ -25,16 +25,30 @@
 
 void main(string[] args)
 {
-  import std.regex, std.stdio;
+  import std.algorithm.iteration : filter;
+  import std.algorithm.searching : endsWith, find;
+  import std.array, std.file, std.regex, std.stdio;
 
-  auto rex = regex("([0-9 ]+)\\|(.*)", "g");
-  auto emp = regex("^ +$", "g");
-  auto inf = File(args[1], "r");
-  auto ouf = File(args[1] ~ "#.cov", "w");
-  auto num = 0;
-  foreach (line; inf.byLine())
+  immutable coverage_filename_predicate = `endsWith(a.name, ".lst") && find(a.name, ".dub-packages").empty`;
+  auto coverage_files = dirEntries(".", SpanMode.depth).filter!coverage_filename_predicate;
+  auto whole_line_regex = regex(`^([0-9 ]+)\|(.*)$`, "g");
+  auto empty_coverage_regex = regex(`^ +$`, "g");
+  foreach (filename; coverage_files)
   {
-    auto c = line.matchFirst(rex);
-    ouf.writefln("%8s:%8s:%s", c[1].match(emp) ? "-" : c[1], ++num, c[2]);
+    auto input_file = File(filename, "r");
+    auto output_file = File(filename ~ "#.cov", "w");
+    auto source_filename = filename.replace("-", "/").replaceLast(".lst", ".d");
+    auto line_number = 0;
+    output_file.writefln("%8s:%8s:Source:%s", "-", line_number, source_filename);
+    foreach (line; input_file.byLine())
+    {
+      auto captures = line.matchFirst(whole_line_regex);
+      if (!captures.empty())
+      {
+        auto line_coverage = captures[1].match(empty_coverage_regex) ? "-" : captures[1];
+        auto source_code_text = captures[2];
+        output_file.writefln("%8s:%8s:%s", line_coverage, ++line_number, source_code_text);
+      }
+    }
   }
 }
