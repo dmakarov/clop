@@ -13,7 +13,9 @@ script:
   - dub run --build=profile --compiler=${DC} :bp -- 32
   - dub run --build=profile --compiler=${DC} :nw -- 32 10
   - dub build --build=release --compiler=${DC} :coverall
-  - bin/clop_coverall
+
+after_success:
+  - tools/bin/clop_coverall
 
 # Local Variables:
 # compile-command: "dub --build=verbose :nw -- 32 10"
