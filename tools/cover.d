@@ -39,29 +39,12 @@ void send_json_file_to_coveralls()
 
   /* Fill in the file upload field. This makes libcurl load data from
      the given file name when curl_easy_perform() is called. */
-  const char[] copyname1 = "sendfile";
+  const char[] copyname1 = "json_file";
   const char[] file = "json_file";
   curl_formadd(&formpost,
                &lastptr,
                CurlForm.copyname, copyname1.ptr,
                CurlForm.file, file.ptr,
-               CurlForm.end);
-
-  // Fill in the filename field
-  const char[] copyname2 = "filename";
-  curl_formadd(&formpost,
-               &lastptr,
-               CurlForm.copyname, copyname2.ptr,
-               CurlForm.copycontents, file.ptr,
-               CurlForm.end);
-
-  // Fill in the submit field too, even if this is rarely needed
-  const char[] copyname3 = "submit";
-  const char[] copycontents = "send";
-  curl_formadd(&formpost,
-               &lastptr,
-               CurlForm.copyname, copyname3.ptr,
-               CurlForm.copycontents, copycontents.ptr,
                CurlForm.end);
 
   curl = curl_easy_init();
@@ -72,16 +55,14 @@ void send_json_file_to_coveralls()
   headerlist = curl_slist_append(headerlist, buf.ptr);
   if (curl && multi_handle)
   {
-    // what URL that receives this POST "http://httpbin.org/post";
+    // what URL that receives this POST
+    //const char[] url = "http://httpbin.org/post";
     const char[] url = "https://coveralls.io/api/v1/jobs";
     curl_easy_setopt(curl, CurlOption.url, url.ptr);
     curl_easy_setopt(curl, CurlOption.verbose, 1L);
-
     curl_easy_setopt(curl, CurlOption.httpheader, headerlist);
     curl_easy_setopt(curl, CurlOption.httppost, formpost);
-
     curl_multi_add_handle(multi_handle, curl);
-
     curl_multi_perform(multi_handle, &still_running);
 
     do
