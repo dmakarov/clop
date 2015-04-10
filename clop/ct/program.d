@@ -478,11 +478,6 @@ struct Program
     return "";
   }
 
-  auto generate_ndrange (ParseTree t)
-  {
-    return "";
-  }
-
   string generate_ndrange(ParseTree t)
   {
     string s = "";
