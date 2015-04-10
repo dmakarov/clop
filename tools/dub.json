@@ -5,4 +5,6 @@
     "sourcePaths"   : ["."],
     "targetType"    : "executable",
     "targetPath"    : "./bin",
+    "lflags-linux"  : ["-lcurl"],
+    "lflags-osx"    : ["-lcurl"]
 }
