@@ -59,7 +59,7 @@ void send_json_file_to_coveralls()
     //const char[] url = "http://httpbin.org/post";
     const char[] url = "https://coveralls.io/api/v1/jobs";
     curl_easy_setopt(curl, CurlOption.url, url.ptr);
-    curl_easy_setopt(curl, CurlOption.verbose, 1L);
+    //curl_easy_setopt(curl, CurlOption.verbose, 1L);
     curl_easy_setopt(curl, CurlOption.httpheader, headerlist);
     curl_easy_setopt(curl, CurlOption.httppost, formpost);
     curl_multi_add_handle(multi_handle, curl);
@@ -147,7 +147,7 @@ void main(string[] args)
   auto whole_line_regex = regex(`^( *)([0-9]*)\|.*$`, "g");
   auto all_zeros_regex = regex(`^ *0+$`, "g");
   auto output_file = File("json_file", "w");
-  auto job_id = environment.get("TRAVIS_JOB_ID", "57989228");
+  auto job_id = environment.get("TRAVIS_JOB_ID", "");
   output_file.writef(`{
   "service_job_id" : "%s",
   "service_name" : "travis-ci",
@@ -172,7 +172,7 @@ void main(string[] args)
       auto captures = line.matchFirst(whole_line_regex);
       if (!captures.empty())
       {
-        auto line_coverage = captures[2].empty ? "null" : captures[2].match(all_zeros_regex) ? "0" : captures[2];
+        auto line_coverage = captures[2].empty ? "null" : captures[2].match(all_zeros_regex) ? "10000" : captures[2];
         output_file.writef("%s%s", coverage_item_comma, line_coverage);
       }
       coverage_item_comma = ", ";
