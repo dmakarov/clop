@@ -27,28 +27,44 @@ void main(string[] args)
 {
   import std.algorithm.iteration : filter;
   import std.algorithm.searching : endsWith, find;
-  import std.array, std.file, std.regex, std.stdio;
+  import std.array, std.digest.md, std.file, std.process, std.range, std.regex, std.stdio;
 
   immutable coverage_filename_predicate = `endsWith(a.name, ".lst") && find(a.name, ".dub-packages").empty`;
   auto coverage_files = dirEntries(".", SpanMode.depth).filter!coverage_filename_predicate;
-  auto whole_line_regex = regex(`^([0-9 ]+)\|(.*)$`, "g");
-  auto empty_coverage_regex = regex(`^ +$`, "g");
+  auto whole_line_regex = regex(`^( *)([0-9]*)\|.*$`, "g");
+  auto output_file = File("json_file", "w");
+  auto job_id = environment.get("TRAVIS_JOB_ID", "N/A");
+  output_file.writef(`{
+  "service_job_id" : "%s",
+  "service_name" : "travis-ci",
+  "source_files" : [`, job_id);
+  auto file_block_comma = "";
   foreach (filename; coverage_files)
   {
     auto input_file = File(filename, "r");
-    auto output_file = File(filename ~ "#.cov", "w");
-    auto source_filename = filename.replace("-", "/").replaceLast(".lst", ".d");
-    auto line_number = 0;
-    output_file.writefln("%8s:%8s:Source:%s", "-", line_number, source_filename);
+    auto source_filename = filename.replaceFirst("./", "").replace("-", "/").replaceLast(".lst", ".d");
+    MD5 source_digest;
+    source_digest.start();
+    auto source_file = File(source_filename, "rb");
+    put(source_digest, source_file.byChunk(1024));
+    output_file.writef(`%s
+    {
+      "name" : "%s",
+      "source_digest" : "%s",
+      "coverage" : [`, file_block_comma, source_filename, toHexString(source_digest.finish()));
+    auto coverage_item_comma = "";
     foreach (line; input_file.byLine())
     {
       auto captures = line.matchFirst(whole_line_regex);
       if (!captures.empty())
       {
-        auto line_coverage = captures[1].match(empty_coverage_regex) ? "-" : captures[1];
-        auto source_code_text = captures[2];
-        output_file.writefln("%8s:%8s:%s", line_coverage, ++line_number, source_code_text);
+        auto line_coverage = captures[2].empty ? "null" : captures[2];
+        output_file.writef("%s%s", coverage_item_comma, line_coverage);
       }
+      coverage_item_comma = ", ";
     }
+    output_file.write("]\n    }");
+    file_block_comma = ",";
   }
+  output_file.writeln("\n  ]\n}");
 }
