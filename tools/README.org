@@ -1,0 +1,3 @@
+* coverall submits coverage information to coveralls.io
+  This is a tool that extracts coverage listings, formats it as required for
+  coveralls.io API and sends the information to coveralls.io.
