@@ -16,7 +16,6 @@ script:
 after_success:
   - dub build --build=release --compiler=${DC} :coverall
   - tools/bin/clop_coverall
-  - cat json_file
 
 # Local Variables:
 # compile-command: "dub --build=verbose :nw -- 32 10"
