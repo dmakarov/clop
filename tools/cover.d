@@ -64,7 +64,7 @@ void save_coverage_in_json_file()
       if (!captures.empty())
       {
         auto line_coverage = captures[2].empty ? "null" :
-          captures[2].match(all_zeros_regex) ? "10000" : captures[2];
+          captures[2].match(all_zeros_regex) ? "0" : captures[2];
         output_file.writef("%s%s", coverage_item_comma, line_coverage);
       }
       coverage_item_comma = ", ";
