@@ -62,13 +62,13 @@ class Application {
   size_t hidden_n;              // number of hidden units
   size_t output_n;              // number of output units
   size_t num_blocks;
-  CL_FP[] input_units;          // the input units
-  CL_FP[] hidden_units;         // the hidden units
-  CL_FP[] hidden_deltas;        // hidden unit errors
-  CL_FP[] output_units;         // the output units
-  CL_FP[] output_deltas;        // output unit errors
-  CL_FP[] partial_sum;
-  CL_FP[] target;               // target vector
+  NDArray!CL_FP input_units;    // the input units
+  NDArray!CL_FP hidden_units;   // the hidden units
+  NDArray!CL_FP hidden_deltas;  // hidden unit errors
+  NDArray!CL_FP output_units;   // the output units
+  NDArray!CL_FP output_deltas;  // output unit errors
+  NDArray!CL_FP partial_sum;
+  NDArray!CL_FP target;         // target vector
   /++
    + Weigths and adjustments are arranged in 2-dimensional arrays so
    + that the first dimension corresponds to the nodes the edges enter
@@ -82,7 +82,7 @@ class Application {
   NDArray!CL_FP h2o_changes;
 
   // validation data
-  CL_FP[] h_hidden_units;
+  NDArray!CL_FP h_hidden_units;
   NDArray!CL_FP h_i2h_weights;
   NDArray!CL_FP h_i2h_changes;
 
@@ -109,15 +109,15 @@ class Application {
     i2h_changes    = new NDArray!CL_FP(hidden_n + 1, input_n + 1);
     h2o_weights    = new NDArray!CL_FP(output_n + 1, hidden_n + 1);
     h2o_changes    = new NDArray!CL_FP(output_n + 1, hidden_n + 1);
-    input_units    = new CL_FP[input_n + 1];
-    hidden_units   = new CL_FP[hidden_n + 1];
-    hidden_deltas  = new CL_FP[hidden_n + 1];
-    output_units   = new CL_FP[output_n + 1];
-    output_deltas  = new CL_FP[output_n + 1];
-    partial_sum    = new CL_FP[input_n]; // num_blocks * BLOCK_SIZE
-    target         = new CL_FP[output_n + 1];
+    input_units    = new NDArray!CL_FP(input_n + 1);
+    hidden_units   = new NDArray!CL_FP(hidden_n + 1);
+    hidden_deltas  = new NDArray!CL_FP(hidden_n + 1);
+    output_units   = new NDArray!CL_FP(output_n + 1);
+    output_deltas  = new NDArray!CL_FP(output_n + 1);
+    partial_sum    = new NDArray!CL_FP(input_n); // num_blocks * BLOCK_SIZE
+    target         = new NDArray!CL_FP(output_n + 1);
     // validation data
-    h_hidden_units = new CL_FP[hidden_n + 1];
+    h_hidden_units = new NDArray!CL_FP(hidden_n + 1);
     h_i2h_weights  = new NDArray!CL_FP(hidden_n + 1, input_n + 1);
     h_i2h_changes  = new NDArray!CL_FP(hidden_n + 1, input_n + 1);
 
@@ -134,7 +134,7 @@ class Application {
   /++
    + w[i, j] is the weight of edge connecting f[i] and t[j]
    +/
-  void layerforward(CL_FP[] f, CL_FP[] t, NDArray!CL_FP w)
+  void layerforward(NDArray!CL_FP f, NDArray!CL_FP t, NDArray!CL_FP w)
   {
     // Set up thresholding unit
     f[0] = ONEF;
@@ -174,7 +174,7 @@ class Application {
     return errsum;
   }
 
-  void adjust_weights(CL_FP[] od, CL_FP[] iu, NDArray!CL_FP w, NDArray!CL_FP c)
+  void adjust_weights(NDArray!CL_FP od, NDArray!CL_FP iu, NDArray!CL_FP w, NDArray!CL_FP c)
   {
     iu[0] = ONEF;
     foreach (i; 1 .. od.length)
@@ -191,7 +191,7 @@ class Application {
    + order they are summed in layerforward_parallel() so that the
    + results are the same exactly.
    +/
-  auto mysum(CL_FP[] s)
+  auto mysum(NDArray!CL_FP s)
   {
     for (auto i = 1; i < s.length; i *= 2)
     {
@@ -207,7 +207,7 @@ class Application {
     import std.algorithm : sum;
     foreach (i; 0 .. i2h_changes.length) i2h_changes[i] = 0;
     foreach (i; 0 .. h2o_changes.length) h2o_changes[i] = 0;
-    auto s = new CL_FP[input_n];
+    auto s = new NDArray!CL_FP(input_n);
     auto n = input_units.length;
     auto h = hidden_units.length;
     foreach (i; 1 .. hidden_units.length)
@@ -435,7 +435,7 @@ class Application {
    + same order as the kernel version does.  In principle the results
    + should be precisely equal.
    +/
-  void layerforward_parallel(CL_FP[] f, CL_FP[] t, NDArray!CL_FP w)
+  void layerforward_parallel(NDArray!CL_FP f, NDArray!CL_FP t, NDArray!CL_FP w)
   {
     f[0] = ONEF;
 
@@ -579,7 +579,7 @@ int main(string[] args)
 {
   auto platforms = runtime.get_platforms();
   foreach (p; 0 .. platforms.length)
-    foreach (d; 0 .. platforms[p])
+    foreach (d; 1 .. platforms[p])
     {
       try
       {
