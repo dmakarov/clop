@@ -42,7 +42,7 @@ class Application {
 
   static immutable int SEED = 1;
 
-  cl_float[] A, B, C;
+  NDArray!cl_float A, B, C;
   NDArray!cl_float M, N, R;
   size_t size;
 
@@ -61,9 +61,9 @@ class Application {
       throw new Exception("ERROR: invalid args # " ~ to!(string)(args.length - 1));
     }
     size = to!(size_t)(args[1]);
-    A = new cl_float[size]; assert(A !is null, "Can't allocate array A");
-    B = new cl_float[size]; assert(B !is null, "Can't allocate array B");
-    C = new cl_float[size]; assert(C !is null, "Can't allocate array C");
+    A = new NDArray!cl_float(size); assert(A !is null, "Can't allocate array A");
+    B = new NDArray!cl_float(size); assert(B !is null, "Can't allocate array B");
+    C = new NDArray!cl_float(size); assert(C !is null, "Can't allocate array C");
     M = new NDArray!cl_float(size, size); assert(M !is null, "Can't allocate array M");
     N = new NDArray!cl_float(size, size); assert(N !is null, "Can't allocate array N");
     R = new NDArray!cl_float(size, size); assert(R !is null, "Can't allocate array R");
@@ -186,8 +186,11 @@ class Application {
     clop_add_vectors();
     check(C, A, B);
 
+    version (DISABLED)
+    {
     clop_add_matrices();
-    check(cast(cl_float[]) R, cast(cl_float[]) M, cast(cl_float[]) N);
+    check(R, M, N);
+    }
   }
 } // Application class
 
@@ -202,7 +205,8 @@ class Application {
  +/
 template validate(alias fun)
 {
-  void validate(T)(T[] R, T[] A, T[] B) if (is (typeof (fun(A[0], B[0])) == T))
+  void validate(T)(NDArray!T R, NDArray!T A, NDArray!T B)
+    if (is (typeof (fun(A[0], B[0])) == T))
   {
     uint diff = 0;
     foreach (ii; 0 .. R.length)
