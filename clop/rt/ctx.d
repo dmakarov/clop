@@ -261,7 +261,6 @@ struct Runtime
   {
     foreach (instance; clops)
       instance.release_resources();
-    clops.length = 0;
     status = clReleaseCommandQueue(queue);
     assert(status == CL_SUCCESS, "clReleaseCommandQueue failed.");
     status = clReleaseContext(context);
