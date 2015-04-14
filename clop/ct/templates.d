@@ -28,9 +28,9 @@ template_create_opencl_kernel = q{
     }
     if (!instance_%s.ready)
     {
-      // params
-      %s
-      instance_%s.prepare_resources("%s", %s);
+          // params
+          %s
+          instance_%s.prepare_resources("%s", %s);
     }
 },
 

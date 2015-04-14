@@ -566,22 +566,22 @@ struct Program
         if (p.back == "")
         {
           result ~= format(q{
-              if (isMutable!(typeof(%s)))
-              {
-                param = mixin(generate_kernel_parameter!(typeof(%s))("%s", "%s"));
-              }
-              else
-              {
-                param = "";
-                macros ~= "#define %s " ~ format("%%s\n", %s);
-              }
-            }, p.name, p.name, p.name, p.back, p.name, p.name);
+          if (isMutable!(typeof(%s)))
+          {
+            param = mixin(generate_kernel_parameter!(typeof(%s))("%s", "%s"));
+          }
+          else
+          {
+            param = "";
+            macros ~= "#define %s " ~ format("%%s\n", %s);
+          }
+          }, p.name, p.name, p.name, p.back, p.name, p.name);
         }
         else
         {
           result ~= format(q{
-              param = mixin(generate_kernel_parameter!(typeof(%s))("%s", "%s"));
-            }, p.back, p.name, p.back);
+          param = mixin(generate_kernel_parameter!(typeof(%s))("%s", "%s"));
+          }, p.back, p.name, p.back);
         }
       }
       else
@@ -604,19 +604,19 @@ struct Program
   string set_args(string kernel)
   {
     auto result = format(q{
-        auto kernel_argument_counter = 0;
-        static bool kernel_arguments_have_been_set_%s;
-      }, suffix);
+    auto kernel_argument_counter = 0;
+    static bool kernel_arguments_have_been_set_%s;
+    }, suffix);
     foreach(p; parameters)
     {
       result ~= format(q{
-        cl_mem clop_opencl_device_buffer_%s;}, p.name);
+    cl_mem clop_opencl_device_buffer_%s;}, p.name);
     }
     debug(NEVER)
     result ~= format(`
-          if (!kernel_arguments_have_been_set_%s)
-          {
-            kernel_arguments_have_been_set_%s = true;`, suffix, suffix);
+    if (!kernel_arguments_have_been_set_%s)
+    {
+      kernel_arguments_have_been_set_%s = true;`, suffix, suffix);
     foreach(i, p; parameters)
     {
       if (!p.skip)
@@ -624,11 +624,10 @@ struct Program
         if (p.back == "")
         {
           result ~= format(q{
-            if (isMutable!(typeof(%s)))
-            {
-              mixin(set_kernel_arg!(typeof(%s))("%s", "kernel_argument_counter++", "%s", "", ""));
-            }
-          }, p.name, p.name, kernel, p.name);
+      if (isMutable!(typeof(%s)))
+      {
+        mixin(set_kernel_arg!(typeof(%s))("%s", "kernel_argument_counter++", "%s", "", ""));
+      }}, p.name, p.name, kernel, p.name);
         }
         else
         {
@@ -640,7 +639,7 @@ struct Program
     }
     debug(NEVER)
     result ~= `
-        }`;
+    }`;
     return result;
   }
 
@@ -652,8 +651,7 @@ struct Program
       if (!v.is_local && v.type == "" && v.defs.length > 0)
       {
         result ~= format(q{
-            mixin(read_device_buffer!(typeof(%s))("%s"));
-          }, k, k);
+      mixin(read_device_buffer!(typeof(%s))("%s"));}, k, k);
       }
     }
     return result;
@@ -669,11 +667,10 @@ struct Program
         if (p.back == "")
         {
           result ~= format(q{
-            if (isMutable!(typeof(%s)))
-            {
-              mixin(release_buffer!(typeof(%s))("%s"));
-            }
-            }, p.name, p.name, p.name);
+      if (isMutable!(typeof(%s)))
+      {
+        mixin(release_buffer!(typeof(%s))("%s"));
+      }}, p.name, p.name, p.name);
         }
       }
     }
