@@ -48,10 +48,14 @@ import std.format;
  +/
 class NDArray(T)
 {
+  import derelict.opencl.cl;
+
   private
   {
     T[]      data;
     size_t[] dims;
+    cl_mem   dbuf; // device buffer bound to this array.
+    bool     dbuf_allocated;
   }
 
   this(size_t[] dims...)
@@ -64,6 +68,16 @@ class NDArray(T)
       size *= d;
     }
     data = new T[size];
+  }
+
+  ~this()
+  {
+    import clop.rt.ctx : cl_strerror;
+    if (dbuf_allocated)
+    {
+      cl_int status = clReleaseMemObject(dbuf);
+      assert(status == CL_SUCCESS, cl_strerror(status, "clReleaseMemObject"));
+    }
   }
 
   auto get_num_dimensions()
