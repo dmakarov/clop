@@ -49,13 +49,14 @@ import std.format;
 class NDArray(T)
 {
   import derelict.opencl.cl;
+  import clop.rt.ctx : cl_strerror;
 
   private
   {
     T[]      data;
     size_t[] dims;
-    cl_mem   dbuf; // device buffer bound to this array.
-    bool     dbuf_allocated;
+    cl_mem   cl_buffer;           /// CL device buffer bound to this array.
+    bool     cl_buffer_allocated; /// whether the buffer was created.
   }
 
   this(size_t[] dims...)
@@ -72,11 +73,51 @@ class NDArray(T)
 
   ~this()
   {
-    import clop.rt.ctx : cl_strerror;
-    if (dbuf_allocated)
+    release_buffer();
+  }
+
+  @property
+  cl_mem* get_buffer()
+  {
+    return &cl_buffer;
+  }
+
+  void create_buffer(cl_context context)
+  {
+    cl_int status;
+    release_buffer();
+    cl_buffer = clCreateBuffer(context, CL_MEM_READ_WRITE, T.sizeof * data.length, null, &status);
+    assert(status == CL_SUCCESS, cl_strerror(status, "clCreateBuffer"));
+    cl_buffer_allocated = true;
+  }
+
+  void push_buffer(cl_command_queue queue)
+  {
+    if (cl_buffer_allocated)
     {
-      cl_int status = clReleaseMemObject(dbuf);
+      cl_int status;
+      status = clEnqueueWriteBuffer(queue, cl_buffer, CL_TRUE, 0, T.sizeof * data.length, data.ptr, 0, null, null);
+      assert(status == CL_SUCCESS, cl_strerror(status, "clEnqueueWriteBuffer"));
+    }
+  }
+
+  void pull_buffer(cl_command_queue queue)
+  {
+    if (cl_buffer_allocated)
+    {
+      cl_int status;
+      status = clEnqueueReadBuffer(queue, cl_buffer, CL_TRUE, 0, T.sizeof * data.length, data.ptr, 0, null, null);
+      assert(status == CL_SUCCESS, cl_strerror(status, "clEnqueueWriteBuffer"));
+    }
+  }
+
+  void release_buffer()
+  {
+    if (cl_buffer_allocated)
+    {
+      cl_int status = clReleaseMemObject(cl_buffer);
       assert(status == CL_SUCCESS, cl_strerror(status, "clReleaseMemObject"));
+      cl_buffer_allocated = false;
     }
   }
 

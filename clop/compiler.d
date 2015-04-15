@@ -847,7 +847,7 @@ auto set_kernel_arg(T)(string kernel, string arg, string name, string back, stri
   else static if (is (Unqual!(T) == ulong))   code ~= format(fmt, arg, kernel, "cl_ulong.sizeof" , name);
   else static if (is (Unqual!(T) == float))   code ~= format(fmt, arg, kernel, "cl_float.sizeof" , name);
   else static if (is (Unqual!(T) == double))  code ~= format(fmt, arg, kernel, "cl_double.sizeof", name);
-  else static if (isDynamicArray!T || isStaticArray!T || __traits(isSame, TemplateOf!(T), NDArray))
+  else static if (isDynamicArray!T || isStaticArray!T)
   {
     code = (null == size || size == "")
          ? format(q{
@@ -864,6 +864,15 @@ auto set_kernel_arg(T)(string kernel, string arg, string name, string back, stri
            assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clSetKernelArg"));
            }, kernel, arg, size, back, name);
   }
+  else static if (__traits(isSame, TemplateOf!(T), NDArray))
+  {
+    code = format(q{
+           %s.create_buffer(runtime.context);
+           %s.push_buffer(runtime.queue);
+           runtime.status = clSetKernelArg(%s, %s, cl_mem.sizeof, %s.get_buffer);
+           assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clSetKernelArg"));
+           }, name, name, kernel, arg, name);
+  }
   return "debug (VERBOSE) writefln(\"%s\", q{" ~ code ~ "});\n" ~ code;
 }
 
@@ -873,7 +882,7 @@ auto set_kernel_arg(T)(string kernel, string arg, string name, string back, stri
 auto release_buffer(T)(string name)
 {
   auto code = "";
-  static if (isDynamicArray!T || isStaticArray!T || !isBasicType!T && __traits(isSame, TemplateOf!(T), NDArray))
+  static if (isDynamicArray!T || isStaticArray!T)
   {
     code = format(q{
            runtime.status = clReleaseMemObject(clop_opencl_device_buffer_%s);
@@ -889,11 +898,15 @@ auto release_buffer(T)(string name)
 auto read_device_buffer(T)(string name)
 {
   auto code = "";
-  static if (isDynamicArray!T || isStaticArray!T || __traits(isSame, TemplateOf!(T), NDArray))
+  static if (isDynamicArray!T || isStaticArray!T)
     code = format(q{
            runtime.status = clEnqueueReadBuffer(runtime.queue, clop_opencl_device_buffer_%s, CL_TRUE, 0, typeid(*%s.ptr).tsize * %s.length, %s.ptr, 0, null, null);
            assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clEnqueueReadBuffer"));
-      }, name, name, name, name);
+           }, name, name, name, name);
+  else static if (__traits(isSame, TemplateOf!(T), NDArray))
+    code = format(q{
+           %s.pull_buffer(runtime.queue);
+           }, name);
   return "debug (VERBOSE) writefln(\"%s\", q{" ~ code ~ "});\n" ~ code;
 }
 
