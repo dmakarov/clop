@@ -61,9 +61,9 @@ class Application {
       throw new Exception("ERROR: invalid args # " ~ to!(string)(args.length - 1));
     }
     size = to!(size_t)(args[1]);
-    A = new NDArray!cl_float(size); assert(A !is null, "Can't allocate array A");
-    B = new NDArray!cl_float(size); assert(B !is null, "Can't allocate array B");
-    C = new NDArray!cl_float(size); assert(C !is null, "Can't allocate array C");
+    A = new NDArray!cl_float(size);       assert(A !is null, "Can't allocate array A");
+    B = new NDArray!cl_float(size);       assert(B !is null, "Can't allocate array B");
+    C = new NDArray!cl_float(size);       assert(C !is null, "Can't allocate array C");
     M = new NDArray!cl_float(size, size); assert(M !is null, "Can't allocate array M");
     N = new NDArray!cl_float(size, size); assert(N !is null, "Can't allocate array N");
     R = new NDArray!cl_float(size, size); assert(R !is null, "Can't allocate array R");
