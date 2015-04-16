@@ -331,6 +331,23 @@ struct Compiler
         analyze(t.children[0]);
         break;
       }
+    case "CLOP.IfStatement":
+      {
+        foreach (c; t.children)
+          analyze(c);
+        break;
+      }
+    case "CLOP.IterationStatement":
+      {
+        analyze(t.children[0]);
+        break;
+      }
+    case "CLOP.ForStatement":
+      {
+        foreach (c; t.children)
+          analyze(c);
+        break;
+      }
     case "CLOP.ReturnStatement":
       {
         t.children.length == 1 && analyze(t.children[0]);

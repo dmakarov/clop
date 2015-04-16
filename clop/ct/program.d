@@ -816,6 +816,22 @@ struct Program
           s ~= indent ~ "else\n" ~ translate(t.children[2]);
         return s;
       }
+    case "CLOP.IterationStatement":
+      {
+        return translate(t.children[0]);
+      }
+    case "CLOP.ForStatement":
+      {
+        auto s = indent;
+        indent ~= "  ";
+        // FIXME: each of the children is optional. check they exist.
+        s ~= "for (" ~ translate(t.children[0]) ~ ";"
+                     ~ translate(t.children[1]) ~ ";"
+                     ~ translate(t.children[2]) ~ ")\n"
+                     ~ indent ~ translate(t.children[3]);
+        indent = indent[0 .. $ - 2];
+        return s;
+      }
     case "CLOP.ReturnStatement":
       {
         return indent ~ (t.children.length == 1 ? "return " ~ translate(t.children[0]) ~ ";\n" : "return;\n");
