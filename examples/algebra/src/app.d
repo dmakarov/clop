@@ -99,6 +99,22 @@ class Application {
   }
 
   /++
+   + Compute the sum of two matrices usin CLOP.
+   +/
+  void clop_mul_matrices()
+  {
+    mixin (compile(q{
+          NDRange(i : 0 .. size, j : 0 .. size)
+          {
+            int k;
+            R[i, j] = 0;
+            for (k = 0; k < size; ++k)
+              R[i, j] += M[i, k] * N[k, j];
+          }
+        }));
+  }
+
+  /++
    + Compute the sum of two vectors using OpenCL directly.
    +/
   void opencl_add_vectors()
@@ -136,21 +152,25 @@ class Application {
       assert(status == CL_SUCCESS, "opencl_compute clCreateBuffer B " ~ cl_strerror(status));
       cl_mem dC = clCreateBuffer(runtime.context, CL_MEM_WRITE_ONLY, cl_float.sizeof * C.length, null, &status);
       assert(status == CL_SUCCESS, "opencl_compute clCreateBuffer C " ~ cl_strerror(status));
+
       status = clEnqueueWriteBuffer(runtime.queue, dA, CL_TRUE, 0, cl_float.sizeof * A.length, A.ptr, 0, null, null);
       assert(status == CL_SUCCESS, "opencl_compute " ~ cl_strerror(status));
       status = clEnqueueWriteBuffer(runtime.queue, dB, CL_TRUE, 0, cl_float.sizeof * B.length, B.ptr, 0, null, null);
       assert(status == CL_SUCCESS, "opencl_compute " ~ cl_strerror(status));
+
       status = clSetKernelArg(kernel, 0, cl_mem.sizeof, &dA);
       assert(status == CL_SUCCESS, "opencl_compute " ~ cl_strerror(status));
       status = clSetKernelArg(kernel, 1, cl_mem.sizeof, &dB);
       assert(status == CL_SUCCESS, "opencl_compute " ~ cl_strerror(status));
       status = clSetKernelArg(kernel, 2, cl_mem.sizeof, &dC);
+      assert(status == CL_SUCCESS, "opencl_compute " ~ cl_strerror(status));
 
       status = clEnqueueNDRangeKernel(runtime.queue, kernel, 1, null, &size, null, 0, null, null);
       assert(status == CL_SUCCESS, "opencl_compute " ~ cl_strerror(status));
 
       status = clEnqueueReadBuffer(runtime.queue, dC, CL_TRUE, 0, cl_float.sizeof * C.length, C.ptr, 0, null, null);
       assert(status == CL_SUCCESS, "opencl_compute " ~ cl_strerror(status));
+
       status = clReleaseMemObject(dA);
       assert(status == CL_SUCCESS, "opencl_compute " ~ cl_strerror(status));
       status = clReleaseMemObject(dB);
@@ -171,26 +191,21 @@ class Application {
   void run()
   {
     StopWatch timer;
-    TickDuration ticks;
+    alias check = validate!((a, b) => a + b);
 
     timer.reset();
     timer.start();
     opencl_add_vectors();
     timer.stop();
-    ticks = timer.peek();
-    writefln("OPENCL %5.3f [s]", ticks.usecs / 1E6);
-    alias check = validate!((a, b) => a + b);
     check(C, A, B);
+    writefln("OPENCL %5.3f [s]", timer.peek().usecs / 1E6);
 
     C[] = cl_float.init;
     clop_add_vectors();
     check(C, A, B);
 
-    version (DISABLED)
-    {
     clop_add_matrices();
     check(R, M, N);
-    }
   }
 } // Application class
 
