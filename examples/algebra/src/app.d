@@ -206,6 +206,8 @@ class Application {
 
     clop_add_matrices();
     check(R, M, N);
+
+    clop_mul_matrices();
   }
 } // Application class
 
