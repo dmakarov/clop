@@ -28,6 +28,7 @@ import std.algorithm : reduce;
 import std.container;
 import std.conv;
 import std.string;
+import std.traits;
 
 import pegged.grammar;
 
@@ -36,6 +37,7 @@ import clop.ct.structs;
 import clop.ct.symbol;
 import clop.ct.templates;
 import clop.ct.transform;
+import clop.rt.ndarray;
 
 /++
  +  The container of all information related to a specific variant
@@ -51,17 +53,17 @@ struct Program
     auto t = optimize(AST); // apply the optimizing transformations on the AST
     auto kbody = translate(t);  // generate OpenCL kernel source code from the AST
     auto kname = generate_kernel_name(); // we need to give the kernel a name
-    auto params = set_params();
+    generate_code_setting_kernel_parameters("instance_" ~ suffix ~ ".kernel");
     auto kernel = "macros ~ q{" ~ external ~ "} ~ "
                 ~ "\"__kernel void " ~ kname
                 ~ "(\" ~ kernel_params ~ \")\" ~\nq{\n" ~ kbody ~ "}";
     auto clhost = format(template_create_opencl_kernel,
                          suffix, suffix, suffix, suffix, suffix,
-                         suffix, params, suffix, kname , kernel);
-    clhost ~= set_args("instance_" ~ suffix ~ ".kernel")
-            ~ code_to_invoke_kernel()
-            ~ code_to_read_data_from_device()
-            ~ code_to_release_buffers();
+                         suffix, kernel_parameter_list_code, suffix, kname , kernel);
+    clhost ~= kernel_set_args_code
+            ~ generate_code_to_invoke_kernel()
+            ~ generate_code_to_pull_from_device()
+            ~ generate_code_to_release_buffers();
     auto diagnostics = format("static if (\"%s\" != \"\")\n  pragma (msg, \"%s\");\n", errors, errors);
     return diagnostics ~ format(template_clop_unit, clhost, toString());
   }
@@ -93,6 +95,8 @@ struct Program
   string indent = "  ";    ///
   string block_size = "8"; ///
   bool use_shadow = false; ///
+  string kernel_parameter_list_code;
+  string kernel_set_args_code;
 
   /++
    +
@@ -310,7 +314,7 @@ struct Program
         range_arg[c] = v;
         auto n = format("b%s0", v); // generated variable to pass the block index.
         s ~= format("  int b%d = %s %s %s;\n", c, n, o, bid0);
-        parameters ~= [Argument(n, "int", "", "", "", true)];
+        parameters ~= [Argument(n, `"int "`, "", "", "", true)];
       }
 
       auto recalculations = "";
@@ -555,123 +559,80 @@ struct Program
     return format( "[%s]", x );
   }
 
-  string set_params()
+  /++
+   + Given a string that represents a name of a variable, return a
+   + string that represents a parameter declaration that contains the
+   + type of the parameter matching the variable's type and the
+   + parameter name matching the variable's name.
+   +/
+  void generate_code_setting_kernel_parameters(string kernel)
   {
-    string result = "string param, macros = \"\";";
-    auto issued_declaration = false;
-    foreach(p; parameters)
-    {
-      if (p.type == "")
-      {
-        if (p.back == "")
-        {
-          result ~= format(q{
-          if (isMutable!(typeof(%s)))
-          {
-            param = mixin(generate_kernel_parameter!(typeof(%s))("%s", "%s"));
-          }
-          else
-          {
-            param = "";
-            macros ~= "#define %s " ~ format("%%s\n", %s);
-          }
-          }, p.name, p.name, p.name, p.back, p.name, p.name);
-        }
-        else
-        {
-          result ~= format(q{
-          param = mixin(generate_kernel_parameter!(typeof(%s))("%s", "%s"));
-          }, p.back, p.name, p.back);
-        }
-      }
-      else
-      {
-        result ~= format("param = \"%s %s\";\n", p.type, p.name);
-      }
-      if (issued_declaration)
-      {
-        result ~= "if (param != \"\") kernel_params ~= \", \" ~ param;\n";
-      }
-      else
-      {
-        result ~= "string kernel_params = param;\n";
-        issued_declaration = true;
-      }
-    }
-    return result;
-  }
-
-  string set_args(string kernel)
-  {
-    auto result = format(q{
-    auto kernel_argument_counter = 0;
-    static bool kernel_arguments_have_been_set_%s;
+    kernel_parameter_list_code = q{
+              auto kernel_params = "", macros = "";
+    };
+    kernel_set_args_code = format(q{
+              static bool kernel_arguments_have_been_set_%s;
     }, suffix);
+    auto comma = "";
+    auto i = 0U;
     foreach(p; parameters)
     {
-      result ~= format(q{
-    cl_mem clop_opencl_device_buffer_%s;}, p.name);
-    }
-    debug(NEVER)
-    result ~= format(`
-    if (!kernel_arguments_have_been_set_%s)
-    {
-      kernel_arguments_have_been_set_%s = true;`, suffix, suffix);
-    foreach(i, p; parameters)
-    {
-      if (!p.skip)
+      if (p.back == "")
       {
-        if (p.back == "")
+        if (!p.is_macro)
         {
-          result ~= format(q{
-      if (isMutable!(typeof(%s)))
-      {
-        mixin(set_kernel_arg!(typeof(%s))("%s", "kernel_argument_counter++", "%s", "", ""));
-      }}, p.name, p.name, kernel, p.name);
+          kernel_parameter_list_code ~= format(q{
+              kernel_params ~= "%s%s" ~ %s ~ "%s";
+          }, comma, p.qual, p.type, p.name);
+          comma = ", ";
         }
         else
-        {
-          result ~= format(q{
-            mixin(set_kernel_arg!(typeof(%s))("%s", "%d", "null", "%s", "%s"));
-          }, p.back, kernel, i, p.back, p.size);
-        }
+          kernel_parameter_list_code ~= format(q{
+              macros ~= "#define %s " ~ format("%%s\n", %s);
+          }, p.name, p.name);
+        if (p.to_push != "")
+          kernel_set_args_code ~= p.to_push;
+        if (!p.skip)
+          kernel_set_args_code ~= format(q{
+              runtime.status = clSetKernelArg(%s, %s, %s, %s);
+              assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clSetKernelArg: %s"));
+            }, kernel, i, p.size, p.address, i++);
+      }
+      else
+      {
+        version(DISABLED)
+        kernel_parameter_list_code ~= format(q{
+            param = mixin(generate_kernel_parameter!(typeof(%s))("%s", "%s"));
+        }, p.back, p.name, p.back);
       }
     }
-    debug(NEVER)
-    result ~= `
-    }`;
-    return result;
+    kernel_set_args_code ~= format(q{
+              auto kernel_argument_counter = %s;
+      }, i);
   }
 
-  string code_to_read_data_from_device()
+  string generate_code_to_pull_from_device()
   {
     string result = "";
-    foreach (k, v; symtable)
+    foreach (p; parameters)
     {
-      if (!v.is_local && v.type == "" && v.defs.length > 0)
+      auto v = symtable[p.name];
+      if (p.to_pull != "" && v.defs.length > 0)
       {
-        result ~= format(q{
-      mixin(read_device_buffer!(typeof(%s))("%s"));}, k, k);
+        result ~= p.to_pull;
       }
     }
     return result;
   }
 
-  string code_to_release_buffers()
+  string generate_code_to_release_buffers()
   {
     auto result = "";
-    foreach(p; parameters)
+    foreach (p; parameters)
     {
-      if (!p.skip)
+      if (p.to_release != "")
       {
-        if (p.back == "")
-        {
-          result ~= format(q{
-      if (isMutable!(typeof(%s)))
-      {
-        mixin(release_buffer!(typeof(%s))("%s"));
-      }}, p.name, p.name, p.name);
-        }
+        result ~= p.to_release;
       }
     }
     return result;
@@ -683,7 +644,7 @@ struct Program
    + the kernel's NDRange and then uses the clEnqueueNDRangeKernel
    + call to launch the kernel.
    +/
-  string code_to_invoke_kernel()
+  string generate_code_to_invoke_kernel()
   {
     if (pattern is null)
     {

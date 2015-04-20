@@ -1,10 +1,6 @@
 module clop.ct.symbol;
 
-import std.string;
-
-import pegged.grammar;
-
-import clop.ct.analysis;
+import std.string, pegged.grammar, clop.ct.analysis;
 
 struct Symbol
 {
@@ -26,6 +22,7 @@ struct Symbol
     box = box.dup;
   }
 
+  @property
   string toString()
   {
     return format("name %16s, type %6s, #uses %2d, #defs %2d, %6s, %6s, cache %s",
@@ -47,4 +44,30 @@ struct Argument
   string size;
   string back;
   bool   skip;
+  bool   is_macro;
+  string address;
+  string to_push;
+  string to_pull;
+  string to_release;
+
+  this(string n, string t = "", string q = "", string s = "", string b = "", bool k = false, bool m = false)
+  {
+    name = n;
+    type = t;
+    qual = q;
+    size = s;
+    back = b;
+    skip = k;
+    is_macro = m;
+    address = "";
+    to_push = "";
+    to_pull = "";
+    to_release = "";
+  }
+
+  @property
+  string toString()
+  {
+    return format("%s, %s, %s, %s, %s, %s, %s", name, type, qual, size, back, skip, is_macro);
+  }
 }
