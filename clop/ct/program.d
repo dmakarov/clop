@@ -350,7 +350,7 @@ struct Program
         auto gma = v;
         // shared memory array name
         auto sma = generate_shared_memory_variable(v);
-        parameters ~= Argument(sma, "", "__local",format("(%s) * (%s)", bsz0, bsz1), gma);
+        parameters ~= Argument(sma, "", "__local", format("(%s) * (%s)", bsz0, bsz1), gma);
         s ~= format(template_shared_memory_data_init,
                      li1, li1, bsz1, li1,
                      li0, li0, bsz0, li0, lsz0,
@@ -598,7 +598,7 @@ struct Program
       else
       {
         kernel_parameter_list_code ~= format(q{
-            macros ~= "#define %s " ~ format("%%s\n", %s);
+            macros ~= "#define %s " ~ std.format.format("%%s\n", %s);
         }, p.name, p.name);
       }
     }

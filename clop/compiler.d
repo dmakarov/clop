@@ -47,10 +47,9 @@ import std.format, clop.ct.parser;
 string compile(string input, string file = __FILE__, size_t line = __LINE__)
 {
   return format(q{{
-        import clop.ct.stage1, clop.ct.stage2, clop.rt.instance, std.format, std.typetuple;
-        import clop.ct.parser:CLOP,ParseTree;
+        static import clop.ct.parser, clop.rt.instance, std.format, std.typetuple;
         enum clop_input = q{%s};
-        enum clop_parse_tree = CLOP(clop_input);
+        enum clop_parse_tree = clop.ct.parser.CLOP(clop_input);
         mixin (stage1_codegen(clop_parse_tree, "%s", cast(size_t) %s));
       }}, input, file, line);
 }

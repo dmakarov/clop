@@ -75,7 +75,7 @@ struct Frontend
           comma = ", ";
         }
       auto code = format(q{
-          alias CLOP_parameter_types = TypeTuple!(%s);
+          alias CLOP_parameter_types = std.typetuple.TypeTuple!(%s);
           immutable(string[]) clop_parameter_names = [%s];
           mixin (stage2_codegen!CLOP_parameter_types(clop_parse_tree, "%s", cast(size_t) %s, clop_parameter_names));},
         types, names, source_file, source_line);

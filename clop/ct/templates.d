@@ -20,10 +20,10 @@ template_clop_unit = q{
 },
 
 template_create_opencl_kernel = q{
-    static Instance instance_%s;
+    static clop.rt.instance.Instance instance_%s;
     if (instance_%s is null)
     {
-      instance_%s = new Instance("%s");
+      instance_%s = new clop.rt.instance.Instance("%s");
       runtime.register_instance(instance_%s);
     }
     if (!instance_%s.ready)
