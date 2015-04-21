@@ -59,7 +59,7 @@ struct Argument
     back = b;
     skip = k;
     is_macro = m;
-    address = "";
+    address = "&" ~ n;
     to_push = "";
     to_pull = "";
     to_release = "";
@@ -68,6 +68,6 @@ struct Argument
   @property
   string toString()
   {
-    return format("%s, %s, %s, %s, %s, %s, %s", name, type, qual, size, back, skip, is_macro);
+    return format("%s, %s, %s, %s, %s, %s, %s, %s", name, type, qual, size, back, skip, is_macro, address);
   }
 }
