@@ -617,18 +617,18 @@ template Backend(TList...)
         auto name = `clop_ndarray_dimensions`;
         auto buffer = name ~ `_buffer`;
         auto to_push =  format(q{
-            size_t[] %s = %s;
-            cl_mem %s = clCreateBuffer(runtime.context, CL_MEM_READ_ONLY, size_t.sizeof * %s.length, null, &runtime.status);
+            cl_ulong[] %s = %s;
+            cl_mem %s = clCreateBuffer(runtime.context, CL_MEM_READ_ONLY, cl_ulong.sizeof * %s.length, null, &runtime.status);
             assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clCreateBuffer"));
-            runtime.status = clEnqueueWriteBuffer(runtime.queue, %s, CL_TRUE, 0, size_t.sizeof * %s.length, %s.ptr, 0, null, null);
+            runtime.status = clEnqueueWriteBuffer(runtime.queue, %s, CL_TRUE, 0, cl_ulong.sizeof * %s.length, %s.ptr, 0, null, null);
             assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clEnqueueWriteBuffer"));
           }, name, clop_ndarray_dimensions_initialization, buffer, name, buffer, name, name);
         auto to_release = format(q{
             runtime.status = clReleaseMemObject(%s);
             assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clReleaseMemObject"));
           }, buffer);
-        symtable[name] = Symbol(name, `size_t[]`);
-        parameters ~= [Argument(name, `"size_t* "`, `__constant `, `cl_mem.sizeof`, ``, false, false, `&` ~ buffer, to_push, ``, to_release)];
+        symtable[name] = Symbol(name, `cl_ulong[]`);
+        parameters ~= [Argument(name, `"ulong* "`, `__constant `, `cl_mem.sizeof`, ``, false, false, `&` ~ buffer, to_push, ``, to_release)];
       }
     }
 
