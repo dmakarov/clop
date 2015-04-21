@@ -553,19 +553,18 @@ template Backend(TList...)
           parameters[i].type = `"double "`;
           parameters[i].size = `cl_double.sizeof`;
         }
-        else static if (isDynamicArray!T || isStaticArray!T)
+        else static if (isArray!T)
         {
-          parameters[i].type = `typeid(*` ~ parameters[i].name ~ `.ptr).toString() ~ "* "`;
+          parameters[i].type = `typeid(*` ~ name ~ `.ptr).toString() ~ "* "`;
           parameters[i].qual = `__global `;
           parameters[i].size = `cl_mem.sizeof`;
           parameters[i].address = "&clop_opencl_device_buffer_" ~ name;
           parameters[i].to_push = format(q{
               cl_mem clop_opencl_device_buffer_%s = clCreateBuffer(runtime.context, CL_MEM_READ_WRITE, typeid(*%s.ptr).tsize * %s.length, null, &runtime.status);
               assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clCreateBuffer"));
-              debug (VERBOSE) writefln("clCreateBuffer(%%s at %%s)", typeid(*%s.ptr).tsize * %s.length, %s.ptr);
               runtime.status = clEnqueueWriteBuffer(runtime.queue, clop_opencl_device_buffer_%s, CL_TRUE, 0, typeid(*%s.ptr).tsize * %s.length, %s.ptr, 0, null, null);
               assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clEnqueueWriteBuffer"));
-            }, name, name, name, name, name, name, name, name, name, name);
+            }, name, name, name, name, name, name, name);
           parameters[i].to_pull = format(q{
               runtime.status = clEnqueueReadBuffer(runtime.queue, clop_opencl_device_buffer_%s, CL_TRUE, 0, typeid(*%s.ptr).tsize * %s.length, %s.ptr, 0, null, null);
               assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clEnqueueReadBuffer"));
@@ -575,9 +574,9 @@ template Backend(TList...)
               assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clReleaseMemObject"));
             }, name);
         }
-        else static if (__traits(isSame, TemplateOf!(T), NDArray))
+        else static if (__traits(compiles, TemplateOf!(T)) && __traits(isSame, TemplateOf!(T), NDArray))
         {
-          parameters[i].type = `typeid(*` ~ parameters[i].name ~ `.ptr).toString() ~ "* "`;
+          parameters[i].type = `typeid(*` ~ name ~ `.ptr).toString() ~ "* "`;
           parameters[i].qual = `__global `;
           parameters[i].size = `cl_mem.sizeof`;
           parameters[i].address = name ~ ".get_buffer";
