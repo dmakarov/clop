@@ -52,7 +52,7 @@ template Backend(TList...)
     Box range;                /// box of intervals for this piece
     ParseTree AST;            /// the tree for this piece
     ParseTree KBT;            /// kernel body compound statement AST
-    Program[] variants;    /// one variant for each set of transformations
+    Program[] variants;       /// one variant for each set of transformations
     Argument[] parameters;    /// kernel parameters
     Symbol[string] symtable;  /// the symbol table
     Set!Transformation trans; /// set of optimizing transformations
@@ -559,18 +559,18 @@ template Backend(TList...)
           parameters[i].size = `cl_mem.sizeof`;
           parameters[i].address = "&clop_opencl_device_buffer_" ~ name;
           parameters[i].to_push = format(q{
-              cl_mem clop_opencl_device_buffer_%s = clCreateBuffer(runtime.context, CL_MEM_READ_WRITE, typeid(*%s.ptr).tsize * %s.length, null, &runtime.status);
-              assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clCreateBuffer"));
-              runtime.status = clEnqueueWriteBuffer(runtime.queue, clop_opencl_device_buffer_%s, CL_TRUE, 0, typeid(*%s.ptr).tsize * %s.length, %s.ptr, 0, null, null);
-              assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clEnqueueWriteBuffer"));
+            cl_mem clop_opencl_device_buffer_%s = clCreateBuffer(runtime.context, CL_MEM_READ_WRITE, typeid(*%s.ptr).tsize * %s.length, null, &runtime.status);
+            assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clCreateBuffer"));
+            runtime.status = clEnqueueWriteBuffer(runtime.queue, clop_opencl_device_buffer_%s, CL_TRUE, 0, typeid(*%s.ptr).tsize * %s.length, %s.ptr, 0, null, null);
+            assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clEnqueueWriteBuffer"));
             }, name, name, name, name, name, name, name);
           parameters[i].to_pull = format(q{
-              runtime.status = clEnqueueReadBuffer(runtime.queue, clop_opencl_device_buffer_%s, CL_TRUE, 0, typeid(*%s.ptr).tsize * %s.length, %s.ptr, 0, null, null);
-              assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clEnqueueReadBuffer"));
+            runtime.status = clEnqueueReadBuffer(runtime.queue, clop_opencl_device_buffer_%s, CL_TRUE, 0, typeid(*%s.ptr).tsize * %s.length, %s.ptr, 0, null, null);
+            assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clEnqueueReadBuffer"));
             }, name, name, name, name);
           parameters[i].to_release = format(q{
-              runtime.status = clReleaseMemObject(clop_opencl_device_buffer_%s);
-              assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clReleaseMemObject"));
+            runtime.status = clReleaseMemObject(clop_opencl_device_buffer_%s);
+            assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clReleaseMemObject"));
             }, name);
         }
         else static if (__traits(compiles, TemplateOf!(T)) && __traits(isSame, TemplateOf!(T), NDArray))
@@ -580,16 +580,14 @@ template Backend(TList...)
           parameters[i].size = `cl_mem.sizeof`;
           parameters[i].address = name ~ ".get_buffer";
           parameters[i].to_push = format(q{
-              %s.create_buffer(runtime.context);
-              %s.push_buffer(runtime.queue);
+            %s.create_buffer(runtime.context);
+            %s.push_buffer(runtime.queue);
             }, name, name);
           parameters[i].to_pull = format(q{
-              %s.pull_buffer(runtime.queue);
+            %s.pull_buffer(runtime.queue);
             }, name);
         }
-        auto is_const = !isMutable!T;
-        parameters[i].skip = is_const;
-        parameters[i].is_macro = is_const;
+        parameters[i].is_macro = !isMutable!T;
       }
     }
 

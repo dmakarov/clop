@@ -567,53 +567,49 @@ struct Program
    +/
   void generate_code_setting_kernel_parameters(string kernel)
   {
+    auto i = 0U;
+    auto comma = "";
     kernel_parameter_list_code = q{
-              auto kernel_params = "", macros = "";
+            auto kernel_params = "", macros = "";
     };
     kernel_set_args_code = format(q{
-              static bool kernel_arguments_have_been_set_%s;
+            static bool kernel_arguments_have_been_set_%s;
     }, suffix);
-    auto comma = "";
-    auto i = 0U;
     foreach(p; parameters)
     {
-      if (p.back == "")
+      if (!p.is_macro)
       {
-        if (!p.is_macro)
-        {
-          kernel_parameter_list_code ~= format(q{
-              kernel_params ~= "%s%s" ~ %s ~ "%s";
-          }, comma, p.qual, p.type, p.name);
-          comma = ", ";
-        }
-        else
-          kernel_parameter_list_code ~= format(q{
-              macros ~= "#define %s " ~ format("%%s\n", %s);
-          }, p.name, p.name);
+        kernel_parameter_list_code ~= format(q{
+            kernel_params ~= "%s%s" ~ %s ~ "%s";
+        }, comma, p.qual, p.type, p.name);
         if (p.to_push != "")
+        {
           kernel_set_args_code ~= p.to_push;
+        }
         if (!p.skip)
+        {
           kernel_set_args_code ~= format(q{
-              runtime.status = clSetKernelArg(%s, %s, %s, %s);
-              assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clSetKernelArg: %s"));
-            }, kernel, i, p.size, p.address, i++);
+            runtime.status = clSetKernelArg(%s, %s, %s, %s);
+            assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clSetKernelArg: %s"));
+          }, kernel, i, p.size, p.address, i++);
+        }
+        comma = ", ";
       }
       else
       {
-        version(DISABLED)
         kernel_parameter_list_code ~= format(q{
-            param = mixin(generate_kernel_parameter!(typeof(%s))("%s", "%s"));
-        }, p.back, p.name, p.back);
+            macros ~= "#define %s " ~ format("%%s\n", %s);
+        }, p.name, p.name);
       }
     }
     kernel_set_args_code ~= format(q{
-              auto kernel_argument_counter = %s;
-      }, i);
+            auto kernel_argument_counter = %sU;
+    }, i);
   }
 
   string generate_code_to_pull_from_device()
   {
-    string result = "";
+    auto result = "";
     foreach (p; parameters)
     {
       auto v = symtable[p.name];
