@@ -1336,8 +1336,8 @@ class Application {
         int k = a > b ? a : b;
         return k > c ? k : c;
       }
-      Antidiagonal NDRange( c : 1 .. cols, r : 1 .. rows ) {
-        F[c, r] = max3( F[c - 1, r - 1] + S[c + cols * r], F[c - 1, r] - penalty, F[c, r - 1] - penalty );
+      Antidiagonal NDRange(r : 1 .. rows, c : 1 .. cols) {
+        F[r, c] = max3( F[r - 1, c - 1] + S[r, c], F[r, c - 1] - penalty, F[r - 1, c] - penalty );
       } apply( rectangular_blocking( 8, 8 ) )
     } ) );
   }
@@ -1353,8 +1353,8 @@ class Application {
         int k = a > b ? a : b;
         return k > c ? k : c;
       }
-      Antidiagonal NDRange( c : 1 .. cols, r : 1 .. rows ) {
-        F[c, r] = max3( F[c - 1, r - 1] + BLOSUM62[M[r] * CHARS + N[c]], F[c - 1, r] - penalty, F[c, r - 1] - penalty );
+      Antidiagonal NDRange(r : 1 .. rows, c : 1 .. cols) {
+        F[r, c] = max3( F[r - 1, c - 1] + BLOSUM62[M[r] * CHARS + N[c]], F[r, c - 1] - penalty, F[r - 1, c] - penalty );
       } apply( rectangular_blocking( 8, 8 ), prefetching() )
     } ) );
   }

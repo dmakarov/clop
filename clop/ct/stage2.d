@@ -92,8 +92,8 @@ template Backend(TList...)
     string generate_code()
     {
       analyze(AST);
-      compute_intervals();
       update_parameters();
+      compute_intervals();
       // before we generate optimized variants, we need to transform
       // the AST for a specific synchronization pattern.
       auto t = transform_by_pattern(KBT);
@@ -445,46 +445,6 @@ template Backend(TList...)
     }
 
     /++
-     + @FIXME this doesn't work when not entire index space is used in
-     + index expressions.  A possible work-around to assume that arrays
-     + indexes always start at 0 and if the lower bound of a computed
-     + interval is greater than 0 it should be extended to 0.
-     +/
-    void compute_intervals()
-    {
-      foreach (k, v; symtable)
-      {
-        if (v.is_array && v.can_cache)
-        {
-          if (v.uses.length > 0)
-          {
-            auto uses = v.uses;
-            auto box = range.map(uses[0]);
-            foreach (u; uses[1 .. $])
-            {
-              auto newbox = range.map(u);
-              foreach (i; 0 .. box.length)
-                box[i] = interval_union(box[i], newbox[i]);
-            }
-            symtable[k].box = box;
-          }
-          else if (v.defs.length > 0)
-          {
-            auto defs = v.defs;
-            auto box = range.map(defs[0]);
-            foreach (d; defs[1 .. $])
-            {
-              auto newbox = range.map(d);
-              foreach (i; 0 .. box.length)
-                box[i] = interval_union(box[i], newbox[i]);
-            }
-            symtable[k].box = box;
-          }
-        }
-      }
-    }
-
-    /++
      +
      +/
     void update_parameters()
@@ -586,8 +546,60 @@ template Backend(TList...)
           parameters[i].to_pull = format(q{
             %s.pull_buffer(runtime.queue);
             }, name);
+          parameters[i].is_ndarray = true;
         }
         parameters[i].is_macro = !isMutable!T;
+      }
+    }
+
+    /++
+     + @FIXME this doesn't work when not entire index space is used in
+     + index expressions.  A possible work-around to assume that arrays
+     + indexes always start at 0 and if the lower bound of a computed
+     + interval is greater than 0 it should be extended to 0.
+     +/
+    void compute_intervals()
+    {
+      auto number_of_parameters = parameters.length;
+      foreach (k, v; symtable)
+      {
+        /*uint j;
+        for (j = 0; j < number_of_parameters; ++j)
+        {
+          if (parameters[j].name == k)
+            break;
+        }
+        if (j < number_of_parameters && parameters[j].is_ndarray)
+        {
+          symtable[k].box = range.intervals;
+        }
+        else*/ if (v.is_array && v.can_cache)
+        {
+          if (v.uses.length > 0)
+          {
+            auto uses = v.uses;
+            auto box = range.map(uses[0]);
+            foreach (u; uses[1 .. $])
+            {
+              auto newbox = range.map(u);
+              foreach (i; 0 .. box.length)
+                box[i] = interval_union(box[i], newbox[i]);
+            }
+            symtable[k].box = box;
+          }
+          else if (v.defs.length > 0)
+          {
+            auto defs = v.defs;
+            auto box = range.map(defs[0]);
+            foreach (d; defs[1 .. $])
+            {
+              auto newbox = range.map(d);
+              foreach (i; 0 .. box.length)
+                box[i] = interval_union(box[i], newbox[i]);
+            }
+            symtable[k].box = box;
+          }
+        }
       }
     }
 
@@ -739,17 +751,17 @@ template Backend(TList...)
       {
         if (v.is_array)
         {
-          string s = "// defs " ~ to!string(v.defs.length) ~ "\n";
-          foreach (a; v.defs)
+          string s = "//   defs " ~ to!string(v.defs.length) ~ "\n";
+          foreach (i, a; v.defs)
           {
-            s ~= "// " ~ to!string(a.matches) ~ "\n";
-            s ~= "// " ~ to!string(map!(p => p.toString())(range.map(a))) ~ "\n";
+            s ~= format("//     %s: %s %s\n", i, to!string(a.matches),
+                        to!string(map!(p => p.toString())(range.map(a))));
           }
-          s ~= "// uses " ~ to!string(v.uses.length) ~ "\n";
-          foreach (a; v.uses)
+          s ~= "//   uses " ~ to!string(v.uses.length) ~ "\n";
+          foreach (i, a; v.uses)
           {
-            s ~= "// " ~ to!string(a.matches) ~ "\n";
-            s ~= "// " ~ to!string(map!(p => p.toString())(range.map(a))) ~ "\n";
+            s ~= format("//     %s: %s %s\n", i, to!string(a.matches),
+                        to!string(map!(p => p.toString())(range.map(a))));
           }
           result ~= "// " ~ k ~ ":\n" ~ s;
         }

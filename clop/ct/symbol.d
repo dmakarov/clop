@@ -49,6 +49,7 @@ struct Argument
   string to_push;
   string to_pull;
   string to_release;
+  bool   is_ndarray;
 
   this(string n, string t = "", string q = "", string s = "", string b = "", bool k = false, bool m = false)
   {

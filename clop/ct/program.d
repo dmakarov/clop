@@ -678,7 +678,7 @@ struct Program
   }
 
   /++
-   +
+   +  For multidimensional arrays linearize the index expressions.
    +/
   string translate_index_expression(string v, ParseTree t)
   {
@@ -686,12 +686,10 @@ struct Program
     {
       return translate(t);
     }
-    auto s = "(" ~ translate(t.children[0]) ~ ")";
-    auto m = "(" ~ symtable[v].box[0].get_size() ~ ")";
+    auto s = translate(t.children[0]);
     foreach (i, c; t.children[1 .. $])
     {
-      s ~= " + " ~ m ~ " * (" ~ translate(c) ~ ")";
-      m ~= " * (" ~ symtable[v].box[i + 1].get_size() ~ ")";
+      s = "(" ~ s ~ ") * (" ~ symtable[v].box[i + 1].get_size() ~ ") + " ~ translate(c);
     }
     return s;
   }
