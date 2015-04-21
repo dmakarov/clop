@@ -50,8 +50,19 @@ struct Argument
   string to_pull;
   string to_release;
   bool   is_ndarray;
+  uint   number;
 
-  this(string n, string t = "", string q = "", string s = "", string b = "", bool k = false, bool m = false)
+  this(string n,
+       string t = "",
+       string q = "",
+       string s = "",
+       string b = "",
+       bool k = false,
+       bool m = false,
+       string a = "",
+       string p = "",
+       string h = "",
+       string e = "")
   {
     name = n;
     type = t;
@@ -60,10 +71,10 @@ struct Argument
     back = b;
     skip = k;
     is_macro = m;
-    address = "&" ~ n;
-    to_push = "";
-    to_pull = "";
-    to_release = "";
+    address = (a == "") ? "&" ~ n : a;
+    to_push = p;
+    to_pull = h;
+    to_release = e;
   }
 
   @property

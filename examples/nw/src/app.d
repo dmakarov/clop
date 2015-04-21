@@ -70,10 +70,9 @@ class Application {
   int[] B; // reconstructed aligned sequence B
   int[] M; // characters of sequence A
   int[] N; // characters of sequence B
-  //int[] F; // matrix of computed scores
-  NDArray!int F;
+  NDArray!int F; // matrix of computed scores
   int[] G; // copy of F for validation
-  int[] S; // matrix of matches
+  NDArray!int S; // matrix of matches
   int[] I; // map of reads
   int[] O; // map of writes
   int[] Z; // map of shared memory accesses
@@ -108,9 +107,8 @@ class Application {
       auto b = to!(string)(BLOCK_SIZE);
       throw new Exception("ERROR: rows # (" ~ r ~ ") must be a multiple of " ~ b);
     }
-    S = new int[rows * cols]; assert(S !is null, "Can't allocate array S");
-    //F = new int[rows * cols]; assert(F !is null, "Can't allocate array F");
-    F = new NDArray!int(cols, rows); assert(F !is null, "Can't allocate array F");
+    S = new NDArray!int(rows, cols); assert(S !is null, "Can't allocate array S");
+    F = new NDArray!int(rows, cols); assert(F !is null, "Can't allocate array F");
 
     G = new int[rows * cols]; assert(G !is null, "Can't allocate array G");
     M = new int[rows];        assert(M !is null, "Can't allocate array M");

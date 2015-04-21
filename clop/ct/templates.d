@@ -41,11 +41,10 @@ template_plain_invoke_kernel = q{
 },
 
 template_antidiagonal_invoke_kernel = q{
-  cl_uint arg = kernel_argument_counter;
   foreach (i; 2 .. 2 * %s - 1)
   {
     size_t global = (i < %s) ? i - 1 : 2 * %s - i - 1;
-    runtime.status = clSetKernelArg(%s, arg, cl_int.sizeof, &i);
+    runtime.status = clSetKernelArg(%s, %s, cl_int.sizeof, &i);
     assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clSetKernelArg in antidiagonal loop"));
     runtime.status = clEnqueueNDRangeKernel(runtime.queue, %s, 1, null, &global, null, 0, null, null);
     assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clEnqueueNDRangeKernel"));

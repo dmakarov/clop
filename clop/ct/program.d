@@ -575,10 +575,11 @@ struct Program
     kernel_set_args_code = format(q{
             static bool kernel_arguments_have_been_set_%s;
     }, suffix);
-    foreach(p; parameters)
+    foreach(j, p; parameters)
     {
       if (!p.is_macro)
       {
+        parameters[j].number = i;
         kernel_parameter_list_code ~= format(q{
             kernel_params ~= "%s%s" ~ %s ~ "%s";
         }, comma, p.qual, p.type, p.name);
@@ -591,9 +592,10 @@ struct Program
           kernel_set_args_code ~= format(q{
             runtime.status = clSetKernelArg(%s, %s, %s, %s);
             assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clSetKernelArg: %s"));
-          }, kernel, i, p.size, p.address, i++);
+          }, kernel, i, p.size, p.address, i);
         }
         comma = ", ";
+        ++i;
       }
       else
       {
@@ -602,9 +604,6 @@ struct Program
         }, p.name, p.name);
       }
     }
-    kernel_set_args_code ~= format(q{
-            auto kernel_argument_counter = %sU;
-    }, i);
   }
 
   string generate_code_to_pull_from_device()
@@ -657,7 +656,7 @@ struct Program
         auto gsz0 = range.intervals[0].get_max();
         auto name = "instance_" ~ suffix ~ ".kernel";
         return format(template_antidiagonal_invoke_kernel,
-                      gsz0, gsz0, gsz0, name, name);
+                      gsz0, gsz0, gsz0, name, parameters[$ - 1].number, name);
       }
       else
       {

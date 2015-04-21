@@ -67,6 +67,7 @@ template Backend(TList...)
     bool global_scope = false;
     bool eval_def     = false;
     uint depth        = 0;
+    uint clop_ndarray_dimension_index = 0;
 
     /++
      +
@@ -561,9 +562,10 @@ template Backend(TList...)
     void compute_intervals()
     {
       auto number_of_parameters = parameters.length;
+      auto clop_ndarray_dimensions_initialization = "";
       foreach (k, v; symtable)
       {
-        /*uint j;
+        uint j;
         for (j = 0; j < number_of_parameters; ++j)
         {
           if (parameters[j].name == k)
@@ -571,9 +573,18 @@ template Backend(TList...)
         }
         if (j < number_of_parameters && parameters[j].is_ndarray)
         {
-          symtable[k].box = range.intervals;
+          Interval[] box;
+          for (auto n = 0; n < range.intervals.length; ++n)
+            box ~= Interval(CLOP.decimateTree(CLOP.IntegerLiteral("0")),
+                            CLOP.decimateTree(CLOP.Expression(format("clop_ndarray_dimensions[%s]",
+                                                                     clop_ndarray_dimension_index++))));
+          if (clop_ndarray_dimensions_initialization == "")
+            clop_ndarray_dimensions_initialization = parameters[j].name ~ ".get_dimensions()";
+          else
+            clop_ndarray_dimensions_initialization ~= " ~ " ~ parameters[j].name ~ ".get_dimensions()";
+          symtable[k].box = box;
         }
-        else*/ if (v.is_array && v.can_cache)
+        else if (v.is_array && v.can_cache)
         {
           if (v.uses.length > 0)
           {
@@ -600,6 +611,24 @@ template Backend(TList...)
             symtable[k].box = box;
           }
         }
+      }
+      if (clop_ndarray_dimension_index > 0)
+      {
+        auto name = `clop_ndarray_dimensions`;
+        auto buffer = name ~ `_buffer`;
+        auto to_push =  format(q{
+            size_t[] %s = %s;
+            cl_mem %s = clCreateBuffer(runtime.context, CL_MEM_READ_ONLY, size_t.sizeof * %s.length, null, &runtime.status);
+            assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clCreateBuffer"));
+            runtime.status = clEnqueueWriteBuffer(runtime.queue, %s, CL_TRUE, 0, size_t.sizeof * %s.length, %s.ptr, 0, null, null);
+            assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clEnqueueWriteBuffer"));
+          }, name, clop_ndarray_dimensions_initialization, buffer, name, buffer, name, name);
+        auto to_release = format(q{
+            runtime.status = clReleaseMemObject(%s);
+            assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clReleaseMemObject"));
+          }, buffer);
+        symtable[name] = Symbol(name, `size_t[]`);
+        parameters ~= [Argument(name, `"size_t* "`, `__constant `, `cl_mem.sizeof`, ``, false, false, `&` ~ buffer, to_push, ``, to_release)];
       }
     }
 
