@@ -530,19 +530,19 @@ template Backend(TList...)
           parameters[i].size = `cl_mem.sizeof`;
           parameters[i].address = "&clop_opencl_device_buffer_" ~ name;
           parameters[i].to_push = format(q{
-            cl_mem clop_opencl_device_buffer_%s = clCreateBuffer(runtime.context, CL_MEM_READ_WRITE, typeid(*%s.ptr).tsize * %s.length, null, &runtime.status);
-            assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clCreateBuffer"));
-            runtime.status = clEnqueueWriteBuffer(runtime.queue, clop_opencl_device_buffer_%s, CL_TRUE, 0, typeid(*%s.ptr).tsize * %s.length, %s.ptr, 0, null, null);
-            assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clEnqueueWriteBuffer"));
-            }, name, name, name, name, name, name, name);
+          cl_mem clop_opencl_device_buffer_%s = clCreateBuffer(runtime.context, CL_MEM_READ_WRITE, typeid(*%s.ptr).tsize * %s.length, null, &runtime.status);
+          assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clCreateBuffer"));
+          runtime.status = clEnqueueWriteBuffer(runtime.queue, clop_opencl_device_buffer_%s, CL_TRUE, 0, typeid(*%s.ptr).tsize * %s.length, %s.ptr, 0, null, null);
+          assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clEnqueueWriteBuffer"));
+          }, name, name, name, name, name, name, name);
           parameters[i].to_pull = format(q{
-            runtime.status = clEnqueueReadBuffer(runtime.queue, clop_opencl_device_buffer_%s, CL_TRUE, 0, typeid(*%s.ptr).tsize * %s.length, %s.ptr, 0, null, null);
-            assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clEnqueueReadBuffer"));
-            }, name, name, name, name);
+          runtime.status = clEnqueueReadBuffer(runtime.queue, clop_opencl_device_buffer_%s, CL_TRUE, 0, typeid(*%s.ptr).tsize * %s.length, %s.ptr, 0, null, null);
+          assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clEnqueueReadBuffer"));
+          }, name, name, name, name);
           parameters[i].to_release = format(q{
-            runtime.status = clReleaseMemObject(clop_opencl_device_buffer_%s);
-            assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clReleaseMemObject"));
-            }, name);
+          runtime.status = clReleaseMemObject(clop_opencl_device_buffer_%s);
+          assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clReleaseMemObject"));
+          }, name);
         }
         else static if (__traits(compiles, TemplateOf!(T)) && __traits(isSame, TemplateOf!(T), NDArray))
         {
@@ -551,12 +551,12 @@ template Backend(TList...)
           parameters[i].size = `cl_mem.sizeof`;
           parameters[i].address = name ~ ".get_buffer";
           parameters[i].to_push = format(q{
-            %s.create_buffer(runtime.context);
-            %s.push_buffer(runtime.queue);
-            }, name, name);
+          %s.create_buffer(runtime.context);
+          %s.push_buffer(runtime.queue);
+          }, name, name);
           parameters[i].to_pull = format(q{
-            %s.pull_buffer(runtime.queue);
-            }, name);
+          %s.pull_buffer(runtime.queue);
+          }, name);
           parameters[i].is_ndarray = true;
         }
         parameters[i].is_macro = !isMutable!T;
@@ -627,15 +627,15 @@ template Backend(TList...)
         auto name = `clop_ndarray_dimensions`;
         auto buffer = name ~ `_buffer`;
         auto to_push =  format(q{
-            cl_ulong[] %s = %s;
-            cl_mem %s = clCreateBuffer(runtime.context, CL_MEM_READ_ONLY, cl_ulong.sizeof * %s.length, null, &runtime.status);
-            assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clCreateBuffer"));
-            runtime.status = clEnqueueWriteBuffer(runtime.queue, %s, CL_TRUE, 0, cl_ulong.sizeof * %s.length, %s.ptr, 0, null, null);
-            assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clEnqueueWriteBuffer"));
+          cl_ulong[] %s = %s;
+          cl_mem %s = clCreateBuffer(runtime.context, CL_MEM_READ_ONLY, cl_ulong.sizeof * %s.length, null, &runtime.status);
+          assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clCreateBuffer"));
+          runtime.status = clEnqueueWriteBuffer(runtime.queue, %s, CL_TRUE, 0, cl_ulong.sizeof * %s.length, %s.ptr, 0, null, null);
+          assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clEnqueueWriteBuffer"));
           }, name, clop_ndarray_dimensions_initialization, buffer, name, buffer, name, name);
         auto to_release = format(q{
-            runtime.status = clReleaseMemObject(%s);
-            assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clReleaseMemObject"));
+          runtime.status = clReleaseMemObject(%s);
+          assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clReleaseMemObject"));
           }, buffer);
         symtable[name] = Symbol(name, `cl_ulong[]`);
         parameters ~= [Argument(name, `"ulong* "`, `__constant `, `cl_mem.sizeof`, ``, false, false, `&` ~ buffer, to_push, ``, to_release)];

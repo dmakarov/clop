@@ -52,16 +52,18 @@ template_create_opencl_kernel = q{
     }
     if (!instance_%s.ready)
     {
-          // params
+          // make list of kernel parameters
           %s
           instance_%s.prepare_resources("%s", %s);
     }
 },
 
 template_plain_invoke_kernel = q{
-    size_t[] offset = %s, global = %s;
-    runtime.status = clEnqueueNDRangeKernel(runtime.queue, %s, %s, offset.ptr, global.ptr, null, 0, null, null);
-    assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clEnqueueNDRangeKernel"));
+          // kernel invocation
+
+          size_t[] offset = %s, global = %s;
+          runtime.status = clEnqueueNDRangeKernel(runtime.queue, %s, %s, offset.ptr, global.ptr, null, 0, null, null);
+          assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clEnqueueNDRangeKernel"));
 },
 
 template_antidiagonal_invoke_kernel = q{

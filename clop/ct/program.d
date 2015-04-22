@@ -54,9 +54,9 @@ struct Program
     auto kbody = translate(t);  // generate OpenCL kernel source code from the AST
     auto kname = generate_kernel_name(); // we need to give the kernel a name
     generate_code_setting_kernel_parameters("instance_" ~ suffix ~ ".kernel");
-    auto kernel = "macros ~ q{" ~ external ~ "} ~ "
-                ~ "\"__kernel void " ~ kname
-                ~ "(\" ~ kernel_params ~ \")\" ~\nq{\n" ~ kbody ~ "}";
+    auto kernel = "macros ~ q{" ~ external ~ "} ~ \n"
+                ~ "          \"__kernel void " ~ kname
+                ~ "(\" ~ kernel_params ~ \")\" ~q{\n" ~ kbody ~ "          }";
     auto clhost = format(template_create_opencl_kernel,
                          suffix, suffix, suffix, suffix, suffix,
                          suffix, kernel_parameter_list_code, suffix, kname , kernel);
@@ -92,7 +92,7 @@ struct Program
   string errors;           ///
   string suffix;           ///
 
-  string indent = "  ";    ///
+  string indent = "            ";
   string block_size = "8"; ///
   bool use_shadow = false; ///
   string kernel_parameter_list_code;
@@ -570,19 +570,16 @@ struct Program
     auto i = 0U;
     auto comma = "";
     kernel_parameter_list_code = q{
-            auto kernel_params = "", macros = "";
-    };
-    kernel_set_args_code = format(q{
-            static bool kernel_arguments_have_been_set_%s;
-    }, suffix);
+          auto kernel_params = "", macros = "";};
+    kernel_set_args_code = "          // setting up buffers and kernel arguments";
     foreach(j, p; parameters)
     {
       if (!p.is_macro)
       {
         parameters[j].number = i;
         kernel_parameter_list_code ~= format(q{
-            kernel_params ~= "%s%s" ~ %s ~ "%s";
-        }, comma, p.qual, p.type, p.name);
+          kernel_params ~= "%s%s" ~ %s ~ "%s";},
+          comma, p.qual, p.type, p.name);
         if (p.to_push != "")
         {
           kernel_set_args_code ~= p.to_push;
@@ -590,8 +587,8 @@ struct Program
         if (!p.skip)
         {
           kernel_set_args_code ~= format(q{
-            runtime.status = clSetKernelArg(%s, %s, %s, %s);
-            assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clSetKernelArg: %s"));
+          runtime.status = clSetKernelArg(%s, %s, %s, %s);
+          assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clSetKernelArg: %s"));
           }, kernel, i, p.size, p.address, i);
         }
         comma = ", ";
@@ -600,8 +597,8 @@ struct Program
       else
       {
         kernel_parameter_list_code ~= format(q{
-            macros ~= "#define %s " ~ std.format.format("%%s\n", %s);
-        }, p.name, p.name);
+          macros ~= "#define %s " ~ std.format.format("%%s\n", %s);},
+          p.name, p.name);
       }
     }
   }
