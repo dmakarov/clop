@@ -9,9 +9,11 @@ install:
   - sudo apt-get install -qq fglrx=2:8.960-0ubuntu1 opencl-headers
 
 script:
-  - dub run --build=profile --compiler=${DC} :algebra -- 32
-  - dub run --build=profile --compiler=${DC} :bp -- 32
-  - dub run --build=profile --compiler=${DC} :nw -- 32 10
+#  - dub test --build=coverage --compiler=${DC} :compiler
+  - dub test --build=coverage --compiler=${DC} :runtime
+  - dub run --build=coverage --compiler=${DC} :algebra -- 32
+  - dub run --build=coverage --compiler=${DC} :bp -- 32
+  - dub run --build=coverage --compiler=${DC} :nw -- 32 10
 
 after_success:
   - dub build --build=release --compiler=${DC} :coverall
