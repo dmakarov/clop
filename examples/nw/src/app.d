@@ -1376,8 +1376,6 @@ class Application {
               ticks.usecs / 1E6 );
     G[] = F[];
 
-    static if ( false )
-    {
     reset();
     timer.reset();
     timer.start();
@@ -1424,7 +1422,6 @@ class Application {
               ticks.usecs / 1E6, time,
               (rows - 1) * (cols - 1) / (1024 * 1024 * time) );
     validate();
-    }
 
     clGetKernelWorkGroupInfo( kernel_rectangles,
                               runtime.device,
