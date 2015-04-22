@@ -26,7 +26,7 @@
             "buildTypes"   : {
                 "verbose"  : { "debugVersions" : ["VERBOSE"] },
                 "grammar"  : { "debugVersions" : ["GRAMMAR"] },
-                "coverage" : { "buildOptions"  : ["releaseMode", "coverage"] }
+                "testing"  : { "buildOptions"  : ["coverage", "unittests"] }
             }
         },
         {
@@ -39,7 +39,7 @@
             "buildTypes"   : {
                 "verbose"  : { "debugVersions" : ["VERBOSE"] },
                 "grammar"  : { "debugVersions" : ["GRAMMAR"] },
-                "coverage" : { "buildOptions"  : ["releaseMode", "coverage"] }
+                "testing"  : { "buildOptions"  : ["coverage", "unittests"] }
             }
         },
         "./tools",
