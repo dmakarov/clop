@@ -15,7 +15,8 @@
             "dflags"       : ["-Jutils"],
             "dependencies" : {
                 "derelict-cl" : "~>1.2.2",
-                "pegged"      : "~>0.2.1"
+                "pegged"      : "~>0.2.1",
+                "clop:runtime": "*"
             },
             "excludedSourceFiles" : [
                 "clop/ct/grammar.d",

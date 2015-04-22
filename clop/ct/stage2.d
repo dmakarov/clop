@@ -445,6 +445,14 @@ template Backend(TList...)
       }
     }
 
+    unittest {
+      int a, b, c;
+      auto AST = clop.ct.parser.CLOP(q{NDRange(i: 0 .. 8){c = a + b;}});
+      alias T = std.typetuple.TypeTuple!(int, int, int);
+      auto backend = Backend!T(AST, __FILE__, __LINE__, ["a", "b", "c"]);
+      backend.analyze(AST);
+    }
+
     /++
      +
      +/
@@ -820,9 +828,3 @@ template Backend(TList...)
 
   } // Backend class
 } // Backend template
-
-unittest {
-  ParseTree t;
-  auto c = Backend(t, __FILE__, __LINE__);
-  auto p = c.generate_code();
-}
