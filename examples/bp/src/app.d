@@ -202,7 +202,7 @@ class Application {
     return s[0];
   }
 
-  bool clop_train_kernel(ref CL_FP eo, ref CL_FP eh)
+  bool clop_back_propagation(ref CL_FP eo, ref CL_FP eh)
   {
     import std.algorithm : sum;
     foreach (i; 0 .. i2h_changes.length) i2h_changes[i] = 0;
@@ -233,9 +233,9 @@ class Application {
           NDRange(i : 1 .. h, j : 1 .. n)
           {
             int index = i * n + j;
-            float adjust = MOMENTUM * i2h_changes[index] + (ONEF - MOMENTUM) * ETA * input_units[j] * hidden_deltas[i];
-            i2h_changes[index]  = adjust;
-            i2h_weights[index] += adjust;
+            float adjust = MOMENTUM * i2h_changes[i, j] + (ONEF - MOMENTUM) * ETA * input_units[j] * hidden_deltas[i];
+            i2h_changes[i, j]  = adjust;
+            i2h_weights[i * n + j] += adjust; // index i,j does not work here because clop compiler assumes every ndarray in kernel is the same dimensionality as the NDrange
           }
         }));
 
@@ -244,7 +244,7 @@ class Application {
     return valid;
   }
 
-  bool opencl_train_kernel(ref CL_FP eo, ref CL_FP eh)
+  bool opencl_back_propagation(ref CL_FP eo, ref CL_FP eh)
   {
     try
     {
@@ -560,7 +560,7 @@ class Application {
     {
       timer.reset();
       timer.start();
-      valid = opencl_train_kernel(eo, eh);
+      valid = opencl_back_propagation(eo, eh);
       timer.stop();
       ticks = timer.peek();
       writefln("OPENCL %5.3f [s]", ticks.usecs / 1E6);
@@ -569,7 +569,7 @@ class Application {
 
       timer.reset();
       timer.start();
-      valid = clop_train_kernel(eo, eh);
+      valid = clop_back_propagation(eo, eh);
       timer.stop();
       ticks = timer.peek();
       writefln("CLOPs %5.3f [s]", ticks.usecs / 1E6);
