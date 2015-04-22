@@ -47,6 +47,7 @@ struct Runtime
 
   cl_kernel kernel_copy;
   cl_kernel kernel_madd;
+  size_t work_group_size;
 
   Instance[] clops;
 
@@ -132,6 +133,14 @@ struct Runtime
     assert(status == CL_SUCCESS, "Can't create kernel madd " ~ cl_strerror(status));
     status = clReleaseProgram(program);
     assert(status == CL_SUCCESS, "Can't release program " ~ cl_strerror(status));
+    status = clGetKernelWorkGroupInfo(kernel_copy, runtime.device, CL_KERNEL_WORK_GROUP_SIZE,
+                                      work_group_size.sizeof, &work_group_size, null);
+    assert(status == CL_SUCCESS, "Can't get kernel work group size " ~ cl_strerror(status));
+  }
+
+  size_t get_work_group_size()
+  {
+    return work_group_size;
   }
 
   uint[] get_platforms()
@@ -197,17 +206,17 @@ struct Runtime
 
     cl_ulong start_time;
     status = clGetEventProfilingInfo (event                     , // cl_event          event
-                                       CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
-                                       cl_ulong.sizeof           , // size_t            param_value_size
-                                       &start_time               , // void*             param_value
-                                       null                    ); // size_t*           param_value_size_ret
+                                      CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
+                                      cl_ulong.sizeof           , // size_t            param_value_size
+                                      &start_time               , // void*             param_value
+                                      null                     ); // size_t*           param_value_size_ret
     assert(status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror(status));
     cl_ulong end_time;
     status = clGetEventProfilingInfo (event                     , // cl_event          event
-                                       CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
-                                       cl_ulong.sizeof           , // size_t            param_value_size
-                                       &end_time                 , // void*             param_value
-                                       null                    ); // size_t*           param_value_size_ret
+                                      CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
+                                      cl_ulong.sizeof           , // size_t            param_value_size
+                                      &end_time                 , // void*             param_value
+                                      null                     ); // size_t*           param_value_size_ret
     assert(status == CL_SUCCESS, "runtime copy benchmark " ~ cl_strerror(status));
 
     result = size * 1E9 / (1024 * 1024 * (end_time - start_time));
@@ -229,16 +238,16 @@ struct Runtime
     assert(status == CL_SUCCESS, "runtime madd benchmark " ~ cl_strerror(status));
 
     status = clGetEventProfilingInfo (event                     , // cl_event          event
-                                       CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
-                                       cl_ulong.sizeof           , // size_t            param_value_size
-                                       &start_time               , // void*             param_value
-                                       null                    ); // size_t*           param_value_size_ret
+                                      CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
+                                      cl_ulong.sizeof           , // size_t            param_value_size
+                                      &start_time               , // void*             param_value
+                                      null                     ); // size_t*           param_value_size_ret
     assert(status == CL_SUCCESS, "runtime madd benchmark " ~ cl_strerror(status));
     status = clGetEventProfilingInfo (event                     , // cl_event          event
-                                       CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
-                                       cl_ulong.sizeof           , // size_t            param_value_size
-                                       &end_time                 , // void*             param_value
-                                       null                    ); // size_t*           param_value_size_ret
+                                      CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
+                                      cl_ulong.sizeof           , // size_t            param_value_size
+                                      &end_time                 , // void*             param_value
+                                      null                     ); // size_t*           param_value_size_ret
     assert(status == CL_SUCCESS, "runtime madd benchmark " ~ cl_strerror(status));
 
     writefln(", 2 I/O + 24 FP %7.2f MI/s", size * 1E9 / (1024 * 1024 * (end_time - start_time)));

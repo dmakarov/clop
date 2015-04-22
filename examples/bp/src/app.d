@@ -554,24 +554,28 @@ class Application {
     CL_FP eo, eh;
     StopWatch timer;
     TickDuration ticks;
+    size_t size = runtime.get_work_group_size();
 
-    timer.reset();
-    timer.start();
-    valid = opencl_train_kernel(eo, eh);
-    timer.stop();
-    ticks = timer.peek();
-    writefln("OPENCL %5.3f [s]", ticks.usecs / 1E6);
-    if (!valid)
-      writefln("bp: out error %f, hidden error %f", eo, eh);
+    if (size >= hidden_n * hidden_n)
+    {
+      timer.reset();
+      timer.start();
+      valid = opencl_train_kernel(eo, eh);
+      timer.stop();
+      ticks = timer.peek();
+      writefln("OPENCL %5.3f [s]", ticks.usecs / 1E6);
+      if (!valid)
+        writefln("bp: out error %f, hidden error %f", eo, eh);
 
-    timer.reset();
-    timer.start();
-    valid = clop_train_kernel(eo, eh);
-    timer.stop();
-    ticks = timer.peek();
-    writefln("CLOPs %5.3f [s]", ticks.usecs / 1E6);
-    if (!valid)
-      writefln("bp: out error %f, hidden error %f", eo, eh);
+      timer.reset();
+      timer.start();
+      valid = clop_train_kernel(eo, eh);
+      timer.stop();
+      ticks = timer.peek();
+      writefln("CLOPs %5.3f [s]", ticks.usecs / 1E6);
+      if (!valid)
+        writefln("bp: out error %f, hidden error %f", eo, eh);
+    }
   }
 }
 
