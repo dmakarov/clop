@@ -116,6 +116,14 @@ final class Instance
   }
 }
 
+unittest
+{
+  auto instance = new Instance("the_instance");
+  assert(instance !is null);
+  assert(instance.toString() == "the_instance");
+  assert(!instance.is_ready("the_kernel"));
+}
+
 // Local Variables:
 // coding: utf-8
 // flycheck-dmd-include-path: ("~/.dub/packages/derelict-cl-1.2.2/source")

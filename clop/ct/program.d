@@ -37,7 +37,6 @@ import clop.ct.structs;
 import clop.ct.symbol;
 import clop.ct.templates;
 import clop.ct.transform;
-import clop.rt.ndarray;
 
 /++
  +  The container of all information related to a specific variant
