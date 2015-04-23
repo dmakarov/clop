@@ -216,8 +216,7 @@ class Application {
             NDRange(j : 1 .. n)
             {
               s[j - 1] = input_units[j] * i2h_weights[i * n + j];
-            }
-          }));
+            }}));
       hidden_units[i] = ONEF / (ONEF + exp(-mysum(s) - i2h_weights[i, 0]));
     }
 
