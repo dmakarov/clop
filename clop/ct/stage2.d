@@ -572,7 +572,8 @@ template Backend(TList...)
     void compute_intervals()
     {
       auto number_of_parameters = parameters.length;
-      auto clop_ndarray_dimensions_initialization = "";
+      string[] clop_ndarray_dimensions_parameters = [];
+      string[] clop_ndarray_dimensions_variables = [];
       foreach (k, v; symtable)
       {
         uint j;
@@ -586,12 +587,9 @@ template Backend(TList...)
           Interval[] box;
           for (auto n = 0; n < range.intervals.length; ++n)
             box ~= Interval(CLOP.decimateTree(CLOP.IntegerLiteral("0")),
-                            CLOP.decimateTree(CLOP.Expression(format("clop_ndarray_dimensions[%s]",
-                                                                     clop_ndarray_dimension_index++))));
-          if (clop_ndarray_dimensions_initialization == "")
-            clop_ndarray_dimensions_initialization = parameters[j].name ~ ".get_dimensions()";
-          else
-            clop_ndarray_dimensions_initialization ~= " ~ " ~ parameters[j].name ~ ".get_dimensions()";
+                            CLOP.decimateTree(CLOP.Expression(format("clop_ndarray_dimensions_%s[%s]", parameters[j].name, n))));
+          clop_ndarray_dimensions_parameters ~= ["cl_ulong[] clop_ndarray_dimensions_" ~ parameters[j].name ~ " = " ~ parameters[j].name ~ ".get_dimensions();"];
+          clop_ndarray_dimensions_variables ~= [parameters[j].name];
           symtable[k].box = box;
         }
         else if (v.is_array && v.can_cache)
@@ -622,17 +620,17 @@ template Backend(TList...)
           }
         }
       }
-      if (clop_ndarray_dimension_index > 0)
+      foreach (i, p; clop_ndarray_dimensions_parameters)
       {
-        auto name = `clop_ndarray_dimensions`;
+        auto name = `clop_ndarray_dimensions_` ~ clop_ndarray_dimensions_variables[i];
         auto buffer = name ~ `_buffer`;
         auto to_push =  format(q{
-          cl_ulong[] %s = %s;
+          %s
           cl_mem %s = clCreateBuffer(runtime.context, CL_MEM_READ_ONLY, cl_ulong.sizeof * %s.length, null, &runtime.status);
           assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clCreateBuffer"));
           runtime.status = clEnqueueWriteBuffer(runtime.queue, %s, CL_TRUE, 0, cl_ulong.sizeof * %s.length, %s.ptr, 0, null, null);
           assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clEnqueueWriteBuffer"));
-          }, name, clop_ndarray_dimensions_initialization, buffer, name, buffer, name, name);
+          }, p, buffer, name, buffer, name, name);
         auto to_release = format(q{
           runtime.status = clReleaseMemObject(%s);
           assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clReleaseMemObject"));

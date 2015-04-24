@@ -234,9 +234,8 @@ class Application {
             int index = i * n + j;
             float adjust = MOMENTUM * i2h_changes[i, j] + (ONEF - MOMENTUM) * ETA * input_units[j] * hidden_deltas[i];
             i2h_changes[i, j]  = adjust;
-            i2h_weights[i * n + j] += adjust; // index i,j does not work here because clop compiler assumes every ndarray in kernel is the same dimensionality as the NDrange
-          }
-        }));
+            i2h_weights[i, j] += adjust;
+          }}));
 
     valid = valid && validation_block_2();
 
