@@ -127,3 +127,12 @@ template_antidiagonal_loop_suffix = "
 ",
 
 template_2d_index = "(%s) * (%s) + (%s)";
+
+struct TemplateExpansion
+{
+}
+
+enum ExpansionPattern : TemplateExpansion
+{
+  reduce = TemplateExpansion()
+}

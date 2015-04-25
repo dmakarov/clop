@@ -349,7 +349,17 @@ template Backend(TList...)
         }
       case "CLOP.PostfixExpr":
         {
-          analyze(t.children[0]);
+          auto recognized_template = false;
+          if (t.children[0].children[0].name == "CLOP.Identifier" &&
+              t.children[0].children.length > 1 &&
+              t.children[0].children[1].name == "CLOP.StringLiteral")
+          {
+            foreach (a; __traits(allMembers, ExpansionPattern))
+              if (a == t.children[0].children[0].matches[0])
+                recognized_template = true;
+          }
+          if (!recognized_template)
+            analyze(t.children[0]);
           if (t.children.length == 1)
           {
             return;
