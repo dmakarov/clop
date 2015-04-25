@@ -208,10 +208,9 @@ struct Frontend
         }
         break;
       }
+    case "CLOP.DeclarationSpecifiers":
+    case "CLOP.StorageClassSpecifier":
     case "CLOP.TypeSpecifier":
-      {
-        break;
-      }
     case "CLOP.StructSpecifier":
       {
         break;

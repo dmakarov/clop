@@ -229,9 +229,8 @@ class Application {
     adjust_weights(output_deltas, hidden_units, h2o_weights, h2o_changes);
 
     mixin (compile(q{
-          NDRange(i : 1 .. h, j : 1 .. n)
+          NDRange(i : 1 .. hidden_n, j : 1 .. input_n)
           {
-            int index = i * n + j;
             float adjust = MOMENTUM * i2h_changes[i, j] + (ONEF - MOMENTUM) * ETA * input_units[j] * hidden_deltas[i];
             i2h_changes[i, j]  = adjust;
             i2h_weights[i, j] += adjust;
@@ -380,7 +379,8 @@ class Application {
         foreach (k; 0 .. num_blocks)
         {
           sum += partial_sum[k * hidden_n + j - 1];
-          debug (DEBUG) writefln("partial_sum[%2d] %.12f", k * hidden_n + j - 1 ,partial_sum[k * hidden_n + j - 1]);
+          debug (DEBUG)
+            writefln("partial_sum[%2d] %.12f", k * hidden_n + j - 1, partial_sum[k * hidden_n + j - 1]);
         }
         hidden_units[j] = ONEF / (ONEF + exp(-sum));
       }

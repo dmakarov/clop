@@ -698,18 +698,26 @@ struct Program
     {
     case "CLOP.Declaration":
       {
-        auto s = indent ~ translate( t.children[0] );
-        if ( t.children.length > 1 )
-          s ~= " " ~ translate( t.children[1] );
+        auto s = indent ~ translate(t.children[0]);
+        if (t.children.length > 1)
+          s ~= " " ~ translate(t.children[1]);
         return s ~ ";\n";
       }
     case "CLOP.Declarator":
       {
-        string s = translate( t.children[0] );
-        if ( t.children.length > 1 )
-          s ~= "( " ~ translate( t.children[1] ) ~ " )";
+        string s = translate(t.children[0]);
+        if (t.children.length > 1)
+          s ~= "(" ~ translate(t.children[1]) ~ ")";
         return s;
       }
+    case "CLOP.DeclarationSpecifiers":
+      {
+        string s = translate(t.children[0]);
+        if (t.children.length > 1)
+          s ~= " " ~ translate(t.children[1]);
+        return s;
+      }
+    case "CLOP.StorageClassSpecifier":
     case "CLOP.TypeSpecifier":
       {
         return t.matches[0];
@@ -720,25 +728,25 @@ struct Program
       }
     case "CLOP.ParameterDeclaration":
       {
-        return translate( t.children[0] ) ~ " " ~ translate( t.children[1] );
+        return translate(t.children[0]) ~ " " ~ translate(t.children[1]);
       }
     case "CLOP.InitDeclaratorList":
       {
-        string s = translate( t.children[0] );
-        foreach ( i; 1 .. t.children.length )
-          s ~= ", " ~ translate( t.children[i] );
+        string s = translate(t.children[0]);
+        foreach (i; 1 .. t.children.length)
+          s ~= ", " ~ translate(t.children[i]);
         return s;
       }
     case "CLOP.InitDeclarator":
       {
-        string s = translate( t.children[0] );
-        if ( t.children.length > 1 )
-          s ~= " = " ~ translate( t.children[1] );
+        string s = translate(t.children[0]);
+        if (t.children.length > 1)
+          s ~= " = " ~ translate(t.children[1]);
         return s;
       }
     case "CLOP.Initializer":
       {
-        return translate( t.children[0] );
+        return translate(t.children[0]);
       }
     case "CLOP.StatementList":
       {

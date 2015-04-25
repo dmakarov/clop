@@ -37,10 +37,12 @@ CLOP:
  TransSpec              <  Identifier ('(' ')' / '(' ArgumentExprList ')')
 
 # CLOP_Decl:
- Declaration            <  TypeSpecifier InitDeclaratorList? ';'
+ Declaration            <  DeclarationSpecifiers InitDeclaratorList? ';'
  Declarator             <  (Identifier / '(' Declarator ')')
                            ('[' ']' / '(' ')' / '[' ConditionalExpr ']' / '(' ParameterList ')' / '(' IdentifierList ')')*
+ StorageClassSpecifier  <- "local"
  TypeSpecifier          <- "void" / "char" / "short" / "int" / "long" / "float" / "double" / StructSpecifier
+ DeclarationSpecifiers  <  (StorageClassSpecifier / TypeSpecifier) DeclarationSpecifiers?
  StructSpecifier        <  "struct" (Identifier ('{' StructDeclarationList '}')? / '{' StructDeclarationList '}')
  StructDeclarationList  <  StructDeclaration (:Spacing StructDeclaration)*
  StructDeclaration      <  TypeSpecifier StructDeclaratorList ';'
@@ -66,7 +68,7 @@ CLOP:
  ReturnStatement        <  "return" Expression? ';'
 
 # CLOP_Expr:
- PrimaryExpr            <  Identifier / FloatLiteral / IntegerLiteral / '(' Expression ')'
+ PrimaryExpr            <  Identifier ('!' StringLiteral)? / FloatLiteral / IntegerLiteral / '(' Expression ')'
  PostfixExpr            <  PrimaryExpr ( '[' Expression ']'
                                        / '(' ')'
                                        / '(' ArgumentExprList ')'
@@ -118,6 +120,14 @@ CLOP:
  Integer                <~ digit+
  IntegerSuffix          <- "Lu" / "LU" / "uL" / "UL" / "L" / "u" / "U"
  FloatLiteral           <~ Sign? Integer "." Integer? (("e" / "E") Sign? Integer)?
+ StringLiteral          <~ doublequote (DQChar)* doublequote
+ DQChar                 <- EscapeSequence
+                         / !doublequote .
+ EscapeSequence         <~ backslash ( quote
+                                     / doublequote
+                                     / backslash
+                                     / [abfnrtv]
+                                     )
  Sign                   <- "-" / "+"
 
 # Local Variables:
