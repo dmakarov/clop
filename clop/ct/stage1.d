@@ -199,13 +199,13 @@ struct Frontend
       }
     case "CLOP.Declarator":
       {
+        auto saved_global_scope_value = global_scope;
+        global_scope = false;
         foreach (c; t.children)
         {
-          auto saved_global_scope_value = global_scope;
-          global_scope = false;
           analyze(c);
-          global_scope = saved_global_scope_value;
         }
+        global_scope = saved_global_scope_value;
         break;
       }
     case "CLOP.DeclarationSpecifiers":
