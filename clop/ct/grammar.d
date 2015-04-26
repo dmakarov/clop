@@ -24,7 +24,11 @@
  */
 module clop.ct.grammar;
 
-public import pegged.peg;
-import pegged.grammar;
+// XXX: Is this file ever used?
+version (GENERATE_PARSER_ONLINE)
+{
+  public import pegged.peg;
+  import pegged.grammar;
 
-mixin (grammar(mixin ("`" ~ import("grammar.in") ~ "`")));
+  mixin (grammar(mixin ("`" ~ import("grammar.in") ~ "`")));
+}

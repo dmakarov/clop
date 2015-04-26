@@ -39,6 +39,11 @@ import clop.ct.templates;
 import clop.ct.transform;
 import clop.rt.ndarray;
 
+version (unittest)
+{
+  import std.stdio;
+}
+
 template Backend(TList...)
 {
   import std.typetuple;
@@ -92,6 +97,7 @@ template Backend(TList...)
      +/
     string generate_code()
     {
+      lower(AST);
       analyze(AST);
       update_parameters();
       compute_intervals();
@@ -124,7 +130,191 @@ template Backend(TList...)
   private:
 
     /++
+     +  XXX: can this pass be combined with analyze?
      +
+     +  Lower the expressions that need to be evaluated to temporaries
+     +  and replaced in translation.  This pass modifies the AST in
+     +  place.
+     +/
+    void lower(ParseTree t)
+    {
+      switch (t.name)
+      {
+      case "CLOP":
+        {
+          version (unittest)
+          {
+            writeln("THIS IS clop.ct.stage2.Backend.lower case CLOP");
+          }
+          lower(t.children[0]);
+          break;
+        }
+      case "CLOP.TranslationUnit":
+        {
+          uint i = t.children[0].name == "CLOP.ExternalDeclarations" ? 1 : 0;
+          lower(t.children[i]);
+          break;
+        }
+      case "CLOP.KernelBlock":
+        {
+          uint i = t.children[0].name == "CLOP.SyncPattern" ? 2 : 1;
+          lower(t.children[i]);
+          break;
+        }
+      case "CLOP.Declaration":
+        {
+          foreach (c; t.children)
+            lower(c);
+          break;
+        }
+      case "CLOP.Declarator":
+        {
+          foreach (c; t.children)
+            lower(c);
+          break;
+        }
+      case "CLOP.InitDeclaratorList":
+        {
+          foreach (c; t.children)
+            lower(c);
+          break;
+        }
+      case "CLOP.InitDeclarator":
+        {
+          foreach (c; t.children)
+            lower(c);
+          break;
+        }
+      case "CLOP.InitializerList":
+        {
+          foreach (c; t.children)
+            lower(c);
+          break;
+        }
+      case "CLOP.Initializer":
+        {
+          lower(t.children[0]);
+          break;
+        }
+      case "CLOP.ParameterList":
+        {
+          foreach (c; t.children)
+            lower(c);
+          break;
+        }
+      case "CLOP.ParameterDeclaration":
+        {
+          foreach (c; t.children)
+            lower(c);
+          break;
+        }
+      case "CLOP.TypeName":
+        {
+          break;
+        }
+      case "CLOP.StatementList":
+        {
+          foreach (c; t.children)
+            lower(c);
+          break;
+        }
+      case "CLOP.Statement":
+        {
+          lower(t.children[0]);
+          break;
+        }
+      case "CLOP.CompoundStatement":
+        {
+          t.children.length == 1 && lower(t.children[0]);
+          break;
+        }
+      case "CLOP.ExpressionStatement":
+        {
+          lower(t.children[0]);
+          break;
+        }
+      case "CLOP.IfStatement":
+        {
+          foreach (c; t.children)
+            lower(c);
+          break;
+        }
+      case "CLOP.IterationStatement":
+        {
+          lower(t.children[0]);
+          break;
+        }
+      case "CLOP.ForStatement":
+        {
+          foreach (c; t.children)
+            lower(c);
+          break;
+        }
+      case "CLOP.ReturnStatement":
+        {
+          t.children.length == 1 && lower(t.children[0]);
+          break;
+        }
+      case "CLOP.PrimaryExpr":
+        {
+          lower(t.children[0]);
+          break;
+        }
+      case "CLOP.PostfixExpr":
+      case "CLOP.ArgumentExprList":
+      case "CLOP.UnaryExpr":
+      case "CLOP.IncrementExpr":
+      case "CLOP.DecrementExpr":
+      case "CLOP.CastExpr":
+      case "CLOP.MultiplicativeExpr":
+      case "CLOP.AdditiveExpr":
+      case "CLOP.ShiftExpr":
+      case "CLOP.RelationalExpr":
+      case "CLOP.EqualityExpr":
+      case "CLOP.ANDExpr":
+      case "CLOP.ExclusiveORExpr":
+      case "CLOP.InclusiveORExpr":
+      case "CLOP.LogicalANDExpr":
+      case "CLOP.LogicalORExpr":
+      case "CLOP.ConditionalExpr":
+      case "CLOP.Expression":
+        {
+          foreach (c; t.children)
+            lower(c);
+          break;
+        }
+      case "CLOP.AssignmentExpr":
+        {
+          if (t.children.length == 3)
+          {
+            lower(t.children[0]);
+            lower(t.children[2]);
+          }
+          else
+          {
+            lower(t.children[0]);
+          }
+          break;
+        }
+      default:
+        {
+          break;
+        }
+      }
+    }
+
+    unittest
+    {
+      int a, b, c;
+      auto AST = clop.ct.parser.CLOP(q{NDRange(i: 0 .. 8){c = a + b;}});
+      alias T = std.typetuple.TypeTuple!(int, int, int);
+      auto backend = Backend!T(AST, __FILE__, __LINE__, ["a", "b", "c"]);
+      backend.lower(AST);
+    }
+
+    /++
+     + XXX: do we need this pass?
+     + builds the symbol table
      +/
     void analyze(ParseTree t)
     {
@@ -847,3 +1037,7 @@ unittest {
   auto output = backend.generate_code();
   assert(output !is null && output != "");
 }
+
+// Local Variables:
+// compile-command: "../../tests/test_module clop.ct.stage2"
+// End:

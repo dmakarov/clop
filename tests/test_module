@@ -1,0 +1,48 @@
+#!/bin/bash
+
+mypath=${0%/*}
+pushd $mypath
+module=${1}
+source=${module//.//}
+srcdir=../${source%/*}
+testnm=${source##*/}_test
+rm -f ${testnm}{,.d,.o}
+echo "module ${testnm};"      > ${testnm}.d
+echo "import std.typetuple;" >> ${testnm}.d
+inputs=""
+for i in $(ls ${srcdir}/*.d) ; do
+    inputs="${inputs} ${i}"
+    import=${i#*/}
+    import=${import%.d}
+    import=${import//\//.}
+    echo "static import ${import};" >> ${testnm}.d
+done
+echo "alias allModules = TypeTuple!(${module});" >> ${testnm}.d
+cat >> ${testnm}.d <<EOF
+void main()
+{
+  import std.stdio;
+  writeln("All unit tests have been run successfully.");
+}
+shared static this()
+{
+  version (Have_tested)
+  {
+    import tested;
+    import core.runtime;
+    import std.exception;
+    Runtime.moduleUnitTester = () => true;
+    enforce(runUnitTests!allModules(new ConsoleTestResultWriter), "Unit tests failed.");
+  }
+}
+EOF
+dmd -unittest -w -I.. -I~/.dub/packages/{derelict-cl-1.2.2/source,pegged-0.2.1} \
+    -of${testnm} ${testnm}.d ${inputs} \
+    ~/.dub/packages/{pegged-0.2.1/libpegged.a,derelict-cl-1.2.2/lib/libDerelictCL.a,derelict-util-1.9.1/lib/libDerelictUtil.a} \
+    ../lib/libclop_runtime.a -L-ldl
+./${testnm}
+popd
+
+# Local Variables:
+# mode: bash
+# End:
