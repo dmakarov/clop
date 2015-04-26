@@ -36,8 +36,13 @@ shared static this()
   }
 }
 EOF
+if [ ! -f ../lib/libclop_runtime.a ] ; then
+    pushd ..
+    dub build --build=debug :runtime
+    popd
+fi
 dmd -unittest -w -I.. -I~/.dub/packages/{derelict-cl-1.2.2/source,pegged-0.2.1} \
-    -of${testnm} ${testnm}.d ${inputs} \
+    -version=UNITTEST_DEBUG -of${testnm} ${testnm}.d ${inputs} \
     ~/.dub/packages/{pegged-0.2.1/libpegged.a,derelict-cl-1.2.2/lib/libDerelictCL.a,derelict-util-1.9.1/lib/libDerelictUtil.a} \
     ../lib/libclop_runtime.a -L-ldl
 ./${testnm}

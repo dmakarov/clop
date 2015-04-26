@@ -26,6 +26,11 @@ module clop.ct.stage1;
 
 import std.format, clop.ct.parser, clop.ct.symbol, clop.ct.templates;
 
+version (UNITTEST_DEBUG)
+{
+  import std.stdio;
+}
+
 /++
  +  The CLOP compiler front end.
  +  Analyze the AST and extract all the kernel parameters.
@@ -515,7 +520,15 @@ struct Frontend
 } // Frontend class
 
 unittest {
+  version (UNITTEST_DEBUG)
+  {
+    writeln("STAGE 1 unit tests.");
+  }
   ParseTree t;
   auto c = Frontend(t, __FILE__, __LINE__);
   auto p = c.generate_stage2_code();
 }
+
+// Local Variables:
+// compile-command: "../../tests/test_module clop.ct.stage1"
+// End:

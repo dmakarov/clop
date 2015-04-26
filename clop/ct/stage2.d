@@ -39,7 +39,7 @@ import clop.ct.templates;
 import clop.ct.transform;
 import clop.rt.ndarray;
 
-version (unittest)
+version (UNITTEST_DEBUG)
 {
   import std.stdio;
 }
@@ -142,7 +142,7 @@ template Backend(TList...)
       {
       case "CLOP":
         {
-          version (unittest)
+          version (UNITTEST_DEBUG)
           {
             writeln("THIS IS clop.ct.stage2.Backend.lower case CLOP");
           }
