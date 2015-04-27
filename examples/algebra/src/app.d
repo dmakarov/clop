@@ -91,7 +91,7 @@ class Application {
   }
 
   /++
-   + Compute the sum of two matrices usin CLOP.
+   + Compute the sum of two matrices using CLOP.
    +/
   void clop_add_matrices()
   {
@@ -99,7 +99,7 @@ class Application {
   }
 
   /++
-   + Compute the sum of two matrices usin CLOP.
+   + Compute the product of two matrices using CLOP.
    +/
   void clop_mul_matrices()
   {
