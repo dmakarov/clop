@@ -254,20 +254,6 @@ class Application {
         #define FP         float
 
         /**
-         * The kernel computes the components that latter summed up to
-         * get the value at the node j
-         */
-        __kernel void layerforward(__global FP* f,
-                                   __global FP* w,
-                                   __global FP* s,
-                                            int j,
-                                            int n)
-        {
-          int i = get_global_id(0);
-          s[i] = f[i] * w[i * n + j];
-        }
-
-        /**
          * The kernel implements partial reduction
          * The global index space is hidden_n x input_n, i.e. a rectangle
          * with hidden_n height and input_n width.
@@ -278,12 +264,12 @@ class Application {
          * @param summands holds hidden_n x hidden_n elements
          * @param n2 is equal to hidden_n
          */
-        __kernel void layerforward_optimized(__global FP* f,
-                                             __global FP* w,
-                                             __global FP* sums,
-                                             __local  FP* inputs,
-                                             __local  FP* summands,
-                                                      int n2)
+        __kernel void forward_layer(__global FP* f,
+                                    __global FP* w,
+                                    __global FP* sums,
+                                    __local  FP* inputs,
+                                    __local  FP* summands,
+                                    int n2)
         { // workgroups are organized so that get_group_id(0) is always 0.
           int row = get_local_id(0);
           int col = get_local_id(1);
@@ -345,7 +331,7 @@ class Application {
       }
       assert(status == CL_SUCCESS, cl_strerror(status));
       cl_kernel[2] kernels;
-      kernels[0] = clCreateKernel(program, "layerforward_optimized", &status);
+      kernels[0] = clCreateKernel(program, "forward_layer", &status);
       assert(status == CL_SUCCESS, cl_strerror(status));
       kernels[1] = clCreateKernel(program, "adjust_weights", &status);
       assert(status == CL_SUCCESS, cl_strerror(status));
