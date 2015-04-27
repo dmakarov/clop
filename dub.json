@@ -37,6 +37,7 @@
         "./examples/bp",
         "./examples/nw",
         "./examples/pf",
-        "./examples/stencil"
+        "./examples/stencil",
+ 		"./examples/wrapper_example"
     ],
 }

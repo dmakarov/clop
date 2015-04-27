@@ -1,0 +1,19 @@
+{
+    "name"          : "wrapper_example",
+    "authors"       : ["Dmitri Makarov, Patrick Zulian"],
+    "description"   : "Examples with the wrapper.",
+    "targetType"    : "executable",
+    "targetPath"    : "./bin",
+    "importPaths"   : ["../../clop"],
+    "lflags-linux"  : ["-Llib", "-lOpenCL", "-lrt"],
+    "lflags-osx"    : ["-Llib", "-framework", "OpenCL"],
+    "dependencies"  : {
+        "clop:compiler": "*",
+        "clop:runtime" : "*"
+    },
+    "buildTypes"    : {
+        "verbose"      : { "debugVersions" : ["VERBOSE"] },
+        "grammar"      : { "debugVersions" : ["GRAMMAR"] },
+        "profile"      : { "buildOptions"  : ["releaseMode", "coverage"] }
+    }
+}
