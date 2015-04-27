@@ -23,14 +23,18 @@
         </a></p>
 
         <ul>
-          <li><a href="https://github.com/dmakarov/clop/zipball/master">Download <strong>ZIP File</strong></a></li>
-          <li><a href="https://github.com/dmakarov/clop/tarball/master">Download <strong>TAR Ball</strong></a></li>
-          <li><a href="https://github.com/dmakarov/clop">View On <strong>GitHub</strong></a></li>
+          <li><a href="https://github.com/dmakarov/clop/zipball/master">
+              Download <strong>ZIP File</strong></a></li>
+          <li><a href="https://github.com/dmakarov/clop/tarball/master">
+              Download <strong>TAR Ball</strong></a></li>
+          <li><a href="https://github.com/dmakarov/clop">
+              View On <strong>GitHub</strong></a></li>
         </ul>
       </header>
       <section>
         <h3>
-          <a id="clop-overview" class="anchor" href="#clop-overview" aria-hidden="true">
+          <a id="clop-overview" class="anchor" href="#clop-overview"
+             aria-hidden="true">
             <span class="octicon octicon-link"></span>
           </a>
           Overview
@@ -48,15 +52,16 @@
 
         <pre><code>// Needleman-Wunsch algorithm implementation.
 // Use CLOP to generate OpenCL kernel and API calls.
-mixin( compile(
-q{
+mixin( compile(q{
   int max3( int a, int b, int c )
   {
     int k = a > b ? a : b;
     return k > c ? k : c;
   }
   Antidiagonal NDRange(r : 1 .. rows, c : 1 .. cols) {
-    F[r, c] = max3( F[r - 1, c - 1] + S[r, c], F[r, c - 1] - penalty, F[r - 1, c] - penalty );
+    F[r, c] = max3( F[r - 1, c - 1] + S[r, c],
+                    F[r, c - 1] - penalty,
+                    F[r - 1, c] - penalty );
   } apply( rectangular_blocking( 8, 8 ) )
 } ) );</code></pre>
 
