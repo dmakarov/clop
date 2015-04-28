@@ -142,10 +142,7 @@ template Backend(TList...)
       {
       case "CLOP":
         {
-          version (UNITTEST_DEBUG)
-          {
-            writeln("THIS IS clop.ct.stage2.Backend.lower case CLOP");
-          }
+          version (UNITTEST_DEBUG) writefln("clop.ct.stage2.Backend.lower_%s case CLOP", suffix);
           lower(t.children[0]);
           break;
         }
@@ -220,6 +217,7 @@ template Backend(TList...)
         }
       case "CLOP.Statement":
         {
+          version (UNITTEST_DEBUG) writefln("clop.ct.stage2.Backend.lower_%s case CLOP.Statement %s", suffix, t.matches);
           lower(t.children[0]);
           break;
         }
@@ -301,15 +299,6 @@ template Backend(TList...)
           break;
         }
       }
-    }
-
-    unittest
-    {
-      int a, b, c;
-      auto AST = clop.ct.parser.CLOP(q{NDRange(i: 0 .. 8){c = a + b;}});
-      alias T = std.typetuple.TypeTuple!(int, int, int);
-      auto backend = Backend!T(AST, __FILE__, __LINE__, ["a", "b", "c"]);
-      backend.lower(AST);
     }
 
     /++
@@ -1028,14 +1017,31 @@ template Backend(TList...)
   } // Backend class
 } // Backend template
 
-
-unittest {
-  int a, b, c;
+unittest
+{
+  // test 1
   auto AST = clop.ct.parser.CLOP(q{NDRange(i: 0 .. 8){c = a + b;}});
-  alias T = std.typetuple.TypeTuple!(int, int, int);
-  auto backend = Backend!T(AST, __FILE__, __LINE__, ["a", "b", "c"]);
-  auto output = backend.generate_code();
+  alias T1 = std.typetuple.TypeTuple!(int, int, int);
+  auto be1 = Backend!T1(AST, __FILE__, __LINE__, ["a", "b", "c"]);
+  be1.lower(AST);
+  auto output = be1.generate_code();
   assert(output !is null && output != "");
+
+  // test 2
+  AST = clop.ct.parser.CLOP(q{
+      NDRange(i : 1 .. hidden_n, j : 0 .. input_n)
+      {
+        local float t[input_n];
+        t[j] = input_units[j] * i2h_weights[i, j];
+        float s = reduce!"a + b"(0, t);
+        if (j == 0)
+        {
+          hidden_units[i] = ONEF / (ONEF + exp(-s));
+        }
+      }});
+  alias T2 = std.typetuple.TypeTuple!(size_t, size_t, NDArray!float, NDArray!float, NDArray!float);
+  auto be2 = Backend!T2(AST, __FILE__, __LINE__, ["hidden_n", "input_n", "input_units", "i2h_weights", "hidden_units"]);
+  be2.lower(AST);
 }
 
 // Local Variables:
