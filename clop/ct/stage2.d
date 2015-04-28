@@ -127,7 +127,7 @@ template Backend(TList...)
 
     // The following methods are internal to the struct and not used outside.
 
-  private:
+  package:
 
     /++
      +  XXX: can this pass be combined with analyze?
