@@ -4,7 +4,7 @@
 
 
   CLOP is a DSL to write OpenCL kernels in a higher level of abstraction and
-  apply optimizations to them.
+  apply optimizations to them.  For more information see [[http://dmakarov.github.io/clop/][CLOP by dmakarov]].
 
   To compile an example
 
