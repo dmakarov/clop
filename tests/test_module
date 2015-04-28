@@ -10,13 +10,16 @@ rm -f ${testnm}{,.d,.o}
 echo "module ${testnm};"      > ${testnm}.d
 echo "import std.typetuple;" >> ${testnm}.d
 inputs=""
+status=0
 for i in $(ls ${srcdir}/*.d) ; do
     obj=${i/.d/.o}
     obj=${obj##*/}
     if [ ${i} != ../${srcpth}.d ]; then
         dmd -w -I.. -I~/.dub/packages/{derelict-util-1.9.1/source,derelict-cl-1.2.2/source,pegged-0.2.1}                                   -c ${i}
+        status=$status || $?
     else
         dmd -w -I.. -I~/.dub/packages/{derelict-util-1.9.1/source,derelict-cl-1.2.2/source,pegged-0.2.1} -unittest -version=UNITTEST_DEBUG -c ${i}
+        status=$status || $?
     fi
     inputs="${inputs} ${obj}"
     import=${i#*/}
@@ -53,8 +56,13 @@ dmd -unittest -w -I.. -I~/.dub/packages/{derelict-util-1.9.1/source,derelict-cl-
     -version=UNITTEST_DEBUG -of${testnm} ${testnm}.d ${inputs} \
     ~/.dub/packages/{pegged-0.2.1/libpegged.a,derelict-cl-1.2.2/lib/libDerelictCL.a,derelict-util-1.9.1/lib/libDerelictUtil.a} \
     ../lib/libclop_runtime.a -L-ldl
-./${testnm}
+status=$status || $?
+if [ !$status ]; then
+    ./${testnm}
+    status=$?
+fi
 popd
+exit ${status}
 
 # Local Variables:
 # mode: bash
