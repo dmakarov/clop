@@ -38,6 +38,11 @@ import clop.ct.symbol;
 import clop.ct.templates;
 import clop.ct.transform;
 
+version (UNITTEST_DEBUG)
+{
+  import std.stdio;
+}
+
 /++
  +  The container of all information related to a specific variant
  +  a CLOP program fragment.
@@ -754,10 +759,18 @@ struct Program
       }
     case "CLOP.Statement":
       {
+        version (UNITTEST_DEBUG)
+        {
+          writefln("UT:%s Program.translate case CLOP.Statement: %s", suffix, t.matches);
+        }
         return translate(t.children[0]);
       }
     case "CLOP.CompoundStatement":
       {
+        version (UNITTEST_DEBUG)
+        {
+          writefln("UT:%s Program.translate case CLOP.CompoundStatement: %s", suffix, t.matches);
+        }
         indent ~= "  ";
         auto s = translate(t.children[0]);
         indent = indent[0 .. $ - 2];
@@ -941,6 +954,36 @@ struct Program
 
 unittest
 {
+  static import clop.ct.parser;
+  static import clop.ct.stage2;
+  static import clop.rt.ndarray;
+
+  auto t = clop.ct.parser.CLOP(q{
+      NDRange(i : 1 .. hidden_n, j : 0 .. input_n)
+      {
+        local float t[input_n];
+        t[j] = input_units[j] * i2h_weights[i, j];
+        float s = reduce!"a + b"(0, t);
+        if (j == 0)
+        {
+          hidden_units[i] = ONEF / (ONEF + exp(-s));
+        }
+      }});
+  alias T = std.typetuple.TypeTuple!(size_t, size_t,
+                                     clop.rt.ndarray.NDArray!float,
+                                     clop.rt.ndarray.NDArray!float,
+                                     clop.rt.ndarray.NDArray!float);
+  auto be = clop.ct.stage2.Backend!T(t, __FILE__, __LINE__,
+                                     ["hidden_n", "input_n", "input_units", "i2h_weights", "hidden_units"]);
+  be.analyze(t);
+  be.update_parameters();
+  be.compute_intervals();
+  auto p = Program(be.symtable, [], be.parameters, be.KBT, be.range, be.pattern, "", "", be.suffix);
+  auto k = p.translate(be.KBT);
+  version (UNITTEST_DEBUG)
+  {
+    writefln("UT:%s k:\n%s", be.suffix, k);
+  }
 }
 
 // Local Variables:
