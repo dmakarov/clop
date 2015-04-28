@@ -107,3 +107,7 @@ struct Argument
     return format("%s, %s, %s, %s, %s, %s, %s, %s", name, type, qual, size, back, skip, is_macro, address);
   }
 }
+
+// Local Variables:
+// compile-command: "../../tests/test_module clop.ct.symbol"
+// End:

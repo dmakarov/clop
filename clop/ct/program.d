@@ -939,6 +939,11 @@ struct Program
 
 } // Program struct
 
+unittest
+{
+}
+
 // Local Variables:
+// compile-command: "../../tests/test_module clop.ct.program"
 // flycheck-dmd-include-path: ("~/.dub/packages/pegged-0.2.1")
 // End:

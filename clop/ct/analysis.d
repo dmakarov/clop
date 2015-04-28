@@ -650,3 +650,7 @@ create_mul_expr( ParseTree a, ParseTree b, string op )
        [ParseTree( "CLOP.UnaryExpr", true, p2, i, s, e,
           [ParseTree( "CLOP.PrimaryExpr", true, p2, i, s, e, [b] )] )] )] );
 }
+
+// Local Variables:
+// compile-command: "../../tests/test_module clop.ct.analysis"
+// End:

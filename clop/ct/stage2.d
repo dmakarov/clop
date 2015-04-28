@@ -142,7 +142,7 @@ template Backend(TList...)
       {
       case "CLOP":
         {
-          version (UNITTEST_DEBUG) writefln("clop.ct.stage2.Backend.lower_%s case CLOP", suffix);
+          version (UNITTEST_DEBUG) writefln("UT:%s in Backend.lower case CLOP", suffix);
           lower(t.children[0]);
           break;
         }
@@ -211,13 +211,16 @@ template Backend(TList...)
         }
       case "CLOP.StatementList":
         {
-          foreach (c; t.children)
+          version (UNITTEST_DEBUG) writefln("UT:%s in Backend.lower case CLOP.StatementList", suffix);
+          foreach (i, c; t.children)
+          {
+            version (UNITTEST_DEBUG) writefln("UT:%s    child %s: %s", suffix, i, c.matches);
             lower(c);
+          }
           break;
         }
       case "CLOP.Statement":
         {
-          version (UNITTEST_DEBUG) writefln("clop.ct.stage2.Backend.lower_%s case CLOP.Statement %s", suffix, t.matches);
           lower(t.children[0]);
           break;
         }

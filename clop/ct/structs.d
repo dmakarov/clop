@@ -90,3 +90,7 @@ private:
 unittest
 {
 }
+
+// Local Variables:
+// compile-command: "../../tests/test_module clop.ct.structs"
+// End:
