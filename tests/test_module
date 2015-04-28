@@ -3,15 +3,22 @@
 mypath=${0%/*}
 pushd $mypath
 module=${1}
-source=${module//.//}
-srcdir=../${source%/*}
-testnm=${source##*/}_test
+srcpth=${module//.//}
+srcdir=../${srcpth%/*}
+testnm=${srcpth##*/}_test
 rm -f ${testnm}{,.d,.o}
 echo "module ${testnm};"      > ${testnm}.d
 echo "import std.typetuple;" >> ${testnm}.d
 inputs=""
 for i in $(ls ${srcdir}/*.d) ; do
-    inputs="${inputs} ${i}"
+    obj=${i/.d/.o}
+    obj=${obj##*/}
+    if [ ${i} != ../${srcpth}.d ]; then
+        dmd -w -I.. -I~/.dub/packages/{derelict-util-1.9.1/source,derelict-cl-1.2.2/source,pegged-0.2.1}                                   -c ${i}
+    else
+        dmd -w -I.. -I~/.dub/packages/{derelict-util-1.9.1/source,derelict-cl-1.2.2/source,pegged-0.2.1} -unittest -version=UNITTEST_DEBUG -c ${i}
+    fi
+    inputs="${inputs} ${obj}"
     import=${i#*/}
     import=${import%.d}
     import=${import//\//.}
@@ -41,7 +48,8 @@ if [ ! -f ../lib/libclop_runtime.a ] ; then
     dub build --build=debug :runtime
     popd
 fi
-dmd -unittest -w -I.. -I~/.dub/packages/{derelict-cl-1.2.2/source,pegged-0.2.1} \
+
+dmd -unittest -w -I.. -I~/.dub/packages/{derelict-util-1.9.1/source,derelict-cl-1.2.2/source,pegged-0.2.1} \
     -version=UNITTEST_DEBUG -of${testnm} ${testnm}.d ${inputs} \
     ~/.dub/packages/{pegged-0.2.1/libpegged.a,derelict-cl-1.2.2/lib/libDerelictCL.a,derelict-util-1.9.1/lib/libDerelictUtil.a} \
     ../lib/libclop_runtime.a -L-ldl
