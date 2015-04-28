@@ -54,7 +54,6 @@ if [ ! -f ../lib/libclop_runtime.a ] ; then
     popd
 fi
 
-echo "status $status"
 if [ $((status)) = 0 ]; then
     dmd -unittest -w -I.. -I~/.dub/packages/{derelict-util-1.9.1/source,derelict-cl-1.2.2/source,pegged-0.2.1} \
         -version=UNITTEST_DEBUG -of${testnm} ${testnm}.d ${inputs} \
@@ -63,7 +62,7 @@ if [ $((status)) = 0 ]; then
     let excode=$?
     let status=$((status||excode))
 fi
-echo "status $status"
+# finally run the unit tests, if everything compiled without errors.
 if [ $((status)) = 0 ]; then
     ./${testnm}
     let status=$?
