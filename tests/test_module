@@ -36,17 +36,6 @@ void main()
   import std.stdio;
   writeln("All unit tests have been run successfully.");
 }
-shared static this()
-{
-  version (Have_tested)
-  {
-    import tested;
-    import core.runtime;
-    import std.exception;
-    Runtime.moduleUnitTester = () => true;
-    enforce(runUnitTests!allModules(new ConsoleTestResultWriter), "Unit tests failed.");
-  }
-}
 EOF
 if [ ! -f ../lib/libclop_runtime.a ] ; then
     pushd ..
@@ -55,8 +44,8 @@ if [ ! -f ../lib/libclop_runtime.a ] ; then
 fi
 
 if [ $((status)) = 0 ]; then
-    dmd -unittest -w -I.. -I~/.dub/packages/{derelict-util-1.9.1/source,derelict-cl-1.2.2/source,pegged-0.2.1} \
-        -version=UNITTEST_DEBUG -of${testnm} ${testnm}.d ${inputs} \
+    dmd -w -I.. -I~/.dub/packages/{derelict-util-1.9.1/source,derelict-cl-1.2.2/source,pegged-0.2.1} \
+        -unittest -version=UNITTEST_DEBUG -of${testnm} ${testnm}.d ${inputs} \
         ~/.dub/packages/{pegged-0.2.1/libpegged.a,derelict-cl-1.2.2/lib/libDerelictCL.a,derelict-util-1.9.1/lib/libDerelictUtil.a} \
         ../lib/libclop_runtime.a -L-ldl
     let excode=$?
