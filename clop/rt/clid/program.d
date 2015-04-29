@@ -1,5 +1,7 @@
 
 import std.container.array;
+import std.stdio;
+import std.file;
 
 import derelict.opencl.cl;
 import clop.rt.clid.kernel;
@@ -16,32 +18,39 @@ class Program {
 		if(program is null || program.length == 0)
 			return false;
 
+  DerelictCL.load();
 		cl_int err;
 
 		cl_ulong[] empty;
-		_program = clCreateProgramWithSource(_context.implementation(), cast(uint)1, &cast(const char *)program.ptr, cast(const cl_ulong *)empty.ptr, &err);
+
+		size_t lengths = program.length;
+
+
+		char *[] programs = [cast(char *)program.ptr];
+
+		_program = clCreateProgramWithSource(_context.implementation(), 1, programs.ptr, &lengths, &err);
 		CLError ret = new CLError(err);
 		if(!ret.success()) {
 			return false;
 		}
 
 		string args = flags ~ " -Werror";
-		size_t nDevices = _context.devices().size();
+		size_t nDevices = _context.devices().length;
 		for(size_t i = 0; i < nDevices; ++i) {
-
 			cl_device_id dev = _context.device(i).getId();
-			Error ret = clBuildProgram(_program, 1, &dev, args.ptr, null, null );
+			ret = new CLError(clBuildProgram(_program, 1, &dev, args.ptr, null, null ));
 			if(!ret.success()) {
 				size_t diagnosticSize;
 
 
 				clGetProgramBuildInfo(_program, dev, CL_PROGRAM_BUILD_LOG, 0, null, &diagnosticSize);
 
-				string diagnostic;
-				diagnostic.resize(diagnosticSize);
+				char[] diagnostic;
+				diagnostic.length = diagnosticSize;
 
 
-				clGetProgramBuildInfo(_program, dev, CL_PROGRAM_BUILD_LOG, diagnosticSize, diagnostic, null);
+
+				clGetProgramBuildInfo(_program, dev, CL_PROGRAM_BUILD_LOG, diagnosticSize, diagnostic.ptr, empty.ptr);
 
 				writeln(diagnostic);
 				return false;
@@ -64,9 +73,9 @@ class Program {
 	Kernel createKernel(string name)
 	{
 		cl_int err;
-		Kernel kernel = new Kernel( clCreateKernel(_program, name.c_str(), &err) );
+		Kernel kernel = new Kernel( clCreateKernel(_program, name.ptr, &err) );
 		if(!CLError.Check(err)) {
-			writeln("[Error] unable to create kernel\n");
+			writeln("[CLError] unable to create kernel\n");
 			return null;
 		}
 

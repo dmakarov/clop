@@ -1,14 +1,20 @@
 module clop.rt.clid.queue;
 
 import std.array;
+import std.stdio;
 import derelict.opencl.cl;
 import clop.rt.clid.kernel;
+import clop.rt.clid.clerror;
+import clop.rt.clid.context;
 
 
 class Queue {
 	public
 	
-	this(const cl_command_queue queue);
+	this(cl_command_queue queue)
+	{
+		_queue = queue;
+	}
 	
 
 	~this()
@@ -18,33 +24,62 @@ class Queue {
 
 	bool enqueue(Kernel kernel)
 	{
-		size_t * gws = NULL;
-		size_t * lws = NULL;
+		cl_ulong[] gws = null;
+		cl_ulong[] lws = null;
 
-		if(!kernel.localWorkSize().empty()) {
-			lws = &kernel.localWorkSize()[0];
+		if(!kernel.localWorkSize().empty) {
+			lws = kernel.localWorkSize();
 		}
 
-		if(!kernel.globalWorkSize().empty()) {
-			gws = &kernel.globalWorkSize()[0];
+		if(!kernel.globalWorkSize().empty) {
+			gws = kernel.globalWorkSize();
 		}
 
-		Error err = clEnqueueNDRangeKernel(_queue,
+
+		cl_ulong[] empty0;
+		void[] empty1;
+		void[][] empty2;
+
+		cl_event event;
+		CLError err = new CLError( 
+			clEnqueueNDRangeKernel(
+			_queue,
 			kernel.implementation(),
-			kernel.nWorkDims(),
-			NULL,
-			gws,
-			lws,
-			0, NULL, NULL);
+			cast(cl_uint) kernel.nWorkDims(),
+			null,
+			gws.ptr,
+			lws.ptr,
+			0, 
+			null, 
+			&event) 
+		);
 
 		return err.success();
 	}
 
-	bool enqueue(Kernel kernel, cl_event[] eventsToWait, ref cl_event event);
-	bool finish();
+	//bool enqueue(Kernel kernel, cl_event[] eventsToWait, ref cl_event event)
+	//{
+	//	assert(false);
+
+	//	//Error err = clEnqueueNDRangeKernel(_queue,
+	//	//	kernel.implementation(),
+	//	//	kernel.nWorkDims(),
+	//	//	NULL,
+	//	//	&kernel.globalWorkSize()[0],
+	//	//	&kernel.localWorkSize()[0],
+	//	//	eventsToWait.size(), &eventsToWait[0], &event);
+
+	//	//return err.success();
+	//	return false;
+	//}
+	
+	bool finish()
+	{
+		return CLError.Check(clFinish(_queue));
+	}
 
 
-	cl_command_queue implementation() const {
+	cl_command_queue implementation() {
 		return _queue;
 	}
 
@@ -53,7 +88,7 @@ class Queue {
 		static Queue instance = null;
 		if(instance is null) {
 			writeln("Creating Queue instance");
-			instance = new Queue();
+			instance =  Context.GetDefault().queue(0);
 		}
 
 		return instance;

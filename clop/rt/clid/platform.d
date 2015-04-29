@@ -72,7 +72,11 @@ class Platform  {
 
 	static Platform GetDefault()
 	{
-		static Platform def = new Platform();
+		static Platform def = null;
+		if(def is null) {
+			def = new Platform();
+		}
+		
 		return def;
 	}
 

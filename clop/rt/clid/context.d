@@ -60,12 +60,7 @@ class Context {
 	{
 		return _devices;
 	}
-
-	Array!Device devices() 
-	{
-		return _devices;
-	}
-
+	
 	Device device(size_t index) 
 	{
 		return _devices[index];
