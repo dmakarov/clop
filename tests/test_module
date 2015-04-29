@@ -14,12 +14,14 @@ let status=0
 for i in $(ls ${srcdir}/*.d) ; do
     obj=${i/.d/.o}
     obj=${obj##*/}
-    if [ ${i} != ../${srcpth}.d ]; then
-        dmd -w -I.. -I~/.dub/packages/{derelict-util-1.9.1/source,derelict-cl-1.2.2/source,pegged-0.2.1}                                   -c ${i}
+    if [ ${i} == ../${srcpth}.d ]; then
+        echo "Compile ${i}..."
+        dmd -w -I.. -I~/.dub/packages/{derelict-util-1.9.1/source,derelict-cl-1.2.2/source,pegged-0.2.1} -unittest -version=UNITTEST_DEBUG -c ${i}
         let excode=$?
         let status=$((status||excode))
-    else
-        dmd -w -I.. -I~/.dub/packages/{derelict-util-1.9.1/source,derelict-cl-1.2.2/source,pegged-0.2.1} -unittest -version=UNITTEST_DEBUG -c ${i}
+    elif [ ${i} -nt ${obj} ]; then
+        echo "Compile ${i}..."
+        dmd -w -I.. -I~/.dub/packages/{derelict-util-1.9.1/source,derelict-cl-1.2.2/source,pegged-0.2.1}                                   -c ${i}
         let excode=$?
         let status=$((status||excode))
     fi
@@ -37,13 +39,15 @@ void main()
   writeln("All unit tests have been run successfully.");
 }
 EOF
-if [ ! -f ../lib/libclop_runtime.a ] ; then
+
+if [ $((status)) = 0 ] && [ ! -f ../lib/libclop_runtime.a ] ; then
     pushd ..
     dub build --build=debug :runtime
     popd
 fi
 
 if [ $((status)) = 0 ]; then
+    echo "Compile ${testnm}.d ${inputs}..."
     dmd -w -I.. -I~/.dub/packages/{derelict-util-1.9.1/source,derelict-cl-1.2.2/source,pegged-0.2.1} \
         -unittest -version=UNITTEST_DEBUG -of${testnm} ${testnm}.d ${inputs} \
         ~/.dub/packages/{pegged-0.2.1/libpegged.a,derelict-cl-1.2.2/lib/libDerelictCL.a,derelict-util-1.9.1/lib/libDerelictUtil.a} \
@@ -57,6 +61,7 @@ if [ $((status)) = 0 ]; then
     let status=$?
 fi
 popd
+times
 exit ${status}
 
 # Local Variables:
