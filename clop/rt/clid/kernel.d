@@ -8,46 +8,94 @@ import clop.rt.clid.arglist;
 
 
 class Kernel {
-public
+	public
 	bool call(ArgList args, Queue queue = Queue.GetDefault())
 	{
+		bool ok = args.commit(_context, queue);
+		if(!ok) return false;
+		
+		ok = args.setTo(this);
+		if(!ok) return false;
 
+		return queue.enqueue(this);
 	}
 
-	cl_ulong getPrefferedWorkGroupSizeMultiple(const cl_device_id devId = Context.GetDefault().device(0).getId() )
+	cl_ulong getPrefferedWorkGroupSizeMultiple(cl_device_id devId = Context.GetDefault().device(0).getId() )
 	{
 		cl_ulong wgSize;
-		clGetKernelWorkGroupInfo(this.implementation(), devId, CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE, sizeof(size_t), wgSize, NULL);
+		ulong[] empty;
+		clGetKernelWorkGroupInfo(this.implementation(), devId, cast(int)CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE, ulong.sizeof, cast(void *)&wgSize, empty.ptr);
 		return wgSize;
 	}
 
-	void setGlobalWorkSize(const size_t globalWorkSize0);
-	void setLocalWorkSize(const size_t localWorkGroups0);
-
-	void setGlobalWorkSize(const size_t globalWorkSize0,const size_t globalWorkSize1);
-	void setLocalWorkSize(const size_t localWorkGroups0, const size_t localWorkGroups1);
-
-	void setGlobalWorkSize(const size_t globalWorkSize0,const size_t globalWorkSize1, const size_t globalWorkSize2);
-	void setLocalWorkSize(const size_t localWorkGroups0, const size_t localWorkGroups1, const size_t localWorkGroups2);
-
-
-	size_t nWorkDims() const;
-
-	this(const cl_kernel kernel)
+	void setGlobalWorkSize(ulong globalWorkSize0)
 	{
-		_kernel = kernel;
-		 _localWorkSize = null;
-		 _globalWorkSize = null;
+		_globalWorkSize.length = 1;
+		_globalWorkSize[0] = globalWorkSize0;
 	}
 
-	~this();
+	void setLocalWorkSize(ulong localWorkSize0)
+	{
+		_localWorkSize.length = 1;
+		_localWorkSize[0] = localWorkSize0;
 
-	size_t[] localWorkSize()
+	}
+
+	void setGlobalWorkSize(ulong globalWorkSize0,ulong globalWorkSize1)
+	{
+		_globalWorkSize.length = 2;
+		_globalWorkSize[0] = globalWorkSize0;
+		_globalWorkSize[1] = globalWorkSize1;
+	}
+
+	void setLocalWorkSize(ulong localWorkSize0, ulong localWorkSize1)
+	{	
+		_localWorkSize.length = 2;
+		_localWorkSize[0] = localWorkSize0;
+		_localWorkSize[1] = localWorkSize1;
+	}
+
+	void setGlobalWorkSize(ulong globalWorkSize0,ulong globalWorkSize1, ulong globalWorkSize2)
+	{
+		_globalWorkSize.length = 3;
+		_globalWorkSize[0] = globalWorkSize0;
+		_globalWorkSize[1] = globalWorkSize1;
+		_globalWorkSize[2] = globalWorkSize2;
+	}
+
+	void setLocalWorkSize(ulong localWorkSize0, ulong localWorkSize1, ulong localWorkSize2)
+	{
+		_localWorkSize.length = 3;
+		_localWorkSize[0] = localWorkSize0;
+		_localWorkSize[1] = localWorkSize1;
+		_localWorkSize[2] = localWorkSize2;
+	}
+
+	ulong nWorkDims() 
+	{
+		assert(_localWorkSize.length == 0 || _localWorkSize.length == _globalWorkSize.length);
+		return _globalWorkSize.length;
+	}
+
+	~this()
+	{
+		clReleaseKernel(_kernel);
+	}
+	
+
+	this(cl_kernel kernel)
+	{
+		_kernel = kernel;
+		_localWorkSize = null;
+		_globalWorkSize = null;
+	}
+
+	ulong[] localWorkSize()
 	{
 		return _localWorkSize;
 	}
 
-	size_t[] globalWorkSize()
+	ulong[] globalWorkSize()
 	{
 		return _globalWorkSize;
 	}
@@ -72,19 +120,19 @@ public
 	}
 
 
-private
+	private
 	cl_kernel _kernel;
-	size_t[] _localWorkSize;
-	size_t[] _globalWorkSize;
+	ulong[] _localWorkSize;
+	ulong[] _globalWorkSize;
 	Context _context;
 
 
-	IMemory makeMemory(Arg)(Arg arg) const
+	IMemory makeMemory(Arg)(Arg arg) 	
 	{
 		return MakeMemory(arg);
 	}
 
-	bool fillList(Arg)(ArgList al, const size_t index, Arg arg)
+	bool fillList(Arg)(ArgList al, ulong index, Arg arg)
 	{
 		auto mem = makeMemory(arg);
 		if(!mem.commit(_context)) return false;
@@ -92,7 +140,7 @@ private
 		return true;
 	}
 
-	bool fillList(First, Rest...)(ArgList al, const size_t index, First first, Rest rest)
+	bool fillList(First, Rest...)(ArgList al, ulong index, First first, Rest rest)
 	{
 		auto mem = makeMemory(first);
 		if(!mem.commit(_context)) return false;

@@ -12,7 +12,7 @@ public
 
 	cl_mem implementation() const 
 	{
-		IMemory that = const_cast!IMemory(this);
+		IMemory that = cast(IMemory)(this);
 		return that.implementation();
 	}
 
@@ -24,7 +24,7 @@ public
 
 	size_t sizeOfMemory() const 
 	{
-		return sizeof(implementation());
+		return implementation().sizeof;
 	}
 
 	void * pointer()

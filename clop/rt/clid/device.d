@@ -1,58 +1,63 @@
 module clop.rt.clid.device;
+
+import std.stdio;
+import std.conv;
 import derelict.opencl.cl;
 
 class Device {
 public:
-	cl_device_type getType() const
+	cl_device_type getType() 
 	{
 		cl_device_type ret;
-		cl_int ok = clGetDeviceInfo(_id, CL_DEVICE_TYPE, sizeof(cl_device_type), &ret, NULL);
+
+		ulong[] empty;
+		cl_int ok = clGetDeviceInfo(_id, CL_DEVICE_TYPE, cl_device_type.sizeof, &ret, empty.ptr);
 		checkValid(ok);
 		return ret;
 	}
 
 
-	cl_device_id getId() const
+	cl_device_id getId() 
 	{
 		return _id;
 	}
 
 
-	bool isGPU() const
+	bool isGPU() 
 	{
 		return getType() == CL_DEVICE_TYPE_GPU;
 	}
 
-	bool isCPU() const
+	bool isCPU() 
 	{
 		return getType() == CL_DEVICE_TYPE_CPU;
 	}
 
-	bool isAPU() const
+	bool isAPU() 
 	{
 		return getType() == CL_DEVICE_TYPE_ACCELERATOR;
 	}
 
 
-	void describe() const
+	void describe() 
 	{
-		writeln(stringInfoToBuffer("DEVICE_NAME", CL_DEVICE_NAME));
-		writeln(stringInfoToBuffer("DEVICE_VENDOR", CL_DEVICE_VENDOR));
-		writeln(stringInfoToBuffer("DEVICE_VERSION", CL_DEVICE_VERSION));
-		writeln(stringInfoToBuffer("DRIVER_VERSION", CL_DRIVER_VERSION));
-		writeln(infoToBuffer!cl_uint("DEVICE_MAX_COMPUTE_UNITS", CL_DEVICE_MAX_COMPUTE_UNITS));
-		writeln(infoToBuffer!cl_uint("DEVICE_MAX_CLOCK_FREQUENCY", CL_DEVICE_MAX_CLOCK_FREQUENCY));
-		writeln(infoToBuffer!cl_ulong("DEVICE_GLOBAL_MEM_SIZE", CL_DEVICE_GLOBAL_MEM_SIZE));
-		writeln(infoToBuffer!cl_ulong("DEVICE_MAX_MEM_ALLOC_SIZE", CL_DEVICE_MAX_MEM_ALLOC_SIZE));
-		writeln(infoToBuffer!cl_ulong("CL_DEVICE_MAX_WORK_GROUP_SIZE", CL_DEVICE_MAX_WORK_GROUP_SIZE));
+		writeln(info2String("DEVICE_NAME", CL_DEVICE_NAME));
+		writeln(info2String("DEVICE_VENDOR", CL_DEVICE_VENDOR));
+		writeln(info2String("DEVICE_VERSION", CL_DEVICE_VERSION));
+		writeln(info2String("DRIVER_VERSION", CL_DRIVER_VERSION));
+		writeln(info2StringWithType!cl_uint("DEVICE_MAX_COMPUTE_UNITS", CL_DEVICE_MAX_COMPUTE_UNITS));
+		writeln(info2StringWithType!cl_uint("DEVICE_MAX_CLOCK_FREQUENCY", CL_DEVICE_MAX_CLOCK_FREQUENCY));
+		writeln(info2StringWithType!cl_ulong("DEVICE_GLOBAL_MEM_SIZE", CL_DEVICE_GLOBAL_MEM_SIZE));
+		writeln(info2StringWithType!cl_ulong("DEVICE_MAX_MEM_ALLOC_SIZE", CL_DEVICE_MAX_MEM_ALLOC_SIZE));
+		writeln(info2StringWithType!cl_ulong("CL_DEVICE_MAX_WORK_GROUP_SIZE", CL_DEVICE_MAX_WORK_GROUP_SIZE));
 
 
 		cl_device_fp_config prec;
-		checkValid(clGetDeviceInfo(_id, CL_DEVICE_DOUBLE_FP_CONFIG, sizeof(cl_device_fp_config), &prec, NULL));
+		checkValid(clGetDeviceInfo(_id, CL_DEVICE_DOUBLE_FP_CONFIG, cl_device_fp_config.sizeof, &prec, null));
 		writeln(" CL_DEVICE_DOUBLE_FP_CONFIG = %d\n", ( (CL_FP_FMA | CL_FP_ROUND_TO_NEAREST | CL_FP_ROUND_TO_ZERO | CL_FP_ROUND_TO_INF | CL_FP_INF_NAN | CL_FP_DENORM) == prec ));
 	}
 
-	bool checkValid(const cl_int ret) const
+	bool checkValid( cl_int ret) 
 	{
 		if(CL_INVALID_DEVICE == ret) {
 			writeln("CL_INVALID_DEVICE");
@@ -71,31 +76,34 @@ public:
 	}
 
 
-	void toString(const string infoName, cl_device_info info) const
+	string info2String(string infoName, cl_device_info info) 
 	{
 		static const int MAX_BUFFER_SIZE = 2048;
 		char[MAX_BUFFER_SIZE] buffer;
-		checkValid(clGetDeviceInfo(_id, info, sizeof(buffer), buffer, NULL));
-		return + infoName + " = " + buffer + "\n";
+		ulong[] empty;
+		checkValid(clGetDeviceInfo(_id, info, buffer.sizeof, cast(void *)buffer, empty.ptr));
+		string str =text(buffer);
+		return infoName ~ " = " ~ str ~ "\n";
 	}
 
 
 
-	string toStringWithType(T)(const string infoName, cl_device_info info) const
+	string info2StringWithType(T)(string infoName, cl_device_info info) 
 	{
 		T buf;
-		checkValid(clGetDeviceInfo(getId(), info, sizeof(buf), buf, NULL));
-		return infoName + " = " + buf + "\n";
+		ulong[] empty;
+		checkValid(clGetDeviceInfo(getId(), info, buf.sizeof, cast(void *)&buf, empty.ptr));
+		return infoName ~ " = " ~ text(buf) ~ "\n";
 	}
 
-	this(const cl_device_id id)
+	this( cl_device_id id)
 	{
 		_id = id;
 	}
 
 	this()
 	{
-		_id = 0;
+		_id = null;
 	}
 
 	~this()

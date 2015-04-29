@@ -8,6 +8,7 @@ import clop.rt.clid.context;
 import clop.rt.clid.queue;
 import clop.rt.clid.kernel;
 import clop.rt.clid.clerror;
+import clop.rt.clid.platform;
 
 
 
@@ -26,7 +27,7 @@ class ArgList {
 
 	void arg(size_t argNum, IMemory arg)
 	{
-		size_t nArgs =  _args.length();
+		uint nArgs =  cast(uint)_args.length();
 		if(argNum >= nArgs) {
 			_args.length(argNum+1);
 		}
@@ -49,7 +50,7 @@ class ArgList {
 	bool setTo(Kernel kernel)
 	{
 		bool ok = true;
-		for(size_t argNum = 0; argNum < nArgs(); ++argNum) {
+		for(uint argNum = 0; argNum < nArgs(); ++argNum) {
 			ok = setTo(kernel, argNum);
 		}
 
@@ -86,10 +87,10 @@ class ArgList {
 		return ok;
 	}
 
-	bool setTo(Kernel kernel, size_t argNum)
+	bool setTo(Kernel kernel, uint argNum)
 	{
 		IMemory mem = _args[argNum];
-		CLError err = clSetKernelArg(kernel.implementation(), argNum, mem.sizeOfMemory(), mem.pointer());
+		CLError err = new CLError(clSetKernelArg(kernel.implementation(), argNum, mem.sizeOfMemory(), mem.pointer()));
 		if(!err.success()) {
 			writeln("[Error] CLKernel setting arg %d", argNum);
 		}
