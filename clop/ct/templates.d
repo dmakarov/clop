@@ -24,6 +24,8 @@
  */
 module clop.ct.templates;
 
+import pegged.grammar;
+
 enum
 
 template_clop_unit = q{
@@ -128,11 +130,44 @@ template_antidiagonal_loop_suffix = "
 
 template_2d_index = "(%s) * (%s) + (%s)";
 
+
 struct TemplateExpansion
 {
+  private static string[string] snippets;
+
+  private static immutable reduce_snippet = q{
+    barrier(CLK_LOCAL_MEM_FENCE);
+    int clop_local_thread_id = get_local_id(0);
+    for (int i = 1; i < ${DATA_ARRAY_SIZE}; i = i * 2)
+    {
+      if (clop_local_thread_id % (2 * i) == 0)
+        ${DATA_ARRAY}[clop_local_thread_id]
+                       = func(${DATA_ARRAY}[clop_local_thread_id    ],
+                              ${DATA_ARRAY}[clop_local_thread_id + i]);
+      barrier(CLK_LOCAL_MEM_FENCE);
+    }
+    if (clop_local_thread_id == 0)
+      result = func(${INITIAL_VALUE}, ${DATA_ARRAY}[0]);
+  };
+
+  static this()
+  {
+    snippets["reduce"] = reduce_snippet;
+  }
+
+  immutable string the_snippet;
+
+  this(immutable string s)
+  {
+    the_snippet = s;
+  }
+  string instantiate_template(string function_literal, ParseTree argument_list)
+  {
+    return snippets[the_snippet];
+  }
 }
 
 enum ExpansionPattern : TemplateExpansion
 {
-  reduce = TemplateExpansion()
+  reduce = TemplateExpansion("reduce")
 }
