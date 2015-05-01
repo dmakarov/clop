@@ -24,6 +24,8 @@
  */
 module clop.ct.templates;
 
+version (UNITTEST_DEBUG) import std.stdio;
+import std.format, std.string, std.variant;
 import pegged.grammar;
 
 enum
@@ -130,44 +132,84 @@ template_antidiagonal_loop_suffix = "
 
 template_2d_index = "(%s) * (%s) + (%s)";
 
-
-struct TemplateExpansion
+struct ReduceSnippet
 {
-  private static string[string] snippets;
-
   private static immutable reduce_snippet = q{
     barrier(CLK_LOCAL_MEM_FENCE);
     int clop_local_thread_id = get_local_id(0);
-    for (int i = 1; i < ${DATA_ARRAY_SIZE}; i = i * 2)
+    for (int i = 1; i < ${a.length}; i = i * 2)
     {
       if (clop_local_thread_id % (2 * i) == 0)
-        ${DATA_ARRAY}[clop_local_thread_id]
-                       = func(${DATA_ARRAY}[clop_local_thread_id    ],
-                              ${DATA_ARRAY}[clop_local_thread_id + i]);
+        ${a}[clop_local_thread_id]
+              = ${func}(${b}[clop_local_thread_id    ],
+                        ${b}[clop_local_thread_id + i]);
       barrier(CLK_LOCAL_MEM_FENCE);
     }
     if (clop_local_thread_id == 0)
-      result = func(${INITIAL_VALUE}, ${DATA_ARRAY}[0]);
+      result = func(${a}, ${b}[0]);
   };
 
-  static this()
-  {
-    snippets["reduce"] = reduce_snippet;
-  }
-
-  immutable string the_snippet;
-
-  this(immutable string s)
-  {
-    the_snippet = s;
-  }
   string instantiate_template(string function_literal, ParseTree argument_list)
   {
-    return snippets[the_snippet];
+    version (UNITTEST_DEBUG)
+    {
+      writefln("UT: ReduceSnippet.instantiate_template: %s", argument_list.matches);
+    }
+    return reduce_snippet;
   }
 }
 
-enum ExpansionPattern : TemplateExpansion
+struct MapSnippet
 {
-  reduce = TemplateExpansion("reduce")
+  private static immutable map_snippet = q{
+  };
+
+  string instantiate_template(string function_literal, ParseTree argument_list)
+  {
+    version (UNITTEST_DEBUG)
+    {
+      writefln("UT: MapSnippet.instantiate_template: %s", argument_list.matches);
+    }
+    return map_snippet;
+  }
+}
+
+// snippet container is wrapper around other snippet types, so that
+// specific snippets can be used without knowing their respective
+// types.
+struct SnippetContainer(T)
+{
+  private T SnippetContainer_payload;
+
+  this(T bind_to)
+  {
+    SnippetContainer_payload = bind_to;
+  }
+
+  @property T SnippetContainer_get()
+  {
+    return SnippetContainer_payload;
+  }
+
+  alias SnippetContainer_get this;
+
+  string binary_function(string function_literal, string type = "float", string a = "a", string b = "b")
+  {
+    // FIXME: generate unique function name
+    auto name = "clop_binary_function";
+    auto func = chomp(chompPrefix(function_literal, `"`), `"`);
+    auto definition = format(q{
+        %s %s(%s %s, %s %s)
+        {return (%s);}
+      }, type, name, type, a, type, b, func);
+    return definition;
+  }
+}
+
+// I need this type to be able to check that there is a member with a
+// specific name.  In typed enum all members must be of the same type
+enum ExpansionPattern : Algebraic!(SnippetContainer!ReduceSnippet, SnippetContainer!MapSnippet)
+{
+  reduce = Algebraic!(SnippetContainer!ReduceSnippet, SnippetContainer!MapSnippet)(SnippetContainer!ReduceSnippet()),
+  map    = Algebraic!(SnippetContainer!ReduceSnippet, SnippetContainer!MapSnippet)(SnippetContainer!MapSnippet())
 }
