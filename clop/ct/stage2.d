@@ -35,7 +35,7 @@ import clop.ct.parser;
 import clop.ct.program;
 import clop.ct.structs;
 import clop.ct.symbol;
-import clop.ct.templates;
+static import clop.ct.templates;
 import clop.ct.transform;
 import clop.rt.ndarray;
 
@@ -536,9 +536,19 @@ template Backend(TList...)
               t.children[0].children.length > 1 &&
               t.children[0].children[1].name == "CLOP.StringLiteral")
           {
+            switch (t.children[0].children[0].matches[0])
+            {
+            case "reduce":
+              recognized_template = true;
+              break;
+            default:
+              recognized_template = false;
+            }
+            /+
             foreach (a; __traits(allMembers, ExpansionPattern))
               if (a == t.children[0].children[0].matches[0])
                 recognized_template = true;
+            +/
           }
           if (!recognized_template)
             analyze(t.children[0]);

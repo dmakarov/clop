@@ -177,8 +177,10 @@ struct MapSnippet
 // snippet container is wrapper around other snippet types, so that
 // specific snippets can be used without knowing their respective
 // types.
-struct SnippetContainer(T)
+struct SnippetContainer
 {
+  ///////////////////////////////////////////////////////////////////////////////////////
+  /+
   private T SnippetContainer_payload;
 
   this(T bind_to)
@@ -192,7 +194,8 @@ struct SnippetContainer(T)
   }
 
   alias SnippetContainer_get this;
-
+  +/
+  ///////////////////////////////////////////////////////////////////////////////////////
   string binary_function(string function_literal, string type = "float", string a = "a", string b = "b")
   {
     // FIXME: generate unique function name
@@ -208,8 +211,8 @@ struct SnippetContainer(T)
 
 // I need this type to be able to check that there is a member with a
 // specific name.  In typed enum all members must be of the same type
-enum ExpansionPattern : Algebraic!(SnippetContainer!ReduceSnippet, SnippetContainer!MapSnippet)
+enum
 {
-  reduce = Algebraic!(SnippetContainer!ReduceSnippet, SnippetContainer!MapSnippet)(SnippetContainer!ReduceSnippet()),
-  map    = Algebraic!(SnippetContainer!ReduceSnippet, SnippetContainer!MapSnippet)(SnippetContainer!MapSnippet())
+  reduce = ReduceSnippet(),
+  map    = MapSnippet()
 }

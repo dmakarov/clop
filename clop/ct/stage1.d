@@ -24,7 +24,8 @@
  */
 module clop.ct.stage1;
 
-import std.format, clop.ct.parser, clop.ct.symbol, clop.ct.templates;
+import std.format, clop.ct.parser, clop.ct.symbol;
+static import clop.ct.templates;
 
 version (UNITTEST_DEBUG)
 {
@@ -314,9 +315,19 @@ struct Frontend
             t.children[0].children.length > 1 &&
             t.children[0].children[1].name == "CLOP.StringLiteral")
         {
+          switch (t.children[0].children[0].matches[0])
+          {
+          case "reduce":
+            recognized_template = true;
+            break;
+          default:
+            recognized_template = false;
+          }
+          /+
           foreach (a; __traits(allMembers, ExpansionPattern))
             if (a == t.children[0].children[0].matches[0])
               recognized_template = true;
+          +/
         }
         if (!recognized_template)
           analyze(t.children[0]);

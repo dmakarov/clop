@@ -29,19 +29,15 @@ import std.container;
 import std.conv;
 import std.string;
 import std.traits;
+version (UNITTEST_DEBUG) import std.stdio;
 
 import pegged.grammar;
 
 import clop.ct.analysis;
 import clop.ct.structs;
 import clop.ct.symbol;
-import clop.ct.templates;
+static import clop.ct.templates;
 import clop.ct.transform;
-
-version (UNITTEST_DEBUG)
-{
-  import std.stdio;
-}
 
 /++
  +  The container of all information related to a specific variant
@@ -61,7 +57,7 @@ struct Program
     auto kernel = "macros ~ q{" ~ external ~ "} ~ \n"
                 ~ "          \"__kernel void " ~ kname
                 ~ "(\" ~ kernel_params ~ \")\" ~q{\n" ~ kbody ~ "          }";
-    auto clhost = format(template_create_opencl_kernel,
+    auto clhost = format(clop.ct.templates.template_create_opencl_kernel,
                          suffix, suffix, suffix, suffix, suffix,
                          suffix, kernel_parameter_list_code, suffix, kname , kernel);
     clhost ~= kernel_set_args_code
@@ -69,7 +65,7 @@ struct Program
             ~ generate_code_to_pull_from_device()
             ~ generate_code_to_release_buffers();
     auto diagnostics = format("static if (\"%s\" != \"\")\n  pragma (msg, \"%s\");\n", errors, errors);
-    return diagnostics ~ format(template_clop_unit, clhost, toString());
+    return diagnostics ~ format(clop.ct.templates.template_clop_unit, clhost, toString());
   }
 
   @property
@@ -101,6 +97,7 @@ struct Program
   bool use_shadow = false; ///
   string kernel_parameter_list_code;
   string kernel_set_args_code;
+  uint temporary_id;
 
   /++
    +
@@ -355,7 +352,7 @@ struct Program
         // shared memory array name
         auto sma = generate_shared_memory_variable(v);
         parameters ~= Argument(sma, "", "__local", format("(%s) * (%s)", bsz0, bsz1), gma);
-        s ~= format(template_shared_memory_data_init,
+        s ~= format(clop.ct.templates.template_shared_memory_data_init,
                      li1, li1, bsz1, li1,
                      li0, li0, bsz0, li0, lsz0,
                      li0, tid0, bsz0,
@@ -368,11 +365,11 @@ struct Program
 
         auto iv0 = v ~ "_" ~ generate_shared_memory_variable(range_arg[0]);
         auto iv1 = v ~ "_" ~ generate_shared_memory_variable(range_arg[1]);
-        recalculations ~= format(template_shared_index_recalculation, iv0, msz0, tid0, iv, lsz0, iv, lsz0,  iv1, msz1, tid0, iv, lsz1, iv, lsz1);
+        recalculations ~= format(clop.ct.templates.template_shared_index_recalculation, iv0, msz0, tid0, iv, lsz0, iv, lsz0,  iv1, msz1, tid0, iv, lsz1, iv, lsz1);
         if (safeguards != "") safeguards ~= " && ";
         safeguards ~= format("(%s) < (%s) && (%s) >= (%s)", iv0, bsz0, iv1, msz1);
       }
-      s ~= format(template_antidiagonal_loop_prefix, iv, iv, lsz1, lsz0, iv);
+      s ~= format(clop.ct.templates.template_antidiagonal_loop_prefix, iv, iv, lsz1, lsz0, iv);
       s ~= format("    int %s = (%s) + tid0 + ((%s) < (%s) ?   0  : (%s) - (%s) + 1);\n", t.children[0].matches[0], g.intervals[0].get_min(), iv, lsz0, iv, lsz0);
       s ~= format("    int %s = (%s) - tid0 + ((%s) < (%s) ? (%s) : (%s)        - 1);\n", t.children[1].matches[0], g.intervals[1].get_min(), iv, lsz1, iv, lsz1);
       s ~= recalculations;
@@ -409,7 +406,7 @@ struct Program
 
     if (true /*trans.contains("rectangular_blocking")*/)
     {
-      s ~= template_antidiagonal_loop_suffix;
+      s ~= clop.ct.templates.template_antidiagonal_loop_suffix;
       string[3] bix;
       auto r = Box([], []);
       foreach (c, u; range.symbols)
@@ -455,7 +452,7 @@ struct Program
         auto gma = v;
         // shared memory array name
         auto sma = generate_shared_memory_variable(v);
-        s ~= format(template_shared_memory_fini,
+        s ~= format(clop.ct.templates.template_shared_memory_fini,
                      li1, li1, bsz1, li1,
                      li0, li0, bsz0, li0, lsz0,
                      li0, tid0, bsz0,
@@ -648,7 +645,7 @@ struct Program
       auto offset = "[" ~ range.get_lower_bounds() ~ "]";
       auto kernel = "instance_" ~ suffix ~ ".kernel";
       auto dimensions = range.get_dimensions();
-      return format(template_plain_invoke_kernel, offset, global, kernel, dimensions);
+      return format(clop.ct.templates.template_plain_invoke_kernel, offset, global, kernel, dimensions);
     }
     if (pattern == "Antidiagonal")
     {
@@ -656,7 +653,7 @@ struct Program
       {
         auto gsz0 = range.intervals[0].get_max();
         auto name = "instance_" ~ suffix ~ ".kernel";
-        return format(template_antidiagonal_invoke_kernel,
+        return format(clop.ct.templates.template_antidiagonal_invoke_kernel,
                       gsz0, gsz0, gsz0, name, parameters[$ - 1].number, name);
       }
       else
@@ -670,7 +667,7 @@ struct Program
         foreach (i, p; parameters)
           if (p.skip)
             argindex[n++] = i;
-        return format(template_antidiagonal_rectangular_blocks_invoke_kernel,
+        return format(clop.ct.templates.template_antidiagonal_rectangular_blocks_invoke_kernel,
                       gsz0, bsz0, bsz0, bsz0, name, argindex[0], name, argindex[1], name);
       }
     }
@@ -692,6 +689,27 @@ struct Program
       s = "(" ~ s ~ ") * (" ~ symtable[v].box[i + 1].get_size() ~ ") + " ~ translate(c);
     }
     return s;
+  }
+
+  /++
+   +
+   +/
+  Symbol create_new_temporary(string lhs)
+  {
+    auto n = format("clop_tmp_%s", temporary_id++);
+    // FIXME: get the type from lhs.
+    auto t = "float";
+    auto s = Symbol(n, t);
+    symtable[n] = s;
+    return s;
+  }
+
+  /++
+   +
+   +/
+  string translate_expression_and_assign_temporary(Symbol tmp, ParseTree exp)
+  {
+    return tmp.type ~ " " ~ tmp.name ~ " = " ~ translate(exp) ~ ";\n";
   }
 
   /++
@@ -778,6 +796,10 @@ struct Program
       }
     case "CLOP.ExpressionStatement":
       {
+        version (UNITTEST_DEBUG)
+        {
+          writefln("UT:%s Program.translate case CLOP.ExpressionStatement: %s", suffix, t.matches);
+        }
         return indent ~ translate(t.children[0]) ~ ";\n";
       }
     case "CLOP.IfStatement":
@@ -819,7 +841,8 @@ struct Program
         {
           if (t.children[1].name == "CLOP.Expression")
           {
-            if (t.children[0].name == "CLOP.PrimaryExpr" && t.children[0].children[0].name == "CLOP.Identifier")
+            if (t.children[0].name == "CLOP.PrimaryExpr" &&
+                t.children[0].children[0].name == "CLOP.Identifier")
             {
               s ~= "[" ~ translate_index_expression(t.children[0].children[0].matches[0], t.children[1]) ~ "]";
             }
@@ -830,7 +853,49 @@ struct Program
           }
           else if (t.children[1].name == "CLOP.ArgumentExprList")
           {
-            s ~= "(" ~ translate(t.children[1]) ~ ")";
+            if (t.children[0].children.length == 2)
+            {
+              auto function_literal = t.children[0].children[1].matches[0];
+              version (UNITTEST_DEBUG)
+              {
+                writefln("UT:%s this is template expression %s instance %s",
+                         suffix, t.children[0].children[0].matches, function_literal);
+              }
+              ////////////////////////////////////////////////////////////////////////////
+              switch (t.children[0].children[0].matches[0])
+              {
+              case "reduce":
+                {
+                  s = clop.ct.templates.reduce.instantiate_template(function_literal, t.children[1]);
+                  version (UNITTEST_DEBUG)
+                  {
+                    writefln("UT:%s template expanded to %s", suffix, s);
+                  }
+                }
+                break;
+              default: {/+ do nothing +/}
+              }
+              /+
+              foreach (it; __traits(allMembers, ExpansionPattern))
+              {
+                if (it == t.children[0].children[0].matches[0])
+                {
+                  auto te = mixin ("ExpansionPattern." ~ it);
+                  auto bf = te.binary_function(function_literal);
+                  s = te.instantiate_template(function_literal, t.children[1]);
+                  version (UNITTEST_DEBUG)
+                  {
+                    writefln("UT:%s binary function %s\ntemplate expanded to %s", suffix, bf, s);
+                  }
+                }
+              }
+              +/
+              ////////////////////////////////////////////////////////////////////////////
+            }
+            else
+            {
+              s ~= "(" ~ translate(t.children[1]) ~ ")";
+            }
           }
           else
           {
@@ -917,9 +982,10 @@ struct Program
       {
         if (t.children.length == 3)
         {
-          string lhs = translate(t.children[0]);
-          string rhs = translate(t.children[2]);
-          return lhs ~ " " ~ t.children[1].matches[0] ~ " " ~ rhs;
+          auto lhs = translate(t.children[0]);
+          auto tmp = create_new_temporary(lhs);
+          auto rhs = translate_expression_and_assign_temporary(tmp, t.children[2]);
+          return rhs ~ indent ~ lhs ~ " " ~ t.children[1].matches[0] ~ " " ~ tmp.name;
         }
         else
         {
@@ -959,22 +1025,20 @@ unittest
   static import clop.rt.ndarray;
 
   auto t = clop.ct.parser.CLOP(q{
-      NDRange(i : 1 .. hidden_n, j : 0 .. input_n)
+      NDRange(i : 1 .. h_n, j : 0 .. i_n)
       {
-        local float t[input_n];
-        t[j] = input_units[j] * i2h_weights[i, j];
-        float s = reduce!"a + b"(0, t);
+        float s;
+        local float t[i_n];
+        t[j] = inputs[j] * weights[i, j];
+        s = reduce!"a + b"(0, t);
         if (j == 0)
         {
-          hidden_units[i] = ONEF / (ONEF + exp(-s));
+          hidden[i] = ONEF / (ONEF + exp(-s));
         }
       }});
-  alias T = std.typetuple.TypeTuple!(size_t, size_t,
-                                     clop.rt.ndarray.NDArray!float,
-                                     clop.rt.ndarray.NDArray!float,
-                                     clop.rt.ndarray.NDArray!float);
-  auto be = clop.ct.stage2.Backend!T(t, __FILE__, __LINE__,
-                                     ["hidden_n", "input_n", "input_units", "i2h_weights", "hidden_units"]);
+  alias A = clop.rt.ndarray.NDArray!float;
+  alias T = std.typetuple.TypeTuple!(size_t, size_t, A, A, A);
+  auto be = clop.ct.stage2.Backend!T(t, __FILE__, __LINE__, ["h_n", "i_n", "inputs", "weights", "hidden"]);
   be.analyze(t);
   be.update_parameters();
   be.compute_intervals();
