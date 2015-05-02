@@ -30,14 +30,14 @@ import std.conv;
 import std.string;
 import std.traits;
 
+import clop.rt.ndarray;
 import clop.ct.analysis;
 import clop.ct.parser;
 import clop.ct.program;
 import clop.ct.structs;
 import clop.ct.symbol;
-static import clop.ct.templates;
 import clop.ct.transform;
-import clop.rt.ndarray;
+static import clop.ct.templates;
 
 version (UNITTEST_DEBUG)
 {
@@ -73,6 +73,7 @@ template Backend(TList...)
     bool eval_def     = false;
     uint depth        = 0;
     uint clop_ndarray_dimension_index = 0;
+    string current_type = "";
 
     /++
      +
@@ -97,9 +98,9 @@ template Backend(TList...)
      +/
     string generate_code()
     {
-      lower(AST);
       analyze(AST);
       update_parameters();
+      lower(AST);
       compute_intervals();
       // before we generate optimized variants, we need to transform
       // the AST for a specific synchronization pattern.
@@ -231,6 +232,7 @@ template Backend(TList...)
         }
       case "CLOP.ExpressionStatement":
         {
+          lower_expression(t.children[0]);
           lower(t.children[0]);
           break;
         }
@@ -422,6 +424,7 @@ template Backend(TList...)
         {
           foreach (c; t.children)
             analyze(c);
+          current_type = "";
           break;
         }
       case "CLOP.Declarator":
@@ -436,8 +439,17 @@ template Backend(TList...)
           break;
         }
       case "CLOP.DeclarationSpecifiers":
+        {
+          foreach (c; t.children)
+            analyze(c);
+          break;
+        }
       case "CLOP.StorageClassSpecifier":
+        break;
       case "CLOP.TypeSpecifier":
+        current_type = t.matches[0];
+        version (UNITTEST_DEBUG) writefln("current_type %s", current_type);
+        break;
       case "CLOP.StructSpecifier":
         {
           break;
@@ -635,7 +647,8 @@ template Backend(TList...)
           auto s = t.matches[0];
           if (s !in symtable)
           {
-            symtable[s] = Symbol(s, "", t, [], [], null, null, !global_scope, false, false);
+            version (UNITTEST_DEBUG) writefln("new identifier %s", s);
+            symtable[s] = Symbol(s, current_type, t, [], [], null, null, !global_scope, false, false);
           }
           break;
         }
@@ -696,31 +709,38 @@ template Backend(TList...)
         }
         else static if (is (Unqual!(T) == int))
         {
+          symtable[name].type = "int";
           parameters[i].type = `"int "`;
           parameters[i].size = `cl_int.sizeof`;
         }
         else static if (is (Unqual!(T) == uint))
         {
+          symtable[name].type = "uint";
           parameters[i].type = `"uint "`;
           parameters[i].size = `cl_uint.sizeof`;
         }
         else static if (is (Unqual!(T) == long))
         {
+          symtable[name].type = "long";
           parameters[i].type = `"long "`;
           parameters[i].size = `cl_long.sizeof`;
         }
         else static if (is (Unqual!(T) == ulong))
         {
+          version (UNITTEST_DEBUG) writefln("parameter %s", name);
+          symtable[name].type = "ulong";
           parameters[i].type = `"ulong "`;
           parameters[i].size = `cl_ulong.sizeof`;
         }
         else static if (is (Unqual!(T) == float))
         {
+          symtable[name].type = "float";
           parameters[i].type = `"float "`;
           parameters[i].size = `cl_float.sizeof`;
         }
         else static if (is (Unqual!(T) == double))
         {
+          symtable[name].type = "double";
           parameters[i].type = `"double "`;
           parameters[i].size = `cl_double.sizeof`;
         }
@@ -747,6 +767,13 @@ template Backend(TList...)
         }
         else static if (__traits(compiles, TemplateOf!(T)) && __traits(isSame, TemplateOf!(T), NDArray))
         {
+          static      if (is (TemplateArgsOf!(T) == TypeTuple!(bool)))   symtable[name].type = "char*";
+          else static if (is (TemplateArgsOf!(T) == TypeTuple!(int)))    symtable[name].type = "int*";
+          else static if (is (TemplateArgsOf!(T) == TypeTuple!(uint)))   symtable[name].type = "uint*";
+          else static if (is (TemplateArgsOf!(T) == TypeTuple!(long)))   symtable[name].type = "long*";
+          else static if (is (TemplateArgsOf!(T) == TypeTuple!(ulong)))  symtable[name].type = "ulong*";
+          else static if (is (TemplateArgsOf!(T) == TypeTuple!(float)))  symtable[name].type = "float*";
+          else static if (is (TemplateArgsOf!(T) == TypeTuple!(double))) symtable[name].type = "double*";
           parameters[i].type = `typeid(*` ~ name ~ `.ptr).toString() ~ "* "`;
           parameters[i].qual = `__global `;
           parameters[i].size = `cl_mem.sizeof`;
@@ -869,7 +896,9 @@ template Backend(TList...)
           // different parameters, this will break.  How to do this
           // correctly?
           alias M = typeof (mixin ("this." ~ member));
-          static if (isCallable!M && is (ReturnType!M == ParseTree))
+          static if (isCallable!M &&
+                     is (ReturnType!M == ParseTree) &&
+                     is (ParameterTypeTuple!M == TypeTuple!(ParseTree)))
             return mixin ("this." ~ member ~ "(t)");
         }
       }
@@ -970,6 +999,257 @@ template Backend(TList...)
       return newt;
     }
 
+
+    ParseTree lower_expression(ParseTree t)
+    {
+      // this is an empty list of statements
+      ParseTree sl = ParseTree("CLOP.StatementList", true, [], "", 0, 0, []);
+      lower_expression_internal(t, sl);
+      version (UNITTEST_DEBUG)
+        foreach (i, c; sl.children)
+          writefln("%s %s", i, c.matches);
+      return sl;
+    }
+
+    void lower_expression_internal(ref ParseTree t, ref ParseTree sl)
+    {
+      switch (t.name)
+      {
+      case "CLOP.Declaration":
+        {
+          version (UNITTEST_DEBUG) writefln("lower Declaration %s", t.matches);
+          if (t.children.length > 1)
+            lower_expression_internal(t.children[1], sl);
+        }
+        break;
+      case "CLOP.InitDeclaratorList":
+        {
+          foreach (c; t.children)
+            lower_expression_internal(c, sl);
+        }
+        break;
+      case "CLOP.InitDeclarator":
+        {
+          if (t.children.length > 1)
+            lower_expression_internal(t.children[1], sl);
+        }
+        break;
+      case "CLOP.Initializer":
+        {
+          lower_expression_internal(t.children[0], sl);
+        }
+        break;
+      case "CLOP.PrimaryExpr":
+        {
+          version (UNITTEST_DEBUG) writefln("lower PrimaryExpr %s", t.matches);
+          if (t.children[0].name == "CLOP.Expression")
+          {
+            // lower the expression in parenthesis
+            //auto type = infer_type(t.children[0]);
+            auto type = "float";
+            auto name = "temp";
+            auto code = type ~ " " ~ name ~ " = " ~ reduce!"a ~ b"("", t.children[0].matches) ~ ";";
+            auto tree = CLOP.decimateTree(CLOP.Declaration(code));
+            lower_expression_internal(tree, sl);
+            sl.children ~= tree;
+            t.matches = [name];
+            t.children[0] = tree.children[1].children[0].children[0].children[0];
+          }
+          // otherwise need not do anything, it's a trivial expression
+        }
+        break;
+      case "CLOP.PostfixExpr":
+        {
+          version (UNITTEST_DEBUG) writefln("lower PostfixExpr %s", t.matches);
+          lower_expression_internal(t.children[0], sl);
+          if (t.children.length > 1)
+          {
+            if (t.children[1].name == "CLOP.Expression")
+            {
+              // lower the expression in parenthesis
+              lower_expression_internal(t.children[1], sl);
+            }
+          }
+          // otherwise need not do anything, it's a trivial expression
+        }
+        break;
+      case "CLOP.UnaryExpr":
+        {
+          version (UNITTEST_DEBUG) writefln("lower UnaryExpr %s", t.matches);
+          if (t.children[0].name == "CLOP.PostfixExpr")
+          {
+            // lower the expression in parenthesis
+            lower_expression_internal(t.children[0], sl);
+          }
+          // otherwise need not do anything, it's a trivial expression
+        }
+        break;
+      case "CLOP.CastExpr":
+        {
+          version (UNITTEST_DEBUG) writefln("lower CastExpr %s", t.matches);
+          lower_expression_internal(t.children[0], sl);
+        }
+        break;
+      case "CLOP.MultiplicativeExpr":
+        {
+          version (UNITTEST_DEBUG) writefln("lower MultiplicativeExpr %s", t.matches);
+          if (t.children.length > 1)
+          {
+            auto type1 = "float";
+            auto name1 = "temp1";
+            auto code1 = type1 ~ " " ~ name1 ~ " = " ~ reduce!"a ~ b"("", t.children[0].matches) ~ ";";
+            auto tree1 = CLOP.decimateTree(CLOP.Declaration(code1));
+            lower_expression_internal(tree1, sl);
+            sl.children ~= tree1;
+            auto type2 = "float";
+            auto name2 = "temp2";
+            auto code2 = type2 ~ " " ~ name2 ~ " = " ~ reduce!"a ~ b"("", t.children[2].matches) ~ ";";
+            auto tree2 = CLOP.decimateTree(CLOP.Declaration(code2));
+            lower_expression_internal(tree2, sl);
+            sl.children ~= tree2;
+            auto code = name1 ~ t.children[1].matches[0] ~ name2;
+            auto tree = CLOP.decimateTree(CLOP.MultiplicativeExpr(code));
+            t.matches = [name1, t.children[1].matches[0], name2];
+            t.children[0] = tree.children[0];
+            t.children[2] = tree.children[2];
+          }
+          else
+          {
+            lower_expression_internal(t.children[0], sl);
+          }
+        }
+        break;
+      case "CLOP.AdditiveExpr":
+        {
+          version (UNITTEST_DEBUG) writefln("lower EqualityExpr %s", t.matches);
+          lower_expression_internal(t.children[0], sl);
+          if (t.children.length > 1)
+          {
+            lower_expression_internal(t.children[2], sl);
+          }
+        }
+        break;
+      case "CLOP.ShiftExpr":
+        {
+          version (UNITTEST_DEBUG) writefln("lower ShiftExpr %s", t.matches);
+          lower_expression_internal(t.children[0], sl);
+          if (t.children.length > 1)
+          {
+            lower_expression_internal(t.children[2], sl);
+          }
+        }
+        break;
+      case "CLOP.RelationalExpr":
+        {
+          version (UNITTEST_DEBUG) writefln("lower RelationalExpr %s", t.matches);
+          lower_expression_internal(t.children[0], sl);
+          if (t.children.length > 1)
+          {
+            lower_expression_internal(t.children[2], sl);
+          }
+        }
+        break;
+      case "CLOP.EqualityExpr":
+        {
+          version (UNITTEST_DEBUG) writefln("lower EqualityExpr %s", t.matches);
+          lower_expression_internal(t.children[0], sl);
+          if (t.children.length > 1)
+          {
+            lower_expression_internal(t.children[2], sl);
+          }
+        }
+        break;
+      case "CLOP.ANDExpr":
+        {
+          version (UNITTEST_DEBUG) writefln("lower ANDExpr %s", t.matches);
+          lower_expression_internal(t.children[0], sl);
+          if (t.children.length > 1)
+          {
+            lower_expression_internal(t.children[1], sl);
+          }
+        }
+        break;
+      case "CLOP.ExclusiveORExpr":
+        {
+          version (UNITTEST_DEBUG) writefln("lower ExclusiveORExpr %s", t.matches);
+          lower_expression_internal(t.children[0], sl);
+          if (t.children.length > 1)
+          {
+            lower_expression_internal(t.children[1], sl);
+          }
+        }
+        break;
+      case "CLOP.InclusiveORExpr":
+        {
+          version (UNITTEST_DEBUG) writefln("lower IclusiveORExpr %s", t.matches);
+          lower_expression_internal(t.children[0], sl);
+          if (t.children.length > 1)
+          {
+            lower_expression_internal(t.children[1], sl);
+          }
+        }
+        break;
+      case "CLOP.LogicalANDExpr":
+        {
+          version (UNITTEST_DEBUG) writefln("lower LogicalANDExpr %s", t.matches);
+          lower_expression_internal(t.children[0], sl);
+          if (t.children.length > 1)
+          {
+            lower_expression_internal(t.children[1], sl);
+          }
+        }
+        break;
+      case "CLOP.LogicalORExpr":
+        {
+          version (UNITTEST_DEBUG) writefln("lower LogicalORExpr %s", t.matches);
+          lower_expression_internal(t.children[0], sl);
+          if (t.children.length > 1)
+          {
+            lower_expression_internal(t.children[1], sl);
+          }
+        }
+        break;
+      case "CLOP.ConditionalExpr":
+        {
+          version (UNITTEST_DEBUG) writefln("lower ConditionalExpr %s", t.matches);
+          if (t.children.length > 1)
+          {
+            lower_expression_internal(t.children[0], sl);
+            lower_expression_internal(t.children[1], sl);
+            lower_expression_internal(t.children[2], sl);
+          }
+          else
+          {
+            lower_expression_internal(t.children[0], sl);
+          }
+        }
+        break;
+      case "CLOP.AssignmentExpr":
+        {
+          version (UNITTEST_DEBUG) writefln("lower AssignmentExpr %s", t.matches);
+          if (t.children.length > 1)
+          {
+            lower_expression_internal(t.children[2], sl);
+          }
+          else
+          {
+            lower_expression_internal(t.children[0], sl);
+          }
+        }
+        break;
+      case "CLOP.Expression":
+        {
+          version (UNITTEST_DEBUG) writefln("lower Expression %s", t.matches);
+          foreach (c; t.children)
+          {
+            lower_expression_internal(c, sl);
+          }
+        }
+        break;
+      default: assert(0, t.name);
+      }
+    }
+
     /+
      + Methods to dump compiler's internal and debug information
      +/
@@ -1033,28 +1313,40 @@ template Backend(TList...)
 unittest
 {
   // test 1
+  version (DISABLED)
+  {
   auto AST = clop.ct.parser.CLOP(q{NDRange(i: 0 .. 8){c = a + b;}});
   alias T1 = std.typetuple.TypeTuple!(int, int, int);
   auto be1 = Backend!T1(AST, __FILE__, __LINE__, ["a", "b", "c"]);
+  be1.analyze(AST);
   be1.lower(AST);
   auto output = be1.generate_code();
   assert(output !is null && output != "");
+  }
 
   // test 2
-  AST = clop.ct.parser.CLOP(q{
-      NDRange(i : 1 .. hidden_n, j : 0 .. input_n)
+  {
+  auto AST = clop.ct.parser.CLOP(q{
+      NDRange(i : 1 .. h_n, j : 0 .. i_n)
       {
-        local float t[input_n];
-        t[j] = input_units[j] * i2h_weights[i, j];
+        local float t[i_n];
+        t[j] = inputs[j] * weights[i, j];
         float s = reduce!"a + b"(0, t);
         if (j == 0)
         {
-          hidden_units[i] = ONEF / (ONEF + exp(-s));
+          hidden[i] = ONEF / (ONEF + exp(-s));
         }
       }});
-  alias T2 = std.typetuple.TypeTuple!(size_t, size_t, NDArray!float, NDArray!float, NDArray!float);
-  auto be2 = Backend!T2(AST, __FILE__, __LINE__, ["hidden_n", "input_n", "input_units", "i2h_weights", "hidden_units"]);
+  alias A = NDArray!float;
+  alias T2 = std.typetuple.TypeTuple!(size_t, size_t, A, A, A);
+  auto be2 = Backend!T2(AST, __FILE__, __LINE__, ["h_n", "i_n", "inputs", "weights", "hidden"]);
+  be2.analyze(AST);
+  be2.update_parameters();
+  auto st = be2.dump_symtable();
+  version (UNITTEST_DEBUG) writefln("%s", st);
   be2.lower(AST);
+  version (UNITTEST_DEBUG) writeln(AST.toString());
+  }
 }
 
 // Local Variables:
