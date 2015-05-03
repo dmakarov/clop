@@ -258,47 +258,6 @@ template Backend(TList...)
           t.children.length == 1 && lower(t.children[0]);
           break;
         }
-      case "CLOP.PrimaryExpr":
-        {
-          lower(t.children[0]);
-          break;
-        }
-      case "CLOP.PostfixExpr":
-      case "CLOP.ArgumentExprList":
-      case "CLOP.UnaryExpr":
-      case "CLOP.IncrementExpr":
-      case "CLOP.DecrementExpr":
-      case "CLOP.CastExpr":
-      case "CLOP.MultiplicativeExpr":
-      case "CLOP.AdditiveExpr":
-      case "CLOP.ShiftExpr":
-      case "CLOP.RelationalExpr":
-      case "CLOP.EqualityExpr":
-      case "CLOP.ANDExpr":
-      case "CLOP.ExclusiveORExpr":
-      case "CLOP.InclusiveORExpr":
-      case "CLOP.LogicalANDExpr":
-      case "CLOP.LogicalORExpr":
-      case "CLOP.ConditionalExpr":
-      case "CLOP.Expression":
-        {
-          foreach (c; t.children)
-            lower(c);
-          break;
-        }
-      case "CLOP.AssignmentExpr":
-        {
-          if (t.children.length == 3)
-          {
-            lower(t.children[0]);
-            lower(t.children[2]);
-          }
-          else
-          {
-            lower(t.children[0]);
-          }
-          break;
-        }
       default:
         {
           break;
@@ -1011,32 +970,49 @@ template Backend(TList...)
       return sl;
     }
 
-    void lower_expression_internal(ref ParseTree t, ref ParseTree sl)
+    ParseTree lower_expression_internal(ParseTree t, ParseTree sl)
     {
+      ParseTree nt;
       switch (t.name)
       {
       case "CLOP.Declaration":
         {
           version (UNITTEST_DEBUG) writefln("lower Declaration %s", t.matches);
           if (t.children.length > 1)
-            lower_expression_internal(t.children[1], sl);
+          {
+            nt = lower_expression_internal(t.children[1], sl);
+            t.children[1] = nt;
+            t.matches = t.children[0].matches ~ nt.matches;
+          }
         }
         break;
       case "CLOP.InitDeclaratorList":
         {
-          foreach (c; t.children)
-            lower_expression_internal(c, sl);
+          string[] matches = [];
+          foreach (i; 0 .. t.children.length)
+          {
+            nt = lower_expression_internal(t.children[i], sl);
+            matches ~= (i == 0) ? nt.matches : [","] ~ nt.matches;
+            t.children[i] = nt;
+          }
+          t.matches = matches;
         }
         break;
       case "CLOP.InitDeclarator":
         {
           if (t.children.length > 1)
-            lower_expression_internal(t.children[1], sl);
+          {
+            nt = lower_expression_internal(t.children[1], sl);
+            t.children[1] = nt;
+            t.matches = t.children[0].matches ~ "=" ~ nt.matches;
+          }
         }
         break;
       case "CLOP.Initializer":
         {
-          lower_expression_internal(t.children[0], sl);
+          nt = lower_expression_internal(t.children[0], sl);
+          t.children[0] = nt;
+          t.matches = nt.matches;
         }
         break;
       case "CLOP.PrimaryExpr":
@@ -1045,32 +1021,40 @@ template Backend(TList...)
           if (t.children[0].name == "CLOP.Expression")
           {
             // lower the expression in parenthesis
-            //auto type = infer_type(t.children[0]);
+            // FIXME: auto type = infer_type(t.children[0]);
             auto type = "float";
+            // FIXME: generate new temporary
             auto name = "temp";
             auto code = type ~ " " ~ name ~ " = " ~ reduce!"a ~ b"("", t.children[0].matches) ~ ";";
             auto tree = CLOP.decimateTree(CLOP.Declaration(code));
-            lower_expression_internal(tree, sl);
-            sl.children ~= tree;
+            nt = lower_expression_internal(tree, sl);
+            sl.children ~= nt;
+            version (UNITTEST_DEBUG) writefln("lower PrimaryExpr replace %s with %s", t.matches, name);
             t.matches = [name];
-            t.children[0] = tree.children[1].children[0].children[0].children[0];
+            t.children[0] = CLOP.decimateTree(CLOP.PrimaryExpr(name)).children[0];
           }
-          // otherwise need not do anything, it's a trivial expression
         }
         break;
       case "CLOP.PostfixExpr":
         {
           version (UNITTEST_DEBUG) writefln("lower PostfixExpr %s", t.matches);
-          lower_expression_internal(t.children[0], sl);
+          nt =lower_expression_internal(t.children[0], sl);
+          t.children[0] = nt;
           if (t.children.length > 1)
           {
             if (t.children[1].name == "CLOP.Expression")
             {
               // lower the expression in parenthesis
-              lower_expression_internal(t.children[1], sl);
+              nt = lower_expression_internal(t.children[1], sl);
+              t.children[1] = nt;
+              t.matches = t.children[0].matches ~ "[" ~ t.children[1].matches ~ "]";
             }
           }
-          // otherwise need not do anything, it's a trivial expression
+          else
+          {
+            version (UNITTEST_DEBUG) writefln("lower PostfixExpr replace %s with %s", t.matches, nt.matches);
+            t.matches = nt.matches;
+          }
         }
         break;
       case "CLOP.UnaryExpr":
@@ -1079,7 +1063,10 @@ template Backend(TList...)
           if (t.children[0].name == "CLOP.PostfixExpr")
           {
             // lower the expression in parenthesis
-            lower_expression_internal(t.children[0], sl);
+            t.children[0] = lower_expression_internal(t.children[0], sl);
+            version (UNITTEST_DEBUG) writefln("lower UnaryExpr replace %s with %s",
+                                              t.matches, t.children[0].matches);
+            t.matches = t.children[0].matches;
           }
           // otherwise need not do anything, it's a trivial expression
         }
@@ -1087,125 +1074,126 @@ template Backend(TList...)
       case "CLOP.CastExpr":
         {
           version (UNITTEST_DEBUG) writefln("lower CastExpr %s", t.matches);
-          lower_expression_internal(t.children[0], sl);
+          if (t.children[0].name == "CLOP.UnaryExpr")
+          {
+            t.children[0] = lower_expression_internal(t.children[0], sl);
+            version (UNITTEST_DEBUG) writefln("lower CastExpr replace %s with %s",
+                                              t.matches, t.children[0].matches);
+            t.matches = t.children[0].matches;
+          }
         }
         break;
       case "CLOP.MultiplicativeExpr":
+      case "CLOP.AdditiveExpr":
+      case "CLOP.ShiftExpr":
+      case "CLOP.RelationalExpr":
+      case "CLOP.EqualityExpr":
         {
-          version (UNITTEST_DEBUG) writefln("lower MultiplicativeExpr %s", t.matches);
+          version (UNITTEST_DEBUG) writefln("lower %s %s", t.name, t.matches);
           if (t.children.length > 1)
           {
             auto type1 = "float";
             auto name1 = "temp1";
             auto code1 = type1 ~ " " ~ name1 ~ " = " ~ reduce!"a ~ b"("", t.children[0].matches) ~ ";";
             auto tree1 = CLOP.decimateTree(CLOP.Declaration(code1));
-            lower_expression_internal(tree1, sl);
-            sl.children ~= tree1;
+            nt = lower_expression_internal(tree1, sl);
+            sl.children ~= nt;
             auto type2 = "float";
             auto name2 = "temp2";
             auto code2 = type2 ~ " " ~ name2 ~ " = " ~ reduce!"a ~ b"("", t.children[2].matches) ~ ";";
             auto tree2 = CLOP.decimateTree(CLOP.Declaration(code2));
-            lower_expression_internal(tree2, sl);
-            sl.children ~= tree2;
+            nt = lower_expression_internal(tree2, sl);
+            sl.children ~= nt;
             auto code = name1 ~ t.children[1].matches[0] ~ name2;
-            auto tree = CLOP.decimateTree(CLOP.MultiplicativeExpr(code));
+            ParseTree tree;
+            switch (t.name)
+            {
+            case "CLOP.MultiplicativeExpr": tree = CLOP.decimateTree(CLOP.MultiplicativeExpr(code)); break;
+            case "CLOP.AdditiveExpr": tree = CLOP.decimateTree(CLOP.AdditiveExpr(code)); break;
+            case "CLOP.ShiftExpr": tree = CLOP.decimateTree(CLOP.ShiftExpr(code)); break;
+            case "CLOP.RelationalExpr": tree = CLOP.decimateTree(CLOP.RelationalExpr(code)); break;
+            case "CLOP.EqualityExpr": tree = CLOP.decimateTree(CLOP.EqualityExpr(code)); break;
+            default: break;
+            }
             t.matches = [name1, t.children[1].matches[0], name2];
             t.children[0] = tree.children[0];
             t.children[2] = tree.children[2];
           }
           else
           {
-            lower_expression_internal(t.children[0], sl);
-          }
-        }
-        break;
-      case "CLOP.AdditiveExpr":
-        {
-          version (UNITTEST_DEBUG) writefln("lower EqualityExpr %s", t.matches);
-          lower_expression_internal(t.children[0], sl);
-          if (t.children.length > 1)
-          {
-            lower_expression_internal(t.children[2], sl);
-          }
-        }
-        break;
-      case "CLOP.ShiftExpr":
-        {
-          version (UNITTEST_DEBUG) writefln("lower ShiftExpr %s", t.matches);
-          lower_expression_internal(t.children[0], sl);
-          if (t.children.length > 1)
-          {
-            lower_expression_internal(t.children[2], sl);
-          }
-        }
-        break;
-      case "CLOP.RelationalExpr":
-        {
-          version (UNITTEST_DEBUG) writefln("lower RelationalExpr %s", t.matches);
-          lower_expression_internal(t.children[0], sl);
-          if (t.children.length > 1)
-          {
-            lower_expression_internal(t.children[2], sl);
-          }
-        }
-        break;
-      case "CLOP.EqualityExpr":
-        {
-          version (UNITTEST_DEBUG) writefln("lower EqualityExpr %s", t.matches);
-          lower_expression_internal(t.children[0], sl);
-          if (t.children.length > 1)
-          {
-            lower_expression_internal(t.children[2], sl);
+            nt = lower_expression_internal(t.children[0], sl);
+            t.children[0] = nt;
+            t.matches = nt.matches;
           }
         }
         break;
       case "CLOP.ANDExpr":
         {
           version (UNITTEST_DEBUG) writefln("lower ANDExpr %s", t.matches);
-          lower_expression_internal(t.children[0], sl);
           if (t.children.length > 1)
           {
-            lower_expression_internal(t.children[1], sl);
+          }
+          else
+          {
+            nt = lower_expression_internal(t.children[0], sl);
+            t.children[0] = nt;
+            t.matches = nt.matches;
           }
         }
         break;
       case "CLOP.ExclusiveORExpr":
         {
           version (UNITTEST_DEBUG) writefln("lower ExclusiveORExpr %s", t.matches);
-          lower_expression_internal(t.children[0], sl);
           if (t.children.length > 1)
           {
-            lower_expression_internal(t.children[1], sl);
+          }
+          else
+          {
+            nt = lower_expression_internal(t.children[0], sl);
+            t.children[0] = nt;
+            t.matches = nt.matches;
           }
         }
         break;
       case "CLOP.InclusiveORExpr":
         {
           version (UNITTEST_DEBUG) writefln("lower IclusiveORExpr %s", t.matches);
-          lower_expression_internal(t.children[0], sl);
           if (t.children.length > 1)
           {
-            lower_expression_internal(t.children[1], sl);
+          }
+          else
+          {
+            nt = lower_expression_internal(t.children[0], sl);
+            t.children[0] = nt;
+            t.matches = nt.matches;
           }
         }
         break;
       case "CLOP.LogicalANDExpr":
         {
           version (UNITTEST_DEBUG) writefln("lower LogicalANDExpr %s", t.matches);
-          lower_expression_internal(t.children[0], sl);
           if (t.children.length > 1)
           {
-            lower_expression_internal(t.children[1], sl);
+          }
+          else
+          {
+            nt = lower_expression_internal(t.children[0], sl);
+            t.children[0] = nt;
+            t.matches = nt.matches;
           }
         }
         break;
       case "CLOP.LogicalORExpr":
         {
           version (UNITTEST_DEBUG) writefln("lower LogicalORExpr %s", t.matches);
-          lower_expression_internal(t.children[0], sl);
           if (t.children.length > 1)
           {
-            lower_expression_internal(t.children[1], sl);
+          }
+          else
+          {
+            nt = lower_expression_internal(t.children[0], sl);
+            t.children[0] = nt;
+            t.matches = nt.matches;
           }
         }
         break;
@@ -1214,13 +1202,12 @@ template Backend(TList...)
           version (UNITTEST_DEBUG) writefln("lower ConditionalExpr %s", t.matches);
           if (t.children.length > 1)
           {
-            lower_expression_internal(t.children[0], sl);
-            lower_expression_internal(t.children[1], sl);
-            lower_expression_internal(t.children[2], sl);
           }
           else
           {
-            lower_expression_internal(t.children[0], sl);
+            nt = lower_expression_internal(t.children[0], sl);
+            t.children[0] = nt;
+            t.matches = nt.matches;
           }
         }
         break;
@@ -1229,25 +1216,34 @@ template Backend(TList...)
           version (UNITTEST_DEBUG) writefln("lower AssignmentExpr %s", t.matches);
           if (t.children.length > 1)
           {
-            lower_expression_internal(t.children[2], sl);
+            nt = lower_expression_internal(t.children[2], sl);
+            t.children[2] = nt;
+            t.matches = t.children[0].matches ~ t.children[1].matches ~ nt.matches;
           }
           else
           {
-            lower_expression_internal(t.children[0], sl);
+            nt = lower_expression_internal(t.children[0], sl);
+            t.children[0] = nt;
+            t.matches = nt.matches;
           }
         }
         break;
       case "CLOP.Expression":
         {
           version (UNITTEST_DEBUG) writefln("lower Expression %s", t.matches);
-          foreach (c; t.children)
+          string[] matches = [];
+          foreach (i; 0 .. t.children.length)
           {
-            lower_expression_internal(c, sl);
+            nt = lower_expression_internal(t.children[i], sl);
+            matches ~= (i == 0) ? nt.matches : [","] ~ nt.matches;
+            t.children[i] = nt;
           }
+          t.matches = matches;
         }
         break;
       default: assert(0, t.name);
       }
+      return t;
     }
 
     /+
