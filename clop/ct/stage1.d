@@ -329,7 +329,8 @@ struct Frontend
               recognized_template = true;
           +/
         }
-        if (!recognized_template)
+        auto recognized_function_call = t.matches[$ - 1] == ")";
+        if (!recognized_template && !recognized_function_call)
           analyze(t.children[0]);
         if (t.children.length == 1)
         {

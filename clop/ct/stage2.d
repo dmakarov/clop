@@ -72,7 +72,7 @@ template Backend(TList...)
     bool global_scope = false;
     bool eval_def     = false;
     uint depth        = 0;
-    uint clop_ndarray_dimension_index = 0;
+    uint temporary_index;
     string current_type = "";
 
     /++
@@ -129,141 +129,6 @@ template Backend(TList...)
     // The following methods are internal to the struct and not used outside.
 
   package:
-
-    /++
-     +  XXX: can this pass be combined with analyze?
-     +
-     +  Lower the expressions that need to be evaluated to temporaries
-     +  and replaced in translation.  This pass modifies the AST in
-     +  place.
-     +/
-    void lower(ParseTree t)
-    {
-      switch (t.name)
-      {
-      case "CLOP":
-        {
-          version (UNITTEST_DEBUG) writefln("UT:%s in Backend.lower case CLOP", suffix);
-          lower(t.children[0]);
-          break;
-        }
-      case "CLOP.TranslationUnit":
-        {
-          uint i = t.children[0].name == "CLOP.ExternalDeclarations" ? 1 : 0;
-          lower(t.children[i]);
-          break;
-        }
-      case "CLOP.KernelBlock":
-        {
-          uint i = t.children[0].name == "CLOP.SyncPattern" ? 2 : 1;
-          lower(t.children[i]);
-          break;
-        }
-      case "CLOP.Declaration":
-        {
-          foreach (c; t.children)
-            lower(c);
-          break;
-        }
-      case "CLOP.Declarator":
-        {
-          foreach (c; t.children)
-            lower(c);
-          break;
-        }
-      case "CLOP.InitDeclaratorList":
-        {
-          foreach (c; t.children)
-            lower(c);
-          break;
-        }
-      case "CLOP.InitDeclarator":
-        {
-          foreach (c; t.children)
-            lower(c);
-          break;
-        }
-      case "CLOP.InitializerList":
-        {
-          foreach (c; t.children)
-            lower(c);
-          break;
-        }
-      case "CLOP.Initializer":
-        {
-          lower(t.children[0]);
-          break;
-        }
-      case "CLOP.ParameterList":
-        {
-          foreach (c; t.children)
-            lower(c);
-          break;
-        }
-      case "CLOP.ParameterDeclaration":
-        {
-          foreach (c; t.children)
-            lower(c);
-          break;
-        }
-      case "CLOP.TypeName":
-        {
-          break;
-        }
-      case "CLOP.StatementList":
-        {
-          version (UNITTEST_DEBUG) writefln("UT:%s in Backend.lower case CLOP.StatementList", suffix);
-          foreach (i, c; t.children)
-          {
-            version (UNITTEST_DEBUG) writefln("UT:%s    child %s: %s", suffix, i, c.matches);
-            lower(c);
-          }
-          break;
-        }
-      case "CLOP.Statement":
-        {
-          lower(t.children[0]);
-          break;
-        }
-      case "CLOP.CompoundStatement":
-        {
-          t.children.length == 1 && lower(t.children[0]);
-          break;
-        }
-      case "CLOP.ExpressionStatement":
-        {
-          lower_expression(t.children[0]);
-          lower(t.children[0]);
-          break;
-        }
-      case "CLOP.IfStatement":
-        {
-          foreach (c; t.children)
-            lower(c);
-          break;
-        }
-      case "CLOP.IterationStatement":
-        {
-          lower(t.children[0]);
-          break;
-        }
-      case "CLOP.ForStatement":
-        {
-          foreach (c; t.children)
-            lower(c);
-          break;
-        }
-      case "CLOP.ReturnStatement":
-        {
-          t.children.length == 1 && lower(t.children[0]);
-          break;
-        }
-      default:
-        {
-          break;
-        }
-      }
-    }
 
     /++
      + XXX: do we need this pass?
@@ -521,7 +386,8 @@ template Backend(TList...)
                 recognized_template = true;
             +/
           }
-          if (!recognized_template)
+          auto recognized_function_call = t.matches[$ - 1] == ")";
+          if (!recognized_template && !recognized_function_call)
             analyze(t.children[0]);
           if (t.children.length == 1)
           {
@@ -959,18 +825,159 @@ template Backend(TList...)
     }
 
 
-    ParseTree lower_expression(ParseTree t)
+    /++
+     +  XXX: can this pass be combined with analyze?
+     +
+     +  Lower the expressions that need to be evaluated to temporaries
+     +  and replaced in translation.  This pass modifies the AST in
+     +  place.
+     +/
+    void lower(ref ParseTree t)
+    {
+      switch (t.name)
+      {
+      case "CLOP":
+        {
+          version (UNITTEST_DEBUG) writefln("UT:%s in Backend.lower case CLOP", suffix);
+          lower(t.children[0]);
+          break;
+        }
+      case "CLOP.TranslationUnit":
+        {
+          uint i = t.children[0].name == "CLOP.ExternalDeclarations" ? 1 : 0;
+          lower(t.children[i]);
+          break;
+        }
+      case "CLOP.KernelBlock":
+        {
+          uint i = t.children[0].name == "CLOP.SyncPattern" ? 2 : 1;
+          lower(t.children[i]);
+          break;
+        }
+      case "CLOP.Declaration":
+        {
+          foreach (c; t.children)
+            lower(c);
+          break;
+        }
+      case "CLOP.Declarator":
+        {
+          foreach (c; t.children)
+            lower(c);
+          break;
+        }
+      case "CLOP.InitDeclaratorList":
+        {
+          foreach (c; t.children)
+            lower(c);
+          break;
+        }
+      case "CLOP.InitDeclarator":
+        {
+          foreach (c; t.children)
+            lower(c);
+          break;
+        }
+      case "CLOP.InitializerList":
+        {
+          foreach (c; t.children)
+            lower(c);
+          break;
+        }
+      case "CLOP.Initializer":
+        {
+          lower(t.children[0]);
+          break;
+        }
+      case "CLOP.ParameterList":
+        {
+          foreach (c; t.children)
+            lower(c);
+          break;
+        }
+      case "CLOP.ParameterDeclaration":
+        {
+          foreach (c; t.children)
+            lower(c);
+          break;
+        }
+      case "CLOP.TypeName":
+        {
+          break;
+        }
+      case "CLOP.StatementList":
+        {
+          version (UNITTEST_DEBUG) writefln("UT:%s in Backend.lower case CLOP.StatementList", suffix);
+          ParseTree[] newlist = [];
+          foreach (i, c; t.children)
+          {
+            version (UNITTEST_DEBUG) writefln("UT:%s    child %s: %s", suffix, i, c.matches);
+            if (c.children[0].name == "CLOP.ExpressionStatement")
+            {
+              auto sl = lower_expression(c.children[0].children[0]);
+              newlist ~= sl;
+            }
+            else
+              lower(c);
+            newlist ~= c;
+          }
+          t.children = newlist;
+          break;
+        }
+      case "CLOP.Statement":
+        {
+          lower(t.children[0]);
+          break;
+        }
+      case "CLOP.CompoundStatement":
+        {
+          t.children.length == 1 && lower(t.children[0]);
+          break;
+        }
+      case "CLOP.IfStatement":
+        {
+          foreach (c; t.children)
+            lower(c);
+          break;
+        }
+      case "CLOP.IterationStatement":
+        {
+          lower(t.children[0]);
+          break;
+        }
+      case "CLOP.ForStatement":
+        {
+          foreach (c; t.children)
+            lower(c);
+          break;
+        }
+      case "CLOP.ReturnStatement":
+        {
+          t.children.length == 1 && lower(t.children[0]);
+          break;
+        }
+      default:
+        {
+          break;
+        }
+      }
+    }
+
+    /++
+     +
+     +/
+    ParseTree[] lower_expression(ParseTree t)
     {
       // this is an empty list of statements
-      ParseTree sl = ParseTree("CLOP.StatementList", true, [], "", 0, 0, []);
+      ParseTree[] sl;
       lower_expression_internal(t, sl);
       version (UNITTEST_DEBUG)
-        foreach (i, c; sl.children)
-          writefln("%s %s", i, c.matches);
+        foreach (i, s; sl)
+          writefln("%s %s", i, s.matches);
       return sl;
     }
 
-    ParseTree lower_expression_internal(ParseTree t, ParseTree sl)
+    ParseTree lower_expression_internal(ParseTree t, ref ParseTree[] sl)
     {
       ParseTree nt;
       switch (t.name)
@@ -1024,11 +1031,11 @@ template Backend(TList...)
             // FIXME: auto type = infer_type(t.children[0]);
             auto type = "float";
             // FIXME: generate new temporary
-            auto name = "temp";
+            auto name = format("clop_temp_%s", temporary_index++);
             auto code = type ~ " " ~ name ~ " = " ~ reduce!"a ~ b"("", t.children[0].matches) ~ ";";
             auto tree = CLOP.decimateTree(CLOP.Declaration(code));
             nt = lower_expression_internal(tree, sl);
-            sl.children ~= nt;
+            sl ~= nt;
             version (UNITTEST_DEBUG) writefln("lower PrimaryExpr replace %s with %s", t.matches, name);
             t.matches = [name];
             t.children[0] = CLOP.decimateTree(CLOP.PrimaryExpr(name)).children[0];
@@ -1093,17 +1100,17 @@ template Backend(TList...)
           if (t.children.length > 1)
           {
             auto type1 = "float";
-            auto name1 = "temp1";
+            auto name1 = format("clop_temp_%s", temporary_index++);
             auto code1 = type1 ~ " " ~ name1 ~ " = " ~ reduce!"a ~ b"("", t.children[0].matches) ~ ";";
             auto tree1 = CLOP.decimateTree(CLOP.Declaration(code1));
             nt = lower_expression_internal(tree1, sl);
-            sl.children ~= nt;
+            sl ~= nt;
             auto type2 = "float";
-            auto name2 = "temp2";
+            auto name2 = format("clop_temp_%s", temporary_index++);
             auto code2 = type2 ~ " " ~ name2 ~ " = " ~ reduce!"a ~ b"("", t.children[2].matches) ~ ";";
             auto tree2 = CLOP.decimateTree(CLOP.Declaration(code2));
             nt = lower_expression_internal(tree2, sl);
-            sl.children ~= nt;
+            sl ~= nt;
             auto code = name1 ~ t.children[1].matches[0] ~ name2;
             ParseTree tree;
             switch (t.name)
