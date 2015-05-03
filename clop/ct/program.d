@@ -853,6 +853,8 @@ struct Program
           }
           else if (t.children[1].name == "CLOP.ArgumentExprList")
           {
+            version(DISABLED)
+            {
             if (t.children[0].children.length == 2)
             {
               auto function_literal = t.children[0].children[1].matches[0];
@@ -895,6 +897,11 @@ struct Program
             else
             {
               s ~= "(" ~ translate(t.children[1]) ~ ")";
+            }
+            }
+            else
+            {
+            s ~= "(" ~ translate(t.children[1]) ~ ")";
             }
           }
           else
@@ -982,10 +989,19 @@ struct Program
       {
         if (t.children.length == 3)
         {
+          version (DISABLED)
+          {
           auto lhs = translate(t.children[0]);
           auto tmp = create_new_temporary(lhs);
           auto rhs = translate_expression_and_assign_temporary(tmp, t.children[2]);
           return rhs ~ indent ~ lhs ~ " " ~ t.children[1].matches[0] ~ " " ~ tmp.name;
+          }
+          else
+          {
+          string lhs = translate(t.children[0]);
+          string rhs = translate(t.children[2]);
+          return lhs ~ " " ~ t.children[1].matches[0] ~ " " ~ rhs;
+          }
         }
         else
         {

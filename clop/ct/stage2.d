@@ -386,7 +386,9 @@ template Backend(TList...)
                 recognized_template = true;
             +/
           }
-          auto recognized_function_call = t.matches[$ - 1] == ")";
+          auto recognized_function_call =
+            (t.children.length == 1 && t.matches[$ - 1] == ")" && t.matches[$ - 2] == "(")
+            || (t.children.length > 1 && t.children[1].name == "CLOP.ArgumentExprList");
           if (!recognized_template && !recognized_function_call)
             analyze(t.children[0]);
           if (t.children.length == 1)
