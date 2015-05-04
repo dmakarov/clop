@@ -729,8 +729,9 @@ struct Program
     case "CLOP.Declarator":
       {
         string s = translate(t.children[0]);
+        string b = t.matches[$ - 1] == "]" ? "[" : "(";
         if (t.children.length > 1)
-          s ~= "(" ~ translate(t.children[1]) ~ ")";
+          s ~= b ~ translate(t.children[1]) ~ t.matches[$ - 1];
         return s;
       }
     case "CLOP.DeclarationSpecifiers":
@@ -857,27 +858,6 @@ struct Program
             {
             if (t.children[0].children.length == 2)
             {
-              auto function_literal = t.children[0].children[1].matches[0];
-              version (UNITTEST_DEBUG)
-              {
-                writefln("UT:%s this is template expression %s instance %s",
-                         suffix, t.children[0].children[0].matches, function_literal);
-              }
-              ////////////////////////////////////////////////////////////////////////////
-              switch (t.children[0].children[0].matches[0])
-              {
-              case "reduce":
-                {
-                  s = clop.ct.templates.reduce.instantiate_template(function_literal, t.children[1]);
-                  version (UNITTEST_DEBUG)
-                  {
-                    writefln("UT:%s template expanded to %s", suffix, s);
-                  }
-                }
-                break;
-              default: {/+ do nothing +/}
-              }
-              /+
               foreach (it; __traits(allMembers, ExpansionPattern))
               {
                 if (it == t.children[0].children[0].matches[0])
@@ -891,8 +871,6 @@ struct Program
                   }
                 }
               }
-              +/
-              ////////////////////////////////////////////////////////////////////////////
             }
             else
             {

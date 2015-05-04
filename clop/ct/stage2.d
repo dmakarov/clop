@@ -913,14 +913,34 @@ template Backend(TList...)
           ParseTree[] newlist = [];
           foreach (i, c; t.children)
           {
-            version (UNITTEST_DEBUG) writefln("UT:%s    child %s: %s", suffix, i, c.matches);
-            if (c.children[0].name == "CLOP.ExpressionStatement")
+            auto s = c.children[0];
+            version (UNITTEST_DEBUG) writefln("UT:%s    child %s %s: %s", suffix, i, s.name, s.matches);
+            switch (s.name)
             {
-              auto sl = lower_expression(c.children[0].children[0]);
-              newlist ~= sl;
-            }
-            else
+            case "CLOP.Declaration":
+              {
+                if (s.children.length > 1)
+                {
+                  foreach (j; s.children[1].children)
+                  {
+                    if (j.children.length > 1)
+                    {
+                      auto sl = lower_expression(j.children[1]);
+                      newlist ~= sl;
+                    }
+                  }
+                }
+              }
+              break;
+            case "CLOP.ExpressionStatement":
+              {
+                auto sl = lower_expression(s.children[0]);
+                newlist ~= sl;
+              }
+              break;
+            default:
               lower(c);
+            }
             newlist ~= c;
           }
           t.children = newlist;
@@ -1042,21 +1062,49 @@ template Backend(TList...)
             t.matches = [name];
             t.children[0] = CLOP.decimateTree(CLOP.PrimaryExpr(name)).children[0];
           }
+          else if (t.children.length > 1)
+          {
+            auto function_literal = t.children[1].matches[0];
+            auto return_type = "float";
+            auto x = clop.ct.templates.SnippetContainer.binary_function(function_literal, return_type);
+            version (UNITTEST_DEBUG) writefln("lower PrimaryExpr add an external %s", x);
+            external ~= x;
+          }
         }
         break;
       case "CLOP.PostfixExpr":
         {
           version (UNITTEST_DEBUG) writefln("lower PostfixExpr %s", t.matches);
-          nt =lower_expression_internal(t.children[0], sl);
+          nt = lower_expression_internal(t.children[0], sl);
           t.children[0] = nt;
           if (t.children.length > 1)
           {
             if (t.children[1].name == "CLOP.Expression")
             {
-              // lower the expression in parenthesis
+              // lower the expression in brackets
               nt = lower_expression_internal(t.children[1], sl);
               t.children[1] = nt;
               t.matches = t.children[0].matches ~ "[" ~ t.children[1].matches ~ "]";
+            }
+            else if (t.children[1].name == "CLOP.ArgumentExprList")
+            {
+              // lower the actual parameters
+              nt = lower_expression_internal(t.children[1], sl);
+              t.children[1] = nt;
+              switch (t.children[0].children[0].matches[0])
+              {
+              case "reduce":
+                {
+                  auto func_name = "clop_binary_function";
+                  auto s = clop.ct.templates.reduce.instantiate_template(func_name, t.children[1]);
+                  version (UNITTEST_DEBUG)
+                  {
+                    writefln("UT:%s template expanded to %s", suffix, s);
+                  }
+                }
+                break;
+              default: {/+ do nothing +/}
+              }
             }
           }
           else
@@ -1066,18 +1114,28 @@ template Backend(TList...)
           }
         }
         break;
+      case "CLOP.ArgumentExprList":
+        {
+          string[] matches = [];
+          foreach (i; 0 .. t.children.length)
+          {
+            nt = lower_expression_internal(t.children[i], sl);
+            matches ~= (i == 0) ? nt.matches : [","] ~ nt.matches;
+            t.children[i] = nt;
+          }
+          t.matches = matches;
+        }
+        break;
       case "CLOP.UnaryExpr":
         {
           version (UNITTEST_DEBUG) writefln("lower UnaryExpr %s", t.matches);
           if (t.children[0].name == "CLOP.PostfixExpr")
           {
-            // lower the expression in parenthesis
             t.children[0] = lower_expression_internal(t.children[0], sl);
             version (UNITTEST_DEBUG) writefln("lower UnaryExpr replace %s with %s",
                                               t.matches, t.children[0].matches);
             t.matches = t.children[0].matches;
           }
-          // otherwise need not do anything, it's a trivial expression
         }
         break;
       case "CLOP.CastExpr":

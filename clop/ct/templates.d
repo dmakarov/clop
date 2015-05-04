@@ -149,7 +149,7 @@ struct ReduceSnippet
       result = func(${a}, ${b}[0]);
   };
 
-  string instantiate_template(string function_literal, ParseTree argument_list)
+  string instantiate_template(string func, ParseTree argument_list)
   {
     version (UNITTEST_DEBUG)
     {
@@ -196,7 +196,7 @@ struct SnippetContainer
   alias SnippetContainer_get this;
   +/
   ///////////////////////////////////////////////////////////////////////////////////////
-  string binary_function(string function_literal, string type = "float", string a = "a", string b = "b")
+  static string binary_function(string function_literal, string type = "float", string a = "a", string b = "b")
   {
     // FIXME: generate unique function name
     auto name = "clop_binary_function";
