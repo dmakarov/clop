@@ -135,27 +135,28 @@ template_2d_index = "(%s) * (%s) + (%s)";
 struct ReduceSnippet
 {
   private static immutable reduce_snippet = q{
-    barrier(CLK_LOCAL_MEM_FENCE);
-    int clop_local_thread_id = get_local_id(0);
-    for (int i = 1; i < ${a.length}; i = i * 2)
     {
-      if (clop_local_thread_id % (2 * i) == 0)
-        ${a}[clop_local_thread_id]
-              = ${func}(${b}[clop_local_thread_id    ],
-                        ${b}[clop_local_thread_id + i]);
       barrier(CLK_LOCAL_MEM_FENCE);
+      int clop_local_thread_id = get_local_id(0);
+      for (int i = 1; i < %s; i *= 2)
+      {
+        if (clop_local_thread_id %% (2 * i) == 0)
+          %s[clop_local_thread_id] = %s(%s[clop_local_thread_id], %s[clop_local_thread_id + i]);
+        barrier(CLK_LOCAL_MEM_FENCE);
+      }
+      if (clop_local_thread_id == 0)
+        %s = %s(%s, %s[0]);
     }
-    if (clop_local_thread_id == 0)
-      result = func(${a}, ${b}[0]);
   };
 
-  string instantiate_template(string func, ParseTree argument_list)
+  string instantiate_template(string func, ParseTree argument_list, string result)
   {
-    version (UNITTEST_DEBUG)
-    {
-      writefln("UT: ReduceSnippet.instantiate_template: %s", argument_list.matches);
-    }
-    return reduce_snippet;
+    version (UNITTEST_DEBUG) writefln("UT: ReduceSnippet.instantiate_template: %s", argument_list.matches);
+    // FIXME: lookup length from array entry in the symbol table.
+    auto length = "x";
+    auto initial = argument_list.children[0].matches[0];
+    auto array = argument_list.children[1].matches[0];
+    return format(reduce_snippet, length, array, func, array, array, result, func, initial, array);
   }
 }
 
@@ -164,12 +165,9 @@ struct MapSnippet
   private static immutable map_snippet = q{
   };
 
-  string instantiate_template(string function_literal, ParseTree argument_list)
+  string instantiate_template(string func, ParseTree argument_list, string result)
   {
-    version (UNITTEST_DEBUG)
-    {
-      writefln("UT: MapSnippet.instantiate_template: %s", argument_list.matches);
-    }
+    version (UNITTEST_DEBUG) writefln("UT: MapSnippet.instantiate_template: %s", argument_list.matches);
     return map_snippet;
   }
 }

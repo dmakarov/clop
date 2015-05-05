@@ -33,11 +33,13 @@ import std.traits;
 import clop.rt.ndarray;
 import clop.ct.analysis;
 import clop.ct.parser;
-import clop.ct.program;
 import clop.ct.structs;
 import clop.ct.symbol;
 import clop.ct.transform;
+static import clop.ct.program;
 static import clop.ct.templates;
+
+alias Program = clop.ct.program.Program;
 
 version (UNITTEST_DEBUG)
 {
@@ -1091,20 +1093,7 @@ template Backend(TList...)
               // lower the actual parameters
               nt = lower_expression_internal(t.children[1], sl);
               t.children[1] = nt;
-              switch (t.children[0].children[0].matches[0])
-              {
-              case "reduce":
-                {
-                  auto func_name = "clop_binary_function";
-                  auto s = clop.ct.templates.reduce.instantiate_template(func_name, t.children[1]);
-                  version (UNITTEST_DEBUG)
-                  {
-                    writefln("UT:%s template expanded to %s", suffix, s);
-                  }
-                }
-                break;
-              default: {/+ do nothing +/}
-              }
+              t.matches = nt.matches;
             }
           }
           else
