@@ -8,7 +8,6 @@ srcdir=../${srcpth%/*}
 testnm=${srcpth##*/}_test
 rm -f ${testnm}{,.d,.o}
 echo "module ${testnm};"      > ${testnm}.d
-echo "import std.typetuple;" >> ${testnm}.d
 inputs=""
 let status=0
 for i in $(ls ${srcdir}/*.d) ; do
@@ -26,12 +25,7 @@ for i in $(ls ${srcdir}/*.d) ; do
         let status=$((status||excode))
     fi
     inputs="${inputs} ${obj}"
-    import=${i#*/}
-    import=${import%.d}
-    import=${import//\//.}
-    echo "static import ${import};" >> ${testnm}.d
 done
-echo "alias allModules = TypeTuple!(${module});" >> ${testnm}.d
 cat >> ${testnm}.d <<EOF
 void main()
 {
