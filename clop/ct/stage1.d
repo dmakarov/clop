@@ -24,17 +24,18 @@
  */
 module clop.ct.stage1;
 
-import std.format, clop.ct.parser, clop.ct.symbol;
+import std.format;
+import clop.ct.parser, clop.ct.symbol;
 static import clop.ct.templates;
 
-version (UNITTEST_DEBUG)
+debug (UNITTEST_DEBUG)
 {
   import std.stdio;
 }
 
 /++
  +  The CLOP compiler front end.
- +  Analyze the AST and extract all the kernel parameters.
+ +  Analyze the AST and extract the kernel parameters.
  +/
 struct Frontend
 {
@@ -76,7 +77,7 @@ struct Frontend
       foreach (s, v; symtable)
         if (!v.is_local)
         {
-          types ~= comma ~ "typeof(" ~ v.name ~ ")";
+          types ~= comma ~ (v.type == "" ? "typeof(" ~ v.name ~ ")" : v.type);
           names ~= comma ~ `"` ~ v.name ~ `"`;
           comma = ", ";
         }
@@ -107,8 +108,10 @@ struct Frontend
   string suffix;
   string errors;
 
+  string current_type = "";
+  bool external_linkage = false;
   bool global_scope = false;
-  uint depth        = 0;
+  uint depth = 0;
 
   /++
    +
@@ -199,24 +202,51 @@ struct Frontend
       }
     case "CLOP.Declaration":
       {
-        foreach (c; t.children)
+        foreach (i, c; t.children)
+        {
+          debug (UNITTEST_DEBUG) writefln("STAGE1 analyze CLOP.Declaration %s %s", i, c.matches);
           analyze(c);
+        }
+        current_type = "";
         break;
       }
     case "CLOP.Declarator":
       {
         auto saved_global_scope_value = global_scope;
-        global_scope = false;
-        foreach (c; t.children)
-        {
-          analyze(c);
-        }
+        global_scope = external_linkage;
+        analyze(t.children[0]);
         global_scope = saved_global_scope_value;
+        external_linkage = false;
+        if (t.children.length > 1)
+        {
+          analyze(t.children[1]);
+          if (t.children[1].name == "CLOP.ConditionalExpr")
+          {
+            auto symbol = t.children[0].matches[0];
+            symtable[symbol].is_array = true;
+            symtable[symbol].type = current_type ~ "*";
+          }
+        }
         break;
       }
     case "CLOP.DeclarationSpecifiers":
+      {
+        analyze(t.children[0]);
+        if (t.children.length > 1)
+          analyze(t.children[1]);
+        break;
+      }
     case "CLOP.StorageClassSpecifier":
+      {
+        debug (UNITTEST_DEBUG) writeln("STAGE1 analyze CLOP.StorageClassSpecifier");
+        external_linkage = true;
+        break;
+      }
     case "CLOP.TypeSpecifier":
+      {
+        current_type = t.matches[0];
+        break;
+      }
     case "CLOP.StructSpecifier":
       {
         break;
@@ -534,13 +564,28 @@ struct Frontend
 } // Frontend class
 
 unittest {
-  version (UNITTEST_DEBUG)
+  debug (UNITTEST_DEBUG)
   {
-    writeln("STAGE 1 unit tests.");
+    writeln("STAGE 1 UNIT TESTS");
   }
-  ParseTree t;
-  auto c = Frontend(t, __FILE__, __LINE__);
-  auto p = c.generate_stage2_code();
+  auto t = clop.ct.parser.CLOP(q{
+      NDRange(i : 1 .. h_n, j : 0 .. i_n)
+      {
+        local float t[i_n];
+        t[j] = inputs[j] * weights[i, j];
+        float s = reduce!"a + b"(0, t);
+        if (j == 0)
+        {
+          hidden[i] = ONEF / (ONEF + exp(-s));
+        }
+      }});
+  auto f = Frontend(t, __FILE__, __LINE__);
+  auto c = f.generate_stage2_code();
+  debug (UNITTEST_DEBUG)
+  {
+    writefln("%s", f.dump_symtable());
+    writefln("// STAGE 1 GENERATED CODE:%s\n", c);
+  }
 }
 
 // Local Variables:

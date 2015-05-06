@@ -29,7 +29,7 @@ import std.container;
 import std.conv;
 import std.string;
 import std.traits;
-version (UNITTEST_DEBUG) import std.stdio;
+debug (UNITTEST_DEBUG) import std.stdio;
 
 import pegged.grammar;
 
@@ -768,9 +768,12 @@ struct Program
           case "reduce":
             {
               auto func_name = "clop_binary_function";
+              auto type = "float";
+              auto length = "input_n";
               value = "reduce_result";
-              stmts = clop.ct.templates.reduce.instantiate_template(func_name, t.children[1], value);
-              version (UNITTEST_DEBUG) writefln("UT:%s template expanded to %s", suffix, stmts);
+              stmts = type ~ " " ~ value ~ ";";
+              stmts ~= clop.ct.templates.reduce.instantiate_template(func_name, t.children[1], value, length);
+              debug (UNITTEST_DEBUG) writefln("UT:%s template expanded to %s", suffix, stmts);
             }
             break;
           default: {/+ do nothing +/}
@@ -832,7 +835,12 @@ struct Program
       }
     case "CLOP.ArgumentExprList":
       {
-        value = reduce!((a, b) => a ~ ", " ~ translate(b))(translate(t.children[0]), t.children[1 .. $]);
+        foreach (i, c; t.children)
+        {
+          auto r = translate_expression(c);
+          value ~= i == 0 ? r.value : ", " ~ r.value;
+          stmts ~= r.stmts;
+        }
         break;
       }
     case "CLOP.UnaryExpr":
@@ -1064,6 +1072,9 @@ struct Program
         return s;
       }
     case "CLOP.StorageClassSpecifier":
+      {
+        return "//";
+      }
     case "CLOP.TypeSpecifier":
       {
         return t.matches[0];
@@ -1082,12 +1093,12 @@ struct Program
       }
     case "CLOP.Statement":
       {
-        version (UNITTEST_DEBUG) writefln("UT:%s Program.translate case CLOP.Statement: %s", suffix, t.matches);
+        debug (UNITTEST_DEBUG) writefln("UT:%s Program.translate case CLOP.Statement: %s", suffix, t.matches);
         return translate(t.children[0]);
       }
     case "CLOP.CompoundStatement":
       {
-        version (UNITTEST_DEBUG)
+        debug (UNITTEST_DEBUG)
         {
           writefln("UT:%s Program.translate case CLOP.CompoundStatement: %s", suffix, t.matches);
         }
@@ -1098,7 +1109,7 @@ struct Program
       }
     case "CLOP.ExpressionStatement":
       {
-        version (UNITTEST_DEBUG) writefln("UT:%s Program.translate case CLOP.ExpressionStatement: %s", suffix, t.matches);
+        debug (UNITTEST_DEBUG) writefln("UT:%s Program.translate case CLOP.ExpressionStatement: %s", suffix, t.matches);
         auto r = translate_expression(t.children[0]);
         return r.stmts ~ indent ~ r.value ~ ";\n";
       }
@@ -1202,18 +1213,17 @@ unittest
         }
       }});
   alias A = clop.rt.ndarray.NDArray!float;
-  alias T = std.typetuple.TypeTuple!(size_t, size_t, A, A, A);
-  auto be = clop.ct.stage2.Backend!T(t, __FILE__, __LINE__, ["h_n", "i_n", "inputs", "weights", "hidden"]);
+  alias T = std.typetuple.TypeTuple!(size_t, float*, size_t, A, A, A);
+  auto be = clop.ct.stage2.Backend!T(t, __FILE__, __LINE__, ["h_n", "t", "i_n", "inputs", "weights", "hidden"]);
   be.analyze(t);
   be.update_parameters();
   be.lower(t);
   be.compute_intervals();
   auto p = Program(be.symtable, [], be.parameters, be.KBT, be.range, be.pattern, "", "", be.suffix);
   auto k = p.translate(be.KBT);
-  version (UNITTEST_DEBUG)
-  {
-    writefln("UT:%s k:\n%s", be.suffix, k);
-  }
+  debug (UNITTEST_DEBUG) writefln("UT:%s k:\n%s", be.suffix, k);
+  auto c = p.generate_code();
+  debug (UNITTEST_DEBUG) writefln("UT:%s c:\n%s", be.suffix, c);
 }
 
 // Local Variables:

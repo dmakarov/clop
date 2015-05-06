@@ -137,7 +137,12 @@ struct ReduceSnippet
   private static immutable reduce_snippet = q{
     {
       barrier(CLK_LOCAL_MEM_FENCE);
-      int clop_local_thread_id = get_local_id(0);
+      uint clop_work_dim = get_work_dim();
+      size_t clop_local_thread_id = get_local_id(0); // = get_local_linear_id();
+      if (clop_work_dim > 1)
+        clop_local_thread_id += get_local_id(1) * get_local_size(0);
+      if (clop_work_dim > 2)
+        clop_local_thread_id += get_local_id(2) * get_local_size(1) * get_local_size(0);
       for (int i = 1; i < %s; i *= 2)
       {
         if (clop_local_thread_id %% (2 * i) == 0)
@@ -149,11 +154,10 @@ struct ReduceSnippet
     }
   };
 
-  string instantiate_template(string func, ParseTree argument_list, string result)
+  string instantiate_template(string func, ParseTree argument_list, string result, string length)
   {
     version (UNITTEST_DEBUG) writefln("UT: ReduceSnippet.instantiate_template: %s", argument_list.matches);
     // FIXME: lookup length from array entry in the symbol table.
-    auto length = "x";
     auto initial = argument_list.children[0].matches[0];
     auto array = argument_list.children[1].matches[0];
     return format(reduce_snippet, length, array, func, array, array, result, func, initial, array);
