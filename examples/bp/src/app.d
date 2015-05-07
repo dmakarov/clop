@@ -419,6 +419,43 @@ class Application {
    + same order as the kernel version does.  In principle the results
    + should be precisely equal.
    +/
+  void layerforward_parallel_for_clop(NDArray!CL_FP f, NDArray!CL_FP t, NDArray!CL_FP w)
+  {
+    f[0] = ONEF;
+
+    auto sums = new NDArray!CL_FP(hidden_n + 1, input_n + 1);
+
+    foreach (row; 0 .. hidden_n + 1)
+    {
+      foreach (col; 0 .. input_n + 1)
+      {
+        sums[row, col] = w[row, col] * f[col];
+      }
+    }
+    for (auto i = 1; i < input_n + 1; i *= 2)
+    {
+      foreach (row; 0 .. hidden_n)
+      {
+        foreach (col; 0 .. input_n)
+        {
+          if (col % (2 * i) == 0)
+          {
+            sums[row, col] += sums[row, col + i];
+          }
+        }
+      }
+    }
+    foreach (j; 1 .. hidden_n + 1)
+    {
+      t[j] = ONEF / (ONEF + exp(-sums[j,0]));
+    }
+  }
+
+  /++
+   + This version of layerforward performs additions in exactly the
+   + same order as the kernel version does.  In principle the results
+   + should be precisely equal.
+   +/
   void layerforward_parallel(NDArray!CL_FP f, NDArray!CL_FP t, NDArray!CL_FP w)
   {
     f[0] = ONEF;
