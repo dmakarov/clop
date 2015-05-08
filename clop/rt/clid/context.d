@@ -10,6 +10,7 @@ import clop.rt.clid.queue;
 import clop.rt.clid.platform;
 import clop.rt.clid.device;
 import clop.rt.clid.clerror;
+import clop.rt.clid.settings;
 
 
 class Context {
@@ -22,19 +23,33 @@ class Context {
 			writeln("Creating context singleton");
 			def = new Context();
 
-			
-			//def = cutk.make_shared<Context>();
-			// cutk.String devType = Clipp.Instance().settings().get("device_type").toString();
-			//cutk.shared_ptr<Device> device;
-			//if(devType.stdString() == "gpu")  {
-			//	device = Platform.GetDefault().device(CL_DEVICE_TYPE_GPU);
-			//} else {
-			Device device = Platform.GetDefault().cpu();
+			Settings s = Settings.Instance();
+			Device device = null;
+
+			switch(s.deviceType()) {
+				case "cpu" : 
+				{
+					device = Platform.GetDefault().cpu();
+					break;
+				}
+
+				case "gpu":
+				{
+					device = Platform.GetDefault().gpu();
+					break;
+				}
+
+				case "apu":
+				{
+					device = Platform.GetDefault().apu();
+					break;
+				}
+			}
+
 			if(device is null) {
 				writeln("[Error] invalid context");
 				return null;
 			}
-			//}
 			
 			device.describe();
 			def.initialize(device);
