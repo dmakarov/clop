@@ -2,6 +2,7 @@ module clop.rt.clid.device;
 
 import std.stdio;
 import std.conv;
+import std.string;
 import derelict.opencl.cl;
 
 class Device {
@@ -54,7 +55,7 @@ public:
 
 		cl_device_fp_config prec;
 		checkValid(clGetDeviceInfo(_id, CL_DEVICE_DOUBLE_FP_CONFIG, cl_device_fp_config.sizeof, &prec, null));
-		writeln(" CL_DEVICE_DOUBLE_FP_CONFIG = %d\n", ( (CL_FP_FMA | CL_FP_ROUND_TO_NEAREST | CL_FP_ROUND_TO_ZERO | CL_FP_ROUND_TO_INF | CL_FP_INF_NAN | CL_FP_DENORM) == prec ));
+		writeln("CL_DEVICE_DOUBLE_FP_CONFIG = ", ( (CL_FP_FMA | CL_FP_ROUND_TO_NEAREST | CL_FP_ROUND_TO_ZERO | CL_FP_ROUND_TO_INF | CL_FP_INF_NAN | CL_FP_DENORM) == prec ));
 	}
 
 	bool checkValid( cl_int ret) 
@@ -67,7 +68,7 @@ public:
 
 		if(CL_INVALID_VALUE == ret) {
 			writeln("CL_INVALID_VALUE");
-			assert(ret == CL_SUCCESS);
+			//assert(ret == CL_SUCCESS);
 			return false;
 		}
 
@@ -79,11 +80,13 @@ public:
 	string info2String(string infoName, cl_device_info info) 
 	{
 		static const int MAX_BUFFER_SIZE = 2048;
-		char[MAX_BUFFER_SIZE] buffer;
+		char[] buffer= new char[MAX_BUFFER_SIZE];
 		ulong[] empty;
-		checkValid(clGetDeviceInfo(_id, info, buffer.sizeof, cast(void *)buffer, empty.ptr));
-		string str =text(buffer);
-		return infoName ~ " = " ~ str ~ "\n";
+		if(!checkValid(clGetDeviceInfo(_id, info, buffer.sizeof, cast(void *)buffer.ptr, empty.ptr))) {
+			return infoName ~ " = " ~ "[Error]";
+		}
+		string str = text(fromStringz(cast(char *)buffer.ptr));
+		return infoName ~ " = " ~ str;
 	}
 
 
@@ -93,7 +96,7 @@ public:
 		T buf;
 		ulong[] empty;
 		checkValid(clGetDeviceInfo(getId(), info, buf.sizeof, cast(void *)&buf, empty.ptr));
-		return infoName ~ " = " ~ text(buf) ~ "\n";
+		return infoName ~ " = " ~ text(buf);
 	}
 
 	this( cl_device_id id)

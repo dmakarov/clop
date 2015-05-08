@@ -1,5 +1,5 @@
 module clop.rt.clid.context;
-
+import std.array;
 import std.container.array;
 import std.stdio;
 import std.exception;
@@ -9,6 +9,8 @@ import derelict.opencl.cl;
 import clop.rt.clid.queue;
 import clop.rt.clid.platform;
 import clop.rt.clid.device;
+import clop.rt.clid.clerror;
+
 
 class Context {
 	public
@@ -28,6 +30,10 @@ class Context {
 			//	device = Platform.GetDefault().device(CL_DEVICE_TYPE_GPU);
 			//} else {
 			Device device = Platform.GetDefault().cpu();
+			if(device is null) {
+				writeln("[Error] invalid context");
+				return null;
+			}
 			//}
 			
 			device.describe();
@@ -52,9 +58,47 @@ class Context {
 		return _queues[index];
 	}
 
-	bool initialize(Array!Device devices);
 
-	bool initialize(Device device);
+	bool initialize(Device device)
+	{
+		Array!Device vec = [device];
+		return initialize(vec);
+	}
+
+	bool initialize(Array!Device devices) 
+	{
+		DerelictCL.load();
+		cl_int err = 0;
+		//FIXME Arg0 is platform to use
+		cl_device_id[] devIds;
+		devIds.length = devices.length;
+		
+		int i = 0;
+		foreach(Device it; devices) {
+			devIds[i++] = it.getId();
+		}
+		
+		long[] empty;
+		_context = clCreateContext(null, cast(uint)devIds.length, &devIds[0], null, null, &err);
+
+		CLError ret = new CLError(err);
+		if(!ret.success())
+			return false;
+
+		_queues.length = devices.length;
+
+		bool ok = true;
+		cl_ulong nDevices = devices.length;
+		for(i = 0; i < nDevices; ++i) {
+			_queues[i] = new Queue(clCreateCommandQueue(_context,  devIds[i], 0, &err));
+			ok &= ret.check(err);
+		}
+
+		_devices = devices;
+
+		_initialized = true;
+		return ok;
+	}
 
 	Array!Device devices()
 	{
@@ -71,10 +115,22 @@ class Context {
 		return _context;
 	}
 
-	this() {}
-	~this();
+	this() 
+	{
+		_initialized = false;
+	}
+
+	~this()
+	{
+		if(!_initialized) return;
+
+		cl_int ret = clReleaseContext(_context);
+		assert(ret == CL_SUCCESS);
+	}
+	
 
 	private
+	bool _initialized;
 	cl_context _context;
 	Array!Queue _queues;
 	Array!Device _devices;

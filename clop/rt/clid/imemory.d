@@ -4,7 +4,7 @@ import clop.rt.clid.queue;
 import clop.rt.clid.context;
 
 
-class IMemory {
+abstract class IMemory {
 public
 	~this() {}
 	size_t size() const;

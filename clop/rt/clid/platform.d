@@ -16,11 +16,11 @@ import clop.rt.clid.clerror;
 class Platform  {
 	public
 
-	bool GetIDs(cl_platform_id[] platforms, cl_uint maxPlatforms = 1)
+	bool GetIDs(ref cl_platform_id[] platforms, cl_uint maxPlatforms = 1)
 	{
 		DerelictCL.load();
 		cl_uint numPlatforms;
-		platforms.length = maxPlatforms;
+		platforms = new cl_platform_id[maxPlatforms];
 		cl_int status = clGetPlatformIDs(maxPlatforms, platforms.ptr, &numPlatforms);
 		platforms.length = numPlatforms;
 		return status == CL_SUCCESS;
@@ -29,6 +29,11 @@ class Platform  {
 	this()
 	{
 		GetIDs(_platforms);
+
+		if(_platforms.length == 0) {
+			writeln("[Error] no platform found");
+			return;
+		}
 
 		cl_uint numDevices;
 		CLError ret = new CLError(clGetDeviceIDs(_platforms[0], CL_DEVICE_TYPE_ALL, 0, null, &numDevices));
@@ -54,6 +59,11 @@ class Platform  {
 
 	Device device(cl_device_type type) 
 	{
+		if(!valid()) {
+			writeln("[Error] cannot get device from non-valid platform");
+			return null;
+		}
+
 		cl_device_id dId;
 		cl_uint numDevices;
 		CLError ret = new CLError(clGetDeviceIDs(_platforms[0], type, 1, &dId, &numDevices));
@@ -78,6 +88,11 @@ class Platform  {
 		}
 		
 		return def;
+	}
+
+	bool valid()
+	{
+		return _platforms.length > 0;
 	}
 
 	private
