@@ -9,99 +9,85 @@ import clop.rt.clid.context;
 
 
 class Queue {
-	public
-	
-	this(cl_command_queue queue)
-	{
-		_queue = queue;
-	}
-	
+	public {
 
-	~this()
-	{
-		release();
-	}
-
-	bool enqueue(Kernel kernel)
-	{
-		cl_ulong[] gws = null;
-		cl_ulong[] lws = null;
-
-		if(!kernel.localWorkSize().empty) {
-			lws = kernel.localWorkSize();
-		}
-
-		if(!kernel.globalWorkSize().empty) {
-			gws = kernel.globalWorkSize();
+		this(cl_command_queue queue)
+		{
+			_queue = queue;
 		}
 
 
-		cl_ulong[] empty0;
-		void[] empty1;
-		void[][] empty2;
-
-		cl_event event;
-		CLError err = new CLError( 
-			clEnqueueNDRangeKernel(
-			_queue,
-			kernel.implementation(),
-			cast(cl_uint) kernel.nWorkDims(),
-			null,
-			gws.ptr,
-			lws.ptr,
-			0, 
-			null, 
-			&event) 
-		);
-
-		return err.success();
-	}
-
-	//bool enqueue(Kernel kernel, cl_event[] eventsToWait, ref cl_event event)
-	//{
-	//	assert(false);
-
-	//	//Error err = clEnqueueNDRangeKernel(_queue,
-	//	//	kernel.implementation(),
-	//	//	kernel.nWorkDims(),
-	//	//	NULL,
-	//	//	&kernel.globalWorkSize()[0],
-	//	//	&kernel.localWorkSize()[0],
-	//	//	eventsToWait.size(), &eventsToWait[0], &event);
-
-	//	//return err.success();
-	//	return false;
-	//}
-	
-	bool finish()
-	{
-		return CLError.Check(clFinish(_queue));
-	}
-
-
-	cl_command_queue implementation() {
-		return _queue;
-	}
-
-	static Queue GetDefault()
-	{
-		static Queue instance = null;
-		if(instance is null) {
-			writeln("Creating Queue instance");
-			instance =  Context.GetDefault().queue(0);
+		~this()
+		{
+			release();
 		}
 
-		return instance;
+		bool enqueue(Kernel kernel)
+		{
+			cl_ulong[] gws = null;
+			cl_ulong[] lws = null;
+
+			if(!kernel.localWorkSize().empty) {
+				lws = kernel.localWorkSize();
+			}
+
+			if(!kernel.globalWorkSize().empty) {
+				gws = kernel.globalWorkSize();
+			}
+
+
+			cl_ulong[] empty0;
+			void[] empty1;
+			void[][] empty2;
+
+			cl_event event;
+			CLError err = new CLError( 
+				clEnqueueNDRangeKernel(
+					_queue,
+					kernel.implementation(),
+					cast(cl_uint) kernel.nWorkDims(),
+					null,
+					gws.ptr,
+					lws.ptr,
+					0, 
+					null, 
+					&event) 
+				);
+
+			return err.success();
+		}
+
+		bool finish()
+		{
+			return CLError.Check(clFinish(_queue));
+		}
+
+
+		cl_command_queue implementation() {
+			return _queue;
+		}
+
+		static Queue GetDefault()
+		{
+			static Queue instance = null;
+			if(instance is null) {
+				writeln("Creating Queue instance");
+				instance =  Context.GetDefault().queue(0);
+			}
+
+			return instance;
+		}
+
+
+		void release()
+		{
+			clReleaseCommandQueue(_queue);
+		} 
 	}
 
-
-	void release()
-	{
-		clReleaseCommandQueue(_queue);
+	private {
+		cl_command_queue _queue;
 	}
-
-	private
-	cl_command_queue _queue;
 }
 
 

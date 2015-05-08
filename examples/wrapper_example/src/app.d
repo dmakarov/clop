@@ -8,11 +8,10 @@ import derelict.opencl.cl;
 
 int main(string[] args)
 {
+	//Settings.Instance().setUseGPU();
 	Settings.Instance().setUseCPU();
+	Context c = Context.GetDefault();
 
-	Context c1 = Context.GetDefault();
-	Context c2 = Context.GetDefault();
-	Context c3 = Context.GetDefault();
 
 	return 0;
 }

@@ -22,7 +22,7 @@ class Settings {
 
 	static Settings Instance()
 	{
-		Settings s = null;
+		static Settings s = null;
 		if(s is null) {
 			s = new Settings();
 		}

@@ -26,6 +26,8 @@ class Context {
 			Settings s = Settings.Instance();
 			Device device = null;
 
+			writeln(s.deviceType());
+
 			switch(s.deviceType()) {
 				case "cpu" : 
 				{
@@ -53,7 +55,7 @@ class Context {
 			device.describe();
 			def.initialize(device);
 		} 
-		
+
 		return def;
 	}
 
