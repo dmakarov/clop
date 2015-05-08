@@ -39,9 +39,8 @@ class Context {
 					break;
 				}
 
-				case "apu":
+				default: 
 				{
-					device = Platform.GetDefault().apu();
 					break;
 				}
 			}
@@ -53,8 +52,8 @@ class Context {
 			
 			device.describe();
 			def.initialize(device);
-			
 		} 
+		
 		return def;
 	}
 

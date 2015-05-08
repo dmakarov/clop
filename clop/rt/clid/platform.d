@@ -56,6 +56,10 @@ class Platform  {
 	{
 		return device(CL_DEVICE_TYPE_CPU);
 	}
+	Device gpu()
+	{
+		return device(CL_DEVICE_TYPE_GPU);
+	}
 
 	Device device(cl_device_type type) 
 	{
