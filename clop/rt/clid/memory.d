@@ -5,42 +5,51 @@ import std.stdio;
 
 import derelict.opencl.cl;
 import clop.rt.clid.imemory;
+import clop.rt.clid.arraymemory;
+import clop.rt.clid.context;
+import clop.rt.clid.queue;
 
 class Memory(T) : IMemory {
 	public {
-		size_t size()  { return 1; }
-		//cl_mem implementation() { return *((cl_mem *) &_hostValue); }
+		override {
+			size_t size()  { return 1; }
+			
+			cl_mem implementation() { return *(cast(cl_mem *) &_hostValue); }
+
+
+			bool initialize(Context context = Context.GetDefault())
+			{
+				return true;
+			}
+
+			bool updateHost(Queue queue = Queue.GetDefault()) 
+			{
+				return true;
+			}
+
+			bool updateDevice(Queue queue = Queue.GetDefault()) 
+			{
+				return true;
+			}
+
+
+			bool finalize(Queue queue = Queue.GetDefault()) 
+			{
+				return true;
+			}
+
+			bool commit(Context context = Context.GetDefault(), Queue queue = Queue.GetDefault())
+			{
+				return finalize(queue);
+			}
+		}
+
 
 		this(T hostValue)
 		{
 			_hostValue = hostValue;
 		}
 
-		bool initialize(Context context = Context.GetDefault())
-		{
-			return true;
-		}
-
-		bool updateHost(Queue queue = Queue.GetDefault()) 
-		{
-			return true;
-		}
-
-		bool updateDevice(Queue queue = Queue.GetDefault()) 
-		{
-			return true;
-		}
-
-
-		bool finalize(Queue queue = Queue.GetDefault()) 
-		{
-			return true;
-		}
-
-		bool commit(Context context = Context.GetDefault(), Queue queue = Queue.GetDefault())
-		{
-			return finalize(queue);
-		}
 	}
 
 	private {
@@ -49,68 +58,42 @@ class Memory(T) : IMemory {
 }
 
 
-class Memory(A : Array!T, T) : ArrayMemory!T {
+class Memory(T : T[]) : ArrayMemory!T {
 	public {
 		this()
 		{}
 
 		this(cl_ulong size)
 		{
-			_hostData = new Array!T(size);
+			_hostData = new T[size];
+		}
+		this(T[] data)
+		{
+			_hostData = data;
 		}
 
-		Array!T hostData()
+
+		T[] hostData()
 		{
 			return _hostData;
 		}
 
-		bool initialize(Context context = Context.GetDefault())
-		{
-			setPtr(&_hostData[0]);
-			setSize(_hostData.size());
-			return super.initialize(context);
-		}
+		override {
+			bool initialize(Context context = Context.GetDefault())
+			{
+				setPtr(_hostData);
+				setSize(_hostData.length);
+				return super.initialize(context);
+			}
 
-		bool finalize(Queue queue = Queue.GetDefault()) 
-		{
-			return super.finalize(queue);
-		}
-	}
-
-	private {
-		std.vector!T _hostData;
-	}
-}
-
-
-class Memory(A : Array!T, T) : ArrayMemory!T {
-	public {
-		this(Array!T hostData)
-		{
-			_hostData = hostData;
-		}
-
-		Array!T hostData()
-		{
-			return _hostData;
-		}
-
-		bool initialize(Context context = Context.GetDefault())
-		{
-			setPtr(&_hostData[0]);
-			setSize(_hostData.size());
-			return super.initialize(context);
-		}
-
-		bool finalize(Queue queue = Queue.GetDefault()) 
-		{
-			return super.finalize(queue);
+			bool finalize(Queue queue = Queue.GetDefault()) 
+			{
+				return super.finalize(queue);
+			}
 		}
 	}
 
 	private {
-		Array!T _hostData;
+		T[] _hostData;
 	}
 }
-
-

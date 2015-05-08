@@ -89,7 +89,14 @@ class ArgList {
 
 	bool setTo(Kernel kernel, uint argNum)
 	{
+		assert(!(kernel.implementation() is null));
+
+
+
 		IMemory mem = _args[argNum];
+		
+		assert(!(mem.pointer() is null));
+
 		CLError err = new CLError(clSetKernelArg(kernel.implementation(), argNum, mem.sizeOfMemory(), mem.pointer()));
 		if(!err.success()) {
 			writeln("[Error] CLKernel setting arg %d", argNum);

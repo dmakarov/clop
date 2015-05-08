@@ -3,10 +3,11 @@ module clop.rt.clid.makememory;
 
 import derelict.opencl.cl;
 import clop.rt.clid.imemory;
+import clop.rt.clid.memory;
 
 struct MemoryMaker(Arg) 
 {
-	Memory make(Arg arg) 
+	Memory!Arg make(Arg arg) 
 	{
 		return new Memory!Arg(arg);	
 	}

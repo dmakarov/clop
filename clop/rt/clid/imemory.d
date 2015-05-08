@@ -5,32 +5,33 @@ import clop.rt.clid.context;
 
 
 abstract class IMemory {
-public
-	~this() {}
-	size_t size() const;
-	cl_mem implementation();
+	public {
+		~this() {}
+	
+		cl_mem implementation()  
+		{
+			IMemory that = cast(IMemory)(this);
+			return that.implementation();
+		}
 
-	cl_mem implementation() const 
-	{
-		IMemory that = cast(IMemory)(this);
-		return that.implementation();
+		abstract {
+			size_t size();
+			bool initialize( Context context = Context.GetDefault());
+			bool updateDevice( Queue queue = Queue.GetDefault());
+			bool updateHost( Queue queue = Queue.GetDefault());
+			bool finalize( Queue queue = Queue.GetDefault());
+			bool commit( Context context = Context.GetDefault(),  Queue queue = Queue.GetDefault());
+		}
+
+		size_t sizeOfMemory()  
+		{
+			return implementation().sizeof;
+		}
+
+		void * pointer()
+		{
+			return cast(void *) implementation();
+		}
 	}
-
-	bool initialize(const Context context = Context.GetDefault());
-	bool updateDevice(const Queue queue = Queue.GetDefault());
-	bool updateHost(const Queue queue = Queue.GetDefault());
-	bool finalize(const Queue queue = Queue.GetDefault());
-	bool commit(const Context context = Context.GetDefault(), const Queue queue = Queue.GetDefault());
-
-	size_t sizeOfMemory() const 
-	{
-		return implementation().sizeof;
-	}
-
-	void * pointer()
-	{
-		return cast(void *) implementation();
-	}
-
 }
 
