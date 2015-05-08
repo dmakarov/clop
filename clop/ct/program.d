@@ -771,7 +771,7 @@ struct Program
               auto type = "float";
               auto length = "input_n";
               value = "reduce_result";
-              stmts = type ~ " " ~ value ~ ";";
+              stmts = "        " ~ type ~ " " ~ value ~ ";";
               stmts ~= clop.ct.templates.reduce.instantiate_template(func_name, t.children[1], value, length);
               debug (UNITTEST_DEBUG) writefln("UT:%s template expanded to %s", suffix, stmts);
             }
