@@ -70,10 +70,9 @@ class Application {
   int[] B; // reconstructed aligned sequence B
   int[] M; // characters of sequence A
   int[] N; // characters of sequence B
-  //int[] F; // matrix of computed scores
-  NDArray!int F;
+  NDArray!int F; // matrix of computed scores
   int[] G; // copy of F for validation
-  int[] S; // matrix of matches
+  NDArray!int S; // matrix of matches
   int[] I; // map of reads
   int[] O; // map of writes
   int[] Z; // map of shared memory accesses
@@ -108,9 +107,8 @@ class Application {
       auto b = to!(string)(BLOCK_SIZE);
       throw new Exception("ERROR: rows # (" ~ r ~ ") must be a multiple of " ~ b);
     }
-    S = new int[rows * cols]; assert(S !is null, "Can't allocate array S");
-    //F = new int[rows * cols]; assert(F !is null, "Can't allocate array F");
-    F = new NDArray!int(cols, rows); assert(F !is null, "Can't allocate array F");
+    S = new NDArray!int(rows, cols); assert(S !is null, "Can't allocate array S");
+    F = new NDArray!int(rows, cols); assert(F !is null, "Can't allocate array F");
 
     G = new int[rows * cols]; assert(G !is null, "Can't allocate array G");
     M = new int[rows];        assert(M !is null, "Can't allocate array M");
@@ -1336,8 +1334,8 @@ class Application {
         int k = a > b ? a : b;
         return k > c ? k : c;
       }
-      Antidiagonal NDRange( c : 1 .. cols, r : 1 .. rows ) {
-        F[c, r] = max3( F[c - 1, r - 1] + S[c + cols * r], F[c - 1, r] - penalty, F[c, r - 1] - penalty );
+      Antidiagonal NDRange(r : 1 .. rows, c : 1 .. cols) {
+        F[r, c] = max3( F[r - 1, c - 1] + S[r, c], F[r, c - 1] - penalty, F[r - 1, c] - penalty );
       } apply( rectangular_blocking( 8, 8 ) )
     } ) );
   }
@@ -1353,8 +1351,8 @@ class Application {
         int k = a > b ? a : b;
         return k > c ? k : c;
       }
-      Antidiagonal NDRange( c : 1 .. cols, r : 1 .. rows ) {
-        F[c, r] = max3( F[c - 1, r - 1] + BLOSUM62[M[r] * CHARS + N[c]], F[c - 1, r] - penalty, F[c, r - 1] - penalty );
+      Antidiagonal NDRange(r : 1 .. rows, c : 1 .. cols) {
+        F[r, c] = max3( F[r - 1, c - 1] + BLOSUM62[M[r] * CHARS + N[c]], F[r, c - 1] - penalty, F[r - 1, c] - penalty );
       } apply( rectangular_blocking( 8, 8 ), prefetching() )
     } ) );
   }
@@ -1378,8 +1376,6 @@ class Application {
               ticks.usecs / 1E6 );
     G[] = F[];
 
-    static if ( false )
-    {
     reset();
     timer.reset();
     timer.start();
@@ -1426,7 +1422,6 @@ class Application {
               ticks.usecs / 1E6, time,
               (rows - 1) * (cols - 1) / (1024 * 1024 * time) );
     validate();
-    }
 
     clGetKernelWorkGroupInfo( kernel_rectangles,
                               runtime.device,

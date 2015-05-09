@@ -55,3 +55,7 @@ struct Transformation
   string _name;
   string[] _parameters;
 }
+
+// Local Variables:
+// compile-command: "../../tests/test_module clop.ct.transform"
+// End:

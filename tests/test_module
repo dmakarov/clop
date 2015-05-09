@@ -1,0 +1,63 @@
+#!/bin/bash
+
+mypath=${0%/*}
+pushd $mypath
+module=${1}
+srcpth=${module//.//}
+srcdir=../${srcpth%/*}
+testnm=${srcpth##*/}_test
+rm -f ${testnm}{,.d,.o}
+echo "module ${testnm};"      > ${testnm}.d
+inputs=""
+let status=0
+for i in $(ls ${srcdir}/*.d) ; do
+    obj=${i/.d/.o}
+    obj=${obj##*/}
+    if [ ${i} == ../${srcpth}.d ]; then
+        echo "Compile ${i}..."
+        dmd -w -I.. -I~/.dub/packages/{derelict-util-1.9.1/source,derelict-cl-1.2.2/source,pegged-0.2.1} -unittest -debug=UNITTEST_DEBUG -c ${i}
+        let excode=$?
+        let status=$((status||excode))
+    elif [ ${i} -nt ${obj} ]; then
+        echo "Compile ${i}..."
+        dmd -w -I.. -I~/.dub/packages/{derelict-util-1.9.1/source,derelict-cl-1.2.2/source,pegged-0.2.1}           -debug=UNITTEST_DEBUG -c ${i}
+        let excode=$?
+        let status=$((status||excode))
+    fi
+    inputs="${inputs} ${obj}"
+done
+cat >> ${testnm}.d <<EOF
+void main()
+{
+  import std.stdio;
+  writeln("All unit tests have been run successfully.");
+}
+EOF
+
+if [ $((status)) = 0 ] && [ ! -f ../lib/libclop_runtime.a ] ; then
+    pushd ..
+    dub build --build=debug :runtime
+    popd
+fi
+
+if [ $((status)) = 0 ]; then
+    echo "Compile ${testnm}.d ${inputs}..."
+    dmd -w -I.. -I~/.dub/packages/{derelict-util-1.9.1/source,derelict-cl-1.2.2/source,pegged-0.2.1} \
+        -unittest -of${testnm} ${testnm}.d ${inputs} \
+        ~/.dub/packages/{pegged-0.2.1/libpegged.a,derelict-cl-1.2.2/lib/libDerelictCL.a,derelict-util-1.9.1/lib/libDerelictUtil.a} \
+        ../lib/libclop_runtime.a -L-ldl
+    let excode=$?
+    let status=$((status||excode))
+fi
+# finally run the unit tests, if everything compiled without errors.
+if [ $((status)) = 0 ]; then
+    ./${testnm}
+    let status=$?
+fi
+popd
+times
+exit ${status}
+
+# Local Variables:
+# mode: bash
+# End:

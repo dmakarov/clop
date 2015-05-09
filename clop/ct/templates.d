@@ -1,4 +1,32 @@
+/*
+ *  The MIT License (MIT)
+ *  =====================
+ *
+ *  Copyright (c) 2015 Dmitri Makarov <dmakarov@alumni.stanford.edu>
+ *
+ *  Permission is hereby granted, free of charge, to any person obtaining a copy
+ *  of this software and associated documentation files (the "Software"), to deal
+ *  in the Software without restriction, including without limitation the rights
+ *  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ *  copies of the Software, and to permit persons to whom the Software is
+ *  furnished to do so, subject to the following conditions:
+ *
+ *  The above copyright notice and this permission notice shall be included in all
+ *  copies or substantial portions of the Software.
+ *
+ *  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ *  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ *  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ *  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ *  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ *  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *  SOFTWARE.
+ */
 module clop.ct.templates;
+
+version (UNITTEST_DEBUG) import std.stdio;
+import std.format, std.string, std.variant;
+import pegged.grammar;
 
 enum
 
@@ -20,32 +48,33 @@ template_clop_unit = q{
 },
 
 template_create_opencl_kernel = q{
-    static Instance instance_%s;
+    static clop.rt.instance.Instance instance_%s;
     if (instance_%s is null)
     {
-      instance_%s = new Instance("%s");
+      instance_%s = new clop.rt.instance.Instance("%s");
       runtime.register_instance(instance_%s);
     }
     if (!instance_%s.ready)
     {
-          // params
+          // make list of kernel parameters
           %s
           instance_%s.prepare_resources("%s", %s);
     }
 },
 
 template_plain_invoke_kernel = q{
-    size_t[] offset = %s, global = %s;
-    runtime.status = clEnqueueNDRangeKernel(runtime.queue, %s, %s, offset.ptr, global.ptr, null, 0, null, null);
-    assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clEnqueueNDRangeKernel"));
+          // kernel invocation
+
+          size_t[] offset = %s, global = %s;
+          runtime.status = clEnqueueNDRangeKernel(runtime.queue, %s, %s, offset.ptr, global.ptr, null, 0, null, null);
+          assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clEnqueueNDRangeKernel"));
 },
 
 template_antidiagonal_invoke_kernel = q{
-  cl_uint arg = kernel_argument_counter;
   foreach (i; 2 .. 2 * %s - 1)
   {
     size_t global = (i < %s) ? i - 1 : 2 * %s - i - 1;
-    runtime.status = clSetKernelArg(%s, arg, cl_int.sizeof, &i);
+    runtime.status = clSetKernelArg(%s, %s, cl_int.sizeof, &i);
     assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clSetKernelArg in antidiagonal loop"));
     runtime.status = clEnqueueNDRangeKernel(runtime.queue, %s, 1, null, &global, null, 0, null, null);
     assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clEnqueueNDRangeKernel"));
@@ -102,3 +131,90 @@ template_antidiagonal_loop_suffix = "
 ",
 
 template_2d_index = "(%s) * (%s) + (%s)";
+
+struct ReduceSnippet
+{
+  private static immutable reduce_snippet = q{
+    {
+      barrier(CLK_LOCAL_MEM_FENCE);
+      uint clop_work_dim = get_work_dim();
+      size_t clop_local_thread_id = get_local_id(0); // = get_local_linear_id();
+      if (clop_work_dim > 1)
+        clop_local_thread_id += get_local_id(1) * get_local_size(0);
+      if (clop_work_dim > 2)
+        clop_local_thread_id += get_local_id(2) * get_local_size(1) * get_local_size(0);
+      for (int i = 1; i < %s; i *= 2)
+      {
+        if (clop_local_thread_id %% (2 * i) == 0)
+          %s[clop_local_thread_id] = %s(%s[clop_local_thread_id], %s[clop_local_thread_id + i]);
+        barrier(CLK_LOCAL_MEM_FENCE);
+      }
+      if (clop_local_thread_id == 0)
+        %s = %s(%s, %s[0]);
+    }
+  };
+
+  string instantiate_template(string func, ParseTree argument_list, string result, string length)
+  {
+    version (UNITTEST_DEBUG) writefln("UT: ReduceSnippet.instantiate_template: %s", argument_list.matches);
+    // FIXME: lookup length from array entry in the symbol table.
+    auto initial = argument_list.children[0].matches[0];
+    auto array = argument_list.children[1].matches[0];
+    return format(reduce_snippet, length, array, func, array, array, result, func, initial, array);
+  }
+}
+
+struct MapSnippet
+{
+  private static immutable map_snippet = q{
+  };
+
+  string instantiate_template(string func, ParseTree argument_list, string result)
+  {
+    version (UNITTEST_DEBUG) writefln("UT: MapSnippet.instantiate_template: %s", argument_list.matches);
+    return map_snippet;
+  }
+}
+
+// snippet container is wrapper around other snippet types, so that
+// specific snippets can be used without knowing their respective
+// types.
+struct SnippetContainer
+{
+  ///////////////////////////////////////////////////////////////////////////////////////
+  /+
+  private T SnippetContainer_payload;
+
+  this(T bind_to)
+  {
+    SnippetContainer_payload = bind_to;
+  }
+
+  @property T SnippetContainer_get()
+  {
+    return SnippetContainer_payload;
+  }
+
+  alias SnippetContainer_get this;
+  +/
+  ///////////////////////////////////////////////////////////////////////////////////////
+  static string binary_function(string function_literal, string type = "float", string a = "a", string b = "b")
+  {
+    // FIXME: generate unique function name
+    auto name = "clop_binary_function";
+    auto func = chomp(chompPrefix(function_literal, `"`), `"`);
+    auto definition = format(q{
+        %s %s(%s %s, %s %s)
+        {return (%s);}
+      }, type, name, type, a, type, b, func);
+    return definition;
+  }
+}
+
+// I need this type to be able to check that there is a member with a
+// specific name.  In typed enum all members must be of the same type
+enum
+{
+  reduce = ReduceSnippet(),
+  map    = MapSnippet()
+}

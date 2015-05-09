@@ -33,7 +33,7 @@ void save_coverage_in_json_file()
   import std.format, std.process, std.range, std.regex;
 
   immutable coverage_filename_predicate =
-    `endsWith(a.name, ".lst") && find(a.name, ".dub-packages").empty`;
+    `endsWith(a.name, ".lst") && find(a.name, ".dub-packages").empty && find(a.name, "dub_test_root").empty`;
   auto coverage_files = dirEntries(".", SpanMode.depth).filter!coverage_filename_predicate;
   auto whole_line_regex = regex(`^( *)([0-9]*)\|.*$`, "g");
   auto all_zeros_regex = regex(`^ *0+$`, "g");

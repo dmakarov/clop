@@ -28,13 +28,15 @@ import std.algorithm : reduce;
 import std.container;
 import std.conv;
 import std.string;
+import std.traits;
+debug (UNITTEST_DEBUG) import std.stdio;
 
 import pegged.grammar;
 
 import clop.ct.analysis;
 import clop.ct.structs;
 import clop.ct.symbol;
-import clop.ct.templates;
+static import clop.ct.templates;
 import clop.ct.transform;
 
 /++
@@ -51,19 +53,19 @@ struct Program
     auto t = optimize(AST); // apply the optimizing transformations on the AST
     auto kbody = translate(t);  // generate OpenCL kernel source code from the AST
     auto kname = generate_kernel_name(); // we need to give the kernel a name
-    auto params = set_params();
-    auto kernel = "macros ~ q{" ~ external ~ "} ~ "
-                ~ "\"__kernel void " ~ kname
-                ~ "(\" ~ kernel_params ~ \")\" ~\nq{\n" ~ kbody ~ "}";
-    auto clhost = format(template_create_opencl_kernel,
+    generate_code_setting_kernel_parameters("instance_" ~ suffix ~ ".kernel");
+    auto kernel = "macros ~ q{" ~ external ~ "} ~ \n"
+                ~ "          \"__kernel void " ~ kname
+                ~ "(\" ~ kernel_params ~ \")\" ~q{\n" ~ kbody ~ "          }";
+    auto clhost = format(clop.ct.templates.template_create_opencl_kernel,
                          suffix, suffix, suffix, suffix, suffix,
-                         suffix, params, suffix, kname , kernel);
-    clhost ~= set_args("instance_" ~ suffix ~ ".kernel")
-            ~ code_to_invoke_kernel()
-            ~ code_to_read_data_from_device()
-            ~ code_to_release_buffers();
+                         suffix, kernel_parameter_list_code, suffix, kname , kernel);
+    clhost ~= kernel_set_args_code
+            ~ generate_code_to_invoke_kernel()
+            ~ generate_code_to_pull_from_device()
+            ~ generate_code_to_release_buffers();
     auto diagnostics = format("static if (\"%s\" != \"\")\n  pragma (msg, \"%s\");\n", errors, errors);
-    return diagnostics ~ format(template_clop_unit, clhost, toString());
+    return diagnostics ~ format(clop.ct.templates.template_clop_unit, clhost, toString());
   }
 
   @property
@@ -90,9 +92,18 @@ struct Program
   string errors;           ///
   string suffix;           ///
 
-  string indent = "  ";    ///
+  string indent = "            ";
   string block_size = "8"; ///
   bool use_shadow = false; ///
+  string kernel_parameter_list_code;
+  string kernel_set_args_code;
+  uint temporary_id;
+
+  struct translation_result
+  {
+    string stmts;
+    string value;
+  }
 
   /++
    +
@@ -310,7 +321,7 @@ struct Program
         range_arg[c] = v;
         auto n = format("b%s0", v); // generated variable to pass the block index.
         s ~= format("  int b%d = %s %s %s;\n", c, n, o, bid0);
-        parameters ~= [Argument(n, "int", "", "", "", true)];
+        parameters ~= [Argument(n, `"int "`, "", "", "", true)];
       }
 
       auto recalculations = "";
@@ -346,8 +357,8 @@ struct Program
         auto gma = v;
         // shared memory array name
         auto sma = generate_shared_memory_variable(v);
-        parameters ~= Argument(sma, "", "__local",format("(%s) * (%s)", bsz0, bsz1), gma);
-        s ~= format(template_shared_memory_data_init,
+        parameters ~= Argument(sma, "", "__local", format("(%s) * (%s)", bsz0, bsz1), gma);
+        s ~= format(clop.ct.templates.template_shared_memory_data_init,
                      li1, li1, bsz1, li1,
                      li0, li0, bsz0, li0, lsz0,
                      li0, tid0, bsz0,
@@ -360,11 +371,11 @@ struct Program
 
         auto iv0 = v ~ "_" ~ generate_shared_memory_variable(range_arg[0]);
         auto iv1 = v ~ "_" ~ generate_shared_memory_variable(range_arg[1]);
-        recalculations ~= format(template_shared_index_recalculation, iv0, msz0, tid0, iv, lsz0, iv, lsz0,  iv1, msz1, tid0, iv, lsz1, iv, lsz1);
+        recalculations ~= format(clop.ct.templates.template_shared_index_recalculation, iv0, msz0, tid0, iv, lsz0, iv, lsz0,  iv1, msz1, tid0, iv, lsz1, iv, lsz1);
         if (safeguards != "") safeguards ~= " && ";
         safeguards ~= format("(%s) < (%s) && (%s) >= (%s)", iv0, bsz0, iv1, msz1);
       }
-      s ~= format(template_antidiagonal_loop_prefix, iv, iv, lsz1, lsz0, iv);
+      s ~= format(clop.ct.templates.template_antidiagonal_loop_prefix, iv, iv, lsz1, lsz0, iv);
       s ~= format("    int %s = (%s) + tid0 + ((%s) < (%s) ?   0  : (%s) - (%s) + 1);\n", t.children[0].matches[0], g.intervals[0].get_min(), iv, lsz0, iv, lsz0);
       s ~= format("    int %s = (%s) - tid0 + ((%s) < (%s) ? (%s) : (%s)        - 1);\n", t.children[1].matches[0], g.intervals[1].get_min(), iv, lsz1, iv, lsz1);
       s ~= recalculations;
@@ -401,7 +412,7 @@ struct Program
 
     if (true /*trans.contains("rectangular_blocking")*/)
     {
-      s ~= template_antidiagonal_loop_suffix;
+      s ~= clop.ct.templates.template_antidiagonal_loop_suffix;
       string[3] bix;
       auto r = Box([], []);
       foreach (c, u; range.symbols)
@@ -447,7 +458,7 @@ struct Program
         auto gma = v;
         // shared memory array name
         auto sma = generate_shared_memory_variable(v);
-        s ~= format(template_shared_memory_fini,
+        s ~= format(clop.ct.templates.template_shared_memory_fini,
                      li1, li1, bsz1, li1,
                      li0, li0, bsz0, li0, lsz0,
                      li0, tid0, bsz0,
@@ -555,123 +566,72 @@ struct Program
     return format( "[%s]", x );
   }
 
-  string set_params()
+  /++
+   + Given a string that represents a name of a variable, return a
+   + string that represents a parameter declaration that contains the
+   + type of the parameter matching the variable's type and the
+   + parameter name matching the variable's name.
+   +/
+  void generate_code_setting_kernel_parameters(string kernel)
   {
-    string result = "string param, macros = \"\";";
-    auto issued_declaration = false;
-    foreach(p; parameters)
+    auto i = 0U;
+    auto comma = "";
+    kernel_parameter_list_code = q{
+          auto kernel_params = "", macros = "";};
+    kernel_set_args_code = "          // setting up buffers and kernel arguments";
+    foreach(j, p; parameters)
     {
-      if (p.type == "")
+      if (!p.is_macro)
       {
-        if (p.back == "")
+        parameters[j].number = i;
+        kernel_parameter_list_code ~= format(q{
+          kernel_params ~= "%s%s" ~ %s ~ "%s";},
+          comma, p.qual, p.type, p.name);
+        if (p.to_push != "")
         {
-          result ~= format(q{
-          if (isMutable!(typeof(%s)))
-          {
-            param = mixin(generate_kernel_parameter!(typeof(%s))("%s", "%s"));
-          }
-          else
-          {
-            param = "";
-            macros ~= "#define %s " ~ format("%%s\n", %s);
-          }
-          }, p.name, p.name, p.name, p.back, p.name, p.name);
+          kernel_set_args_code ~= p.to_push;
         }
-        else
+        if (!p.skip)
         {
-          result ~= format(q{
-          param = mixin(generate_kernel_parameter!(typeof(%s))("%s", "%s"));
-          }, p.back, p.name, p.back);
+          kernel_set_args_code ~= format(q{
+          runtime.status = clSetKernelArg(%s, %s, %s, %s);
+          assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clSetKernelArg: %s"));
+          }, kernel, i, p.size, p.address, i);
         }
+        comma = ", ";
+        ++i;
       }
       else
       {
-        result ~= format("param = \"%s %s\";\n", p.type, p.name);
-      }
-      if (issued_declaration)
-      {
-        result ~= "if (param != \"\") kernel_params ~= \", \" ~ param;\n";
-      }
-      else
-      {
-        result ~= "string kernel_params = param;\n";
-        issued_declaration = true;
+        kernel_parameter_list_code ~= format(q{
+          macros ~= "#define %s " ~ std.format.format("%%s\n", %s);},
+          p.name, p.name);
       }
     }
-    return result;
   }
 
-  string set_args(string kernel)
-  {
-    auto result = format(q{
-    auto kernel_argument_counter = 0;
-    static bool kernel_arguments_have_been_set_%s;
-    }, suffix);
-    foreach(p; parameters)
-    {
-      result ~= format(q{
-    cl_mem clop_opencl_device_buffer_%s;}, p.name);
-    }
-    debug(NEVER)
-    result ~= format(`
-    if (!kernel_arguments_have_been_set_%s)
-    {
-      kernel_arguments_have_been_set_%s = true;`, suffix, suffix);
-    foreach(i, p; parameters)
-    {
-      if (!p.skip)
-      {
-        if (p.back == "")
-        {
-          result ~= format(q{
-      if (isMutable!(typeof(%s)))
-      {
-        mixin(set_kernel_arg!(typeof(%s))("%s", "kernel_argument_counter++", "%s", "", ""));
-      }}, p.name, p.name, kernel, p.name);
-        }
-        else
-        {
-          result ~= format(q{
-            mixin(set_kernel_arg!(typeof(%s))("%s", "%d", "null", "%s", "%s"));
-          }, p.back, kernel, i, p.back, p.size);
-        }
-      }
-    }
-    debug(NEVER)
-    result ~= `
-    }`;
-    return result;
-  }
-
-  string code_to_read_data_from_device()
-  {
-    string result = "";
-    foreach (k, v; symtable)
-    {
-      if (!v.is_local && v.type == "" && v.defs.length > 0)
-      {
-        result ~= format(q{
-      mixin(read_device_buffer!(typeof(%s))("%s"));}, k, k);
-      }
-    }
-    return result;
-  }
-
-  string code_to_release_buffers()
+  string generate_code_to_pull_from_device()
   {
     auto result = "";
-    foreach(p; parameters)
+    foreach (p; parameters)
     {
-      if (!p.skip)
+      auto v = symtable[p.name];
+      if (p.to_pull != "" && v.defs.length > 0)
       {
-        if (p.back == "")
-        {
-          result ~= format(q{
-      if (isMutable!(typeof(%s)))
+        result ~= p.to_pull;
+      }
+    }
+    return result;
+  }
+
+  string generate_code_to_release_buffers()
+  {
+    auto result = "";
+    foreach (p; parameters)
+    {
+      if (p.to_release != "")
       {
-        mixin(release_buffer!(typeof(%s))("%s"));
-      }}, p.name, p.name, p.name);
-        }
+        result ~= p.to_release;
       }
     }
     return result;
@@ -683,7 +643,7 @@ struct Program
    + the kernel's NDRange and then uses the clEnqueueNDRangeKernel
    + call to launch the kernel.
    +/
-  string code_to_invoke_kernel()
+  string generate_code_to_invoke_kernel()
   {
     if (pattern is null)
     {
@@ -691,7 +651,7 @@ struct Program
       auto offset = "[" ~ range.get_lower_bounds() ~ "]";
       auto kernel = "instance_" ~ suffix ~ ".kernel";
       auto dimensions = range.get_dimensions();
-      return format(template_plain_invoke_kernel, offset, global, kernel, dimensions);
+      return format(clop.ct.templates.template_plain_invoke_kernel, offset, global, kernel, dimensions);
     }
     if (pattern == "Antidiagonal")
     {
@@ -699,8 +659,8 @@ struct Program
       {
         auto gsz0 = range.intervals[0].get_max();
         auto name = "instance_" ~ suffix ~ ".kernel";
-        return format(template_antidiagonal_invoke_kernel,
-                      gsz0, gsz0, gsz0, name, name);
+        return format(clop.ct.templates.template_antidiagonal_invoke_kernel,
+                      gsz0, gsz0, gsz0, name, parameters[$ - 1].number, name);
       }
       else
       {
@@ -713,7 +673,7 @@ struct Program
         foreach (i, p; parameters)
           if (p.skip)
             argindex[n++] = i;
-        return format(template_antidiagonal_rectangular_blocks_invoke_kernel,
+        return format(clop.ct.templates.template_antidiagonal_rectangular_blocks_invoke_kernel,
                       gsz0, bsz0, bsz0, bsz0, name, argindex[0], name, argindex[1], name);
       }
     }
@@ -721,22 +681,352 @@ struct Program
   }
 
   /++
-   +
+   +  For multidimensional arrays linearize the index expressions.
    +/
-  string translate_index_expression(string v, ParseTree t)
+  translation_result translate_index_expression(string v, ParseTree t)
   {
+    string value = "", stmts = "";
     if (t.children.length == 1 || t.children.length != range.get_dimensions() || v !in symtable || symtable[v].box is null)
     {
-      return translate(t);
+      return translate_expression(t);
     }
-    auto s = "(" ~ translate(t.children[0]) ~ ")";
-    auto m = "(" ~ symtable[v].box[0].get_size() ~ ")";
+    auto r = translate_expression(t.children[0]);
+    value = r.value;
+    stmts = r.stmts;
     foreach (i, c; t.children[1 .. $])
     {
-      s ~= " + " ~ m ~ " * (" ~ translate(c) ~ ")";
-      m ~= " * (" ~ symtable[v].box[i + 1].get_size() ~ ")";
+      auto q = translate_expression(c);
+      stmts ~= q.stmts;
+      value = "(" ~ value ~ ") * (" ~ symtable[v].box[i + 1].get_size() ~ ") + " ~ q.value;
     }
+    return translation_result(stmts, value);
+  }
+
+  /++
+   +
+   +/
+  Symbol create_new_temporary(string lhs)
+  {
+    auto n = format("clop_tmp_%s", temporary_id++);
+    // FIXME: get the type from lhs.
+    auto t = "float";
+    auto s = Symbol(n, t);
+    symtable[n] = s;
     return s;
+  }
+
+  /++
+   +
+   +/
+  translation_result translate_expression(ParseTree t)
+  {
+    string stmts = "", value = "";
+    switch (t.name)
+    {
+    case "CLOP.InitDeclaratorList":
+      {
+        foreach (i, c; t.children)
+        {
+          auto r = translate_expression(c);
+          stmts ~= r.stmts;
+          value ~= (i == 0) ? r.value : ", " ~ r.value;
+        }
+        break;
+      }
+    case "CLOP.InitDeclarator":
+      {
+        value = translate(t.children[0]);
+        if (t.children.length > 1)
+        {
+          auto r = translate_expression(t.children[1]);
+          value ~= " = " ~ r.value;
+          stmts = r.stmts;
+        }
+        break;
+      }
+    case "CLOP.Initializer":
+      {
+        auto r = translate_expression(t.children[0]);
+        value = r.value;
+        stmts = r.stmts;
+        break;
+      }
+    case "CLOP.PrimaryExpr":
+      {
+        auto r = translate_expression(t.children[0]);
+        value = "(" == t.matches[0] ? "(" ~ r.value ~ ")" : r.value;
+        stmts = r.stmts;
+        break;
+      }
+    case "CLOP.PostfixExpr":
+      {
+        auto is_snippet = t.children[0].children.length == 2;
+        if (is_snippet)
+        {
+          switch (t.children[0].children[0].matches[0])
+          {
+          case "reduce":
+            {
+              auto func_name = "clop_binary_function";
+              auto type = "float";
+              auto length = "input_n";
+              value = "reduce_result";
+              stmts = "        " ~ type ~ " " ~ value ~ ";";
+              stmts ~= clop.ct.templates.reduce.instantiate_template(func_name, t.children[1], value, length);
+              debug (UNITTEST_DEBUG) writefln("UT:%s template expanded to %s", suffix, stmts);
+            }
+            break;
+          default: {/+ do nothing +/}
+          }
+        }
+        else if (t.children.length == 2)
+        {
+          auto r = translate_expression(t.children[0]);
+          value = r.value;
+          stmts = r.stmts;
+          if (t.children[1].name == "CLOP.Expression")
+          {
+            if (t.children[0].name == "CLOP.PrimaryExpr" &&
+                t.children[0].children[0].name == "CLOP.Identifier")
+            {
+              auto q = translate_index_expression(t.children[0].children[0].matches[0], t.children[1]);
+              value ~= "[" ~ q.value ~ "]";
+              stmts ~= q.stmts;
+            }
+            else
+            {
+              r = translate_expression(t.children[1]);
+              value ~= "[" ~ r.value ~ "]";
+              stmts = r.stmts;
+            }
+          }
+          else if (t.children[1].name == "CLOP.ArgumentExprList")
+          {
+            r = translate_expression(t.children[1]);
+            value ~= "(" ~ r.value ~ ")";
+            stmts = r.stmts;
+          }
+          else
+          {
+            r = translate_expression(t.children[1]);
+            value ~= "." ~ r.value;
+            stmts = r.stmts;
+          }
+        }
+        else
+        {
+          auto r = translate_expression(t.children[0]);
+          value = r.value;
+          stmts = r.stmts;
+          if (t.matches.length > 2 && "(" == t.matches[$ - 2] && ")" == t.matches[$ - 1])
+          {
+            value ~= "()";
+          }
+          else if ("++" == t.matches[$ - 1])
+          {
+            value ~= "++";
+          }
+          else if ("--" == t.matches[$ - 1])
+          {
+            value ~= "--";
+          }
+        }
+        break;
+      }
+    case "CLOP.ArgumentExprList":
+      {
+        foreach (i, c; t.children)
+        {
+          auto r = translate_expression(c);
+          value ~= i == 0 ? r.value : ", " ~ r.value;
+          stmts ~= r.stmts;
+        }
+        break;
+      }
+    case "CLOP.UnaryExpr":
+      {
+        if (t.children.length == 1)
+        {
+          auto r = translate_expression(t.children[0]);
+          value = r.value;
+          stmts = r.stmts;
+        }
+        else
+        {
+          auto r = translate_expression(t.children[1]);
+          value = t.children[0].matches[0] ~ r.value;
+          stmts = r.stmts;
+        }
+        break;
+      }
+    case "CLOP.IncrementExpr":
+      {
+        auto r = translate_expression(t.children[0]);
+        value = "++" ~ r.value;
+        stmts = r.stmts;
+        break;
+      }
+    case "CLOP.DecrementExpr":
+      {
+        auto r = translate_expression(t.children[0]);
+        value = "--" ~ r.value;
+        stmts = r.stmts;
+        break;
+      }
+    case "CLOP.CastExpr":
+      {
+        if (t.children.length == 1)
+        {
+          auto r = translate_expression(t.children[0]);
+          value = r.value;
+          stmts = r.stmts;
+        }
+        else
+        {
+          auto r = translate_expression(t.children[1]);
+          value = "(" ~ translate(t.children[0]) ~ ")" ~ r.value;
+          stmts = r.stmts;
+        }
+        break;
+      }
+    case "CLOP.MultiplicativeExpr", "CLOP.AdditiveExpr", "CLOP.ShiftExpr":
+    case "CLOP.RelationalExpr", "CLOP.EqualityExpr":
+      {
+        auto r = translate_expression(t.children[0]);
+        value = r.value;
+        stmts = r.stmts;
+        for (auto i = 1; i < t.children.length; i += 2)
+        {
+          r = translate_expression(t.children[i + 1]);
+          value ~= " " ~ t.children[i].matches[0] ~ " " ~ r.value;
+          stmts ~= r.stmts;
+        }
+        break;
+      }
+    case "CLOP.ANDExpr":
+      {
+        auto r = translate_expression(t.children[0]);
+        value = r.value;
+        stmts = r.stmts;
+        foreach (i; 1 .. t.children.length)
+        {
+          r = translate_expression(t.children[i]);
+          value ~= " & " ~ r.value;
+          stmts ~= r.stmts;
+        }
+        break;
+      }
+    case "CLOP.ExclusiveORExpr":
+      {
+        auto r = translate_expression(t.children[0]);
+        value = r.value;
+        stmts = r.stmts;
+        foreach (i; 1 .. t.children.length)
+        {
+          r = translate_expression(t.children[i]);
+          value ~= " ^ " ~ r.value;
+          stmts ~= r.stmts;
+        }
+        break;
+      }
+    case "CLOP.InclusiveORExpr":
+      {
+        auto r = translate_expression(t.children[0]);
+        value = r.value;
+        stmts = r.stmts;
+        foreach (i; 1 .. t.children.length)
+        {
+          r = translate_expression(t.children[i]);
+          value ~= " | " ~ r.value;
+          stmts ~= r.stmts;
+        }
+        break;
+      }
+    case "CLOP.LogicalANDExpr":
+      {
+        auto r = translate_expression(t.children[0]);
+        value = r.value;
+        stmts = r.stmts;
+        foreach (i; 1 .. t.children.length)
+        {
+          r = translate_expression(t.children[i]);
+          value ~= " && " ~ r.value;
+          stmts ~= r.stmts;
+        }
+        break;
+      }
+    case "CLOP.LogicalORExpr":
+      {
+        auto r = translate_expression(t.children[0]);
+        value = r.value;
+        stmts = r.stmts;
+        foreach (i; 1 .. t.children.length)
+        {
+          r = translate_expression(t.children[i]);
+          value ~= " || " ~ r.value;
+          stmts ~= r.stmts;
+        }
+        break;
+      }
+    case "CLOP.ConditionalExpr":
+      {
+        auto r = translate_expression(t.children[0]);
+        value = r.value;
+        stmts = r.stmts;
+        if (t.children.length == 3)
+        {
+          auto then_part = translate_expression(t.children[1]);
+          auto else_part = translate_expression(t.children[2]);
+          value ~= " ? " ~ then_part.value ~ " : " ~ else_part.value;
+          stmts ~= then_part.stmts ~ else_part.stmts;
+        }
+        break;
+      }
+    case "CLOP.AssignmentExpr":
+      {
+        if (t.children.length == 3)
+        {
+          auto lhs = translate_expression(t.children[0]);
+          stmts = lhs.stmts;
+          auto rhs = translate_expression(t.children[2]);
+          stmts ~= rhs.stmts;
+          value = lhs.value ~ " " ~ t.children[1].matches[0] ~ " " ~ rhs.value;
+        }
+        else
+        {
+          auto r = translate_expression(t.children[0]);
+          value = r.value;
+          stmts = r.stmts;
+        }
+        break;
+      }
+    case "CLOP.Expression":
+      {
+        foreach (i, c; t.children)
+        {
+          auto r = translate_expression(c);
+          value ~= i == 0 ? r.value : ", " ~ r.value;
+          stmts ~= r.stmts;
+        }
+        break;
+      }
+    case "CLOP.Identifier":
+      {
+        value = t.matches[0];
+        if (use_shadow && value in symtable && symtable[value].shadow != null)
+          value = symtable[value].shadow;
+        break;
+      }
+    case "CLOP.IntegerLiteral":
+    case "CLOP.FloatLiteral":
+      {
+        value = t.matches[0];
+        break;
+      }
+    default:
+      break;
+    }
+    return translation_result(stmts, value);
   }
 
   /++
@@ -748,17 +1038,42 @@ struct Program
     {
     case "CLOP.Declaration":
       {
-        auto s = indent ~ translate( t.children[0] );
-        if ( t.children.length > 1 )
-          s ~= " " ~ translate( t.children[1] );
+        auto s = indent ~ translate(t.children[0]);
+        if (t.children.length > 1)
+        {
+          auto r = translate_expression(t.children[1]);
+          s = r.stmts ~ s ~ " " ~ r.value;
+        }
         return s ~ ";\n";
       }
     case "CLOP.Declarator":
       {
-        string s = translate( t.children[0] );
-        if ( t.children.length > 1 )
-          s ~= "( " ~ translate( t.children[1] ) ~ " )";
+        string s = translate(t.children[0]);
+        string b = t.matches[$ - 1] == "]" ? "[" : "(";
+        if (t.children.length > 1)
+        {
+          if (t.children[1].name == "CLOP.ConditionalExpr")
+          {
+            auto r = translate_expression(t.children[1]);
+            s = r.stmts ~ s ~ b ~ r.value ~ t.matches[$ - 1];
+          }
+          else
+          {
+            s ~= b ~ translate(t.children[1]) ~ t.matches[$ - 1];
+          }
+        }
         return s;
+      }
+    case "CLOP.DeclarationSpecifiers":
+      {
+        string s = translate(t.children[0]);
+        if (t.children.length > 1)
+          s ~= " " ~ translate(t.children[1]);
+        return s;
+      }
+    case "CLOP.StorageClassSpecifier":
+      {
+        return "//";
       }
     case "CLOP.TypeSpecifier":
       {
@@ -770,25 +1085,7 @@ struct Program
       }
     case "CLOP.ParameterDeclaration":
       {
-        return translate( t.children[0] ) ~ " " ~ translate( t.children[1] );
-      }
-    case "CLOP.InitDeclaratorList":
-      {
-        string s = translate( t.children[0] );
-        foreach ( i; 1 .. t.children.length )
-          s ~= ", " ~ translate( t.children[i] );
-        return s;
-      }
-    case "CLOP.InitDeclarator":
-      {
-        string s = translate( t.children[0] );
-        if ( t.children.length > 1 )
-          s ~= " = " ~ translate( t.children[1] );
-        return s;
-      }
-    case "CLOP.Initializer":
-      {
-        return translate( t.children[0] );
+        return translate(t.children[0]) ~ " " ~ translate(t.children[1]);
       }
     case "CLOP.StatementList":
       {
@@ -796,10 +1093,15 @@ struct Program
       }
     case "CLOP.Statement":
       {
+        debug (UNITTEST_DEBUG) writefln("UT:%s Program.translate case CLOP.Statement: %s", suffix, t.matches);
         return translate(t.children[0]);
       }
     case "CLOP.CompoundStatement":
       {
+        debug (UNITTEST_DEBUG)
+        {
+          writefln("UT:%s Program.translate case CLOP.CompoundStatement: %s", suffix, t.matches);
+        }
         indent ~= "  ";
         auto s = translate(t.children[0]);
         indent = indent[0 .. $ - 2];
@@ -807,13 +1109,22 @@ struct Program
       }
     case "CLOP.ExpressionStatement":
       {
-        return indent ~ translate(t.children[0]) ~ ";\n";
+        debug (UNITTEST_DEBUG) writefln("UT:%s Program.translate case CLOP.ExpressionStatement: %s", suffix, t.matches);
+        auto r = translate_expression(t.children[0]);
+        return r.stmts ~ indent ~ r.value ~ ";\n";
       }
     case "CLOP.IfStatement":
       {
-        auto s = indent ~ "if (" ~ translate(t.children[0]) ~ ")\n" ~ translate(t.children[1]);
+        auto r = translate_expression(t.children[0]);
+        indent ~= "  ";
+        auto then_part = translate(t.children[1]);
+        auto else_part = "";
         if (t.children.length == 3)
-          s ~= indent ~ "else\n" ~ translate(t.children[2]);
+          else_part = translate(t.children[2]);
+        indent = indent[0 .. $ - 2];
+        auto s = format("%s%sif (%s)\n%s", r.stmts, indent, r.value, then_part);
+        if (else_part != "")
+          s ~= indent ~ "else\n" ~ else_part;
         return s;
       }
     case "CLOP.IterationStatement":
@@ -823,147 +1134,54 @@ struct Program
     case "CLOP.ForStatement":
       {
         auto s = indent;
-        indent ~= "  ";
         // FIXME: each of the children is optional. check they exist.
-        s ~= "for (" ~ translate(t.children[0]) ~ ";"
-                     ~ translate(t.children[1]) ~ ";"
-                     ~ translate(t.children[2]) ~ ")\n"
-                     ~ indent ~ translate(t.children[3]);
+        auto num_children = t.children.length;
+        auto num_of_matches = t.children[0].matches.length;
+        auto has_init_part = num_children > 1 && t.matches[2] != ";";
+        auto has_cond_part = has_init_part && num_children > 2 && t.matches[3 + num_of_matches] != ";" ||
+                            !has_init_part && num_children > 1 && t.matches[3] != ";";
+        auto has_step_part = has_init_part &&  has_cond_part && num_children == 4 ||
+                             has_init_part && !has_cond_part && num_children == 3 ||
+                            !has_init_part &&  has_cond_part && num_children == 3 ||
+                            !has_init_part && !has_cond_part && num_children == 2;
+        auto init_part = "";
+        auto cond_part = "";
+        auto step_part = "";
+        auto index = 0;
+        if (has_init_part)
+        {
+          auto r = translate_expression(t.children[index++]);
+          s ~= r.stmts;
+          init_part = r.value;
+        }
+        if (has_cond_part)
+        {
+          auto r = translate_expression(t.children[index++]);
+          s ~= r.stmts;
+          cond_part = r.value;
+        }
+        if (has_step_part)
+        {
+          auto r = translate_expression(t.children[index++]);
+          s ~= r.stmts;
+          step_part = r.value;
+        }
+        indent ~= "  ";
+        auto loop_body = translate(t.children[index]);
         indent = indent[0 .. $ - 2];
+        s ~= indent ~ "for (" ~ init_part ~ ";" ~ cond_part ~ ";" ~ step_part ~ ")\n"
+          ~ indent ~ loop_body;
         return s;
       }
     case "CLOP.ReturnStatement":
       {
         return indent ~ (t.children.length == 1 ? "return " ~ translate(t.children[0]) ~ ";\n" : "return;\n");
       }
-    case "CLOP.PrimaryExpr":
-      {
-        auto s = translate(t.children[0]);
-        return "(" == t.matches[0] ? "(" ~ s ~ ")" : s;
-      }
-    case "CLOP.PostfixExpr":
-      {
-        auto s = translate(t.children[0]);
-        if (t.children.length == 2)
-        {
-          if (t.children[1].name == "CLOP.Expression")
-          {
-            if (t.children[0].name == "CLOP.PrimaryExpr" && t.children[0].children[0].name == "CLOP.Identifier")
-            {
-              s ~= "[" ~ translate_index_expression(t.children[0].children[0].matches[0], t.children[1]) ~ "]";
-            }
-            else
-            {
-              s ~= "[" ~ translate(t.children[1]) ~ "]";
-            }
-          }
-          else if (t.children[1].name == "CLOP.ArgumentExprList")
-          {
-            s ~= "(" ~ translate(t.children[1]) ~ ")";
-          }
-          else
-          {
-            s ~= "." ~ translate(t.children[1]);
-          }
-        }
-        else
-        {
-          if (t.matches.length > 2 && "(" == t.matches[$ - 2] && ")" == t.matches[$ - 1])
-          {
-            s ~= "()";
-          }
-          else if ("++" == t.matches[$ - 1])
-          {
-            s ~= "++";
-          }
-          else if ("--" == t.matches[$ - 1])
-          {
-            s ~= "--";
-          }
-        }
-        return s;
-      }
-    case "CLOP.ArgumentExprList":
-      {
-        return reduce!((a, b) => a ~ ", " ~ translate(b))(translate(t.children[0]), t.children[1 .. $]);
-      }
-    case "CLOP.UnaryExpr":
-      {
-        return t.children.length == 1 ? translate(t.children[0])
-          : t.children[0].matches[0] ~ translate(t.children[1]);
-      }
-    case "CLOP.IncrementExpr":
-      {
-        return "++" ~ translate(t.children[0]);
-      }
-    case "CLOP.DecrementExpr":
-      {
-        return "--" ~ translate(t.children[0]);
-      }
-    case "CLOP.CastExpr":
-      {
-        return t.children.length == 1 ? translate(t.children[0])
-          : "(" ~ translate(t.children[0]) ~ ")" ~ translate(t.children[1]);
-      }
-    case "CLOP.MultiplicativeExpr", "CLOP.AdditiveExpr", "CLOP.ShiftExpr":
-    case "CLOP.RelationalExpr", "CLOP.EqualityExpr":
-      {
-        auto s = translate(t.children[0]);
-        for (auto i = 1; i < t.children.length; i += 2)
-          s ~= " " ~ t.children[i].matches[0] ~ " " ~ translate(t.children[i + 1]);
-        return s;
-      }
-    case "CLOP.ANDExpr":
-      {
-        return reduce!((a, b) => a ~ " & " ~ translate(b))(translate(t.children[0]), t.children[1 .. $]);
-      }
-    case "CLOP.ExclusiveORExpr":
-      {
-        return reduce!((a, b) => a ~ " ^ " ~ translate(b))(translate(t.children[0]), t.children[1 .. $]);
-      }
-    case "CLOP.InclusiveORExpr":
-      {
-        return reduce!((a, b) => a ~ " | " ~ translate(b))(translate(t.children[0]), t.children[1 .. $]);
-      }
-    case "CLOP.LogicalANDExpr":
-      {
-        return reduce!((a, b) => a ~ " && " ~ translate(b))(translate(t.children[0]), t.children[1 .. $]);
-      }
-    case "CLOP.LogicalORExpr":
-      {
-        return reduce!((a, b) => a ~ " || " ~ translate(b))(translate(t.children[0]), t.children[1 .. $]);
-      }
-    case "CLOP.ConditionalExpr":
-      {
-        auto s = translate(t.children[0]);
-        if (t.children.length == 3)
-        {
-          s ~= " ? " ~ translate(t.children[1]) ~ " : " ~ translate(t.children[2]);
-        }
-        return s;
-      }
-    case "CLOP.AssignmentExpr":
-      {
-        if (t.children.length == 3)
-        {
-          string lhs = translate(t.children[0]);
-          string rhs = translate(t.children[2]);
-          return lhs ~ " " ~ t.children[1].matches[0] ~ " " ~ rhs;
-        }
-        else
-        {
-          return translate(t.children[0]);
-        }
-      }
-    case "CLOP.Expression":
-      {
-        return reduce!((a, b) => a ~ ", " ~ translate(b))(translate(t.children[0]), t.children[1 .. $]);
-      }
     case "CLOP.Identifier":
       {
-        string s = t.matches[0];
+        auto s = t.matches[0];
         if (use_shadow && s in symtable && symtable[s].shadow != null)
-          return symtable[s].shadow;
+          s = symtable[s].shadow;
         return s;
       }
     case "CLOP.IntegerLiteral":
@@ -971,16 +1189,44 @@ struct Program
       {
         return t.matches[0];
       }
-    case "CLOP.InternalNode":
-      {
-        return "";
-      }
     default: return t.name;
     }
   }
 
 } // Program struct
 
+unittest
+{
+  static import clop.ct.parser;
+  static import clop.ct.stage2;
+  static import clop.rt.ndarray;
+
+  auto t = clop.ct.parser.CLOP(q{
+      NDRange(i : 1 .. h_n, j : 0 .. i_n)
+      {
+        local float t[i_n];
+        t[j] = inputs[j] * weights[i, j];
+        float s = reduce!"a + b"(0, t);
+        if (j == 0)
+        {
+          hidden[i] = ONEF / (ONEF + exp(-s));
+        }
+      }});
+  alias A = clop.rt.ndarray.NDArray!float;
+  alias T = std.typetuple.TypeTuple!(size_t, float*, size_t, A, A, A);
+  auto be = clop.ct.stage2.Backend!T(t, __FILE__, __LINE__, ["h_n", "t", "i_n", "inputs", "weights", "hidden"]);
+  be.analyze(t);
+  be.update_parameters();
+  be.lower(t);
+  be.compute_intervals();
+  auto p = Program(be.symtable, [], be.parameters, be.KBT, be.range, be.pattern, "", "", be.suffix);
+  auto k = p.translate(be.KBT);
+  debug (UNITTEST_DEBUG) writefln("UT:%s k:\n%s", be.suffix, k);
+  auto c = p.generate_code();
+  debug (UNITTEST_DEBUG) writefln("UT:%s c:\n%s", be.suffix, c);
+}
+
 // Local Variables:
+// compile-command: "../../tests/test_module clop.ct.program"
 // flycheck-dmd-include-path: ("~/.dub/packages/pegged-0.2.1")
 // End:

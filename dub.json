@@ -5,32 +5,43 @@
     "copyright"    : "Copyright © 2014-2015, Dmitri Makarov",
     "license"      : "MIT",
     "targetType"   : "none",
-    "buildTypes"   : {
-        "verbose"          : { "debugVersions" : ["VERBOSE"] },
-        "grammar"          : { "debugVersions" : ["GRAMMAR"] }
-    },
     "subPackages"  : [
         {
             "name"         : "compiler",
             "targetType"   : "library",
             "targetPath"   : "./lib",
+            "importPaths"  : ["clop", "clop/ct"],
             "sourcePaths"  : ["clop"],
             "dflags"       : ["-Jutils"],
             "dependencies" : {
                 "derelict-cl" : "~>1.2.2",
-                "pegged"      : "~>0.2.1"
+                "pegged"      : "~>0.2.1",
+                "clop:runtime": "*"
             },
             "excludedSourceFiles" : [
                 "clop/ct/grammar.d",
-                "clop/rt/ctx.d"
-            ]
+                "clop/rt/ctx.d",
+                "clop/rt/instance.d",
+                "clop/rt/ndarray.d"
+            ],
+            "buildTypes"   : {
+                "verbose"  : { "debugVersions" : ["VERBOSE"] },
+                "grammar"  : { "debugVersions" : ["GRAMMAR"] },
+                "testing"  : { "buildOptions"  : ["coverage", "unittests"] }
+            }
         },
         {
             "name"         : "runtime",
             "targetType"   : "library",
             "targetPath"   : "./lib",
+            "importPaths"  : ["clop", "clop/rt"],
             "sourcePaths"  : ["clop/rt"],
-            "dependencies" : { "derelict-cl" : "~>1.2.2" }
+            "dependencies" : { "derelict-cl" : "~>1.2.2" },
+            "buildTypes"   : {
+                "verbose"  : { "debugVersions" : ["VERBOSE"] },
+                "grammar"  : { "debugVersions" : ["GRAMMAR"] },
+                "testing"  : { "buildOptions"  : ["coverage", "unittests"] }
+            }
         },
         "./tools",
         "./examples/algebra",

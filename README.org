@@ -1,10 +1,10 @@
 * CLOP - a DSL for OpenCL OPtimizations
 
-  [[https://travis-ci.org/dmakarov/clop][https://travis-ci.org/dmakarov/clop.png]]  [[https://coveralls.io/r/dmakarov/clop][https://coveralls.io/repos/dmakarov/clop/badge.svg]]
+  [[https://travis-ci.org/dmakarov/clop][https://travis-ci.org/dmakarov/clop.png]] [[https://coveralls.io/r/dmakarov/clop][https://coveralls.io/repos/dmakarov/clop/badge.svg]]
 
 
   CLOP is a DSL to write OpenCL kernels in a higher level of abstraction and
-  apply optimizations to them.
+  apply optimizations to them.  For more information see [[http://dmakarov.github.io/clop/][CLOP by dmakarov]].
 
   To compile an example
 
@@ -12,7 +12,7 @@
   - invoke dub for a specific sample application, e.g.
 
 #+BEGIN_SRC sh
-  $ dub run --build=release --compiler=ldc2 :nw -- 32 10
+  $ dub run --build=release --compiler=dmd :nw -- 32 10
 #+END_SRC
 
   The command will build the CLOP runtime library, and the NW application.  If

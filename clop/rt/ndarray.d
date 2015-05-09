@@ -230,3 +230,24 @@ class NDArray(T)
   }
 
 } // NDArray class
+
+unittest
+{
+  auto a = new NDArray!int(16);
+  assert(a.get_num_dimensions() == 1);
+  assert(a.get_dimensions() == [16]);
+  assert(a.length == 16);
+  assert(!a.empty());
+  a = new NDArray!int(8, 10);
+  assert(a.get_num_dimensions() == 2);
+  assert(a.get_dimensions() == [8, 10]);
+  assert(a.length == 80);
+  assert(!a.empty());
+  a = new NDArray!int(2, 10, 5);
+  assert(a.get_num_dimensions() == 3);
+  assert(a.get_dimensions() == [2, 10, 5]);
+  assert(a.length == 100);
+  assert(!a.empty());
+  a[1, 4, 4] = 37;
+  assert(a[74] == 37 && a[1, 4, 4] == 37);
+}

@@ -202,7 +202,7 @@ class Application {
     return s[0];
   }
 
-  bool clop_train_kernel(ref CL_FP eo, ref CL_FP eh)
+  bool clop_back_propagation(ref CL_FP eo, ref CL_FP eh)
   {
     import std.algorithm : sum;
     foreach (i; 0 .. i2h_changes.length) i2h_changes[i] = 0;
@@ -216,8 +216,7 @@ class Application {
             NDRange(j : 1 .. n)
             {
               s[j - 1] = input_units[j] * i2h_weights[i * n + j];
-            }
-          }));
+            }}));
       hidden_units[i] = ONEF / (ONEF + exp(-mysum(s) - i2h_weights[i, 0]));
     }
 
@@ -230,21 +229,19 @@ class Application {
     adjust_weights(output_deltas, hidden_units, h2o_weights, h2o_changes);
 
     mixin (compile(q{
-          NDRange(i : 1 .. h, j : 1 .. n)
+          NDRange(i : 1 .. hidden_n, j : 1 .. input_n)
           {
-            int index = i * n + j;
-            float adjust = MOMENTUM * i2h_changes[index] + (ONEF - MOMENTUM) * ETA * input_units[j] * hidden_deltas[i];
-            i2h_changes[index]  = adjust;
-            i2h_weights[index] += adjust;
-          }
-        }));
+            float adjust = MOMENTUM * i2h_changes[i, j] + (ONEF - MOMENTUM) * ETA * input_units[j] * hidden_deltas[i];
+            i2h_changes[i, j]  = adjust;
+            i2h_weights[i, j] += adjust;
+          }}));
 
     valid = valid && validation_block_2();
 
     return valid;
   }
 
-  bool opencl_train_kernel(ref CL_FP eo, ref CL_FP eh)
+  bool opencl_back_propagation(ref CL_FP eo, ref CL_FP eh)
   {
     try
     {
@@ -257,20 +254,6 @@ class Application {
         #define FP         float
 
         /**
-         * The kernel computes the components that latter summed up to
-         * get the value at the node j
-         */
-        __kernel void layerforward(__global FP* f,
-                                   __global FP* w,
-                                   __global FP* s,
-                                            int j,
-                                            int n)
-        {
-          int i = get_global_id(0);
-          s[i] = f[i] * w[i * n + j];
-        }
-
-        /**
          * The kernel implements partial reduction
          * The global index space is hidden_n x input_n, i.e. a rectangle
          * with hidden_n height and input_n width.
@@ -281,12 +264,12 @@ class Application {
          * @param summands holds hidden_n x hidden_n elements
          * @param n2 is equal to hidden_n
          */
-        __kernel void layerforward_optimized(__global FP* f,
-                                             __global FP* w,
-                                             __global FP* sums,
-                                             __local  FP* inputs,
-                                             __local  FP* summands,
-                                                      int n2)
+        __kernel void forward_layer(__global FP* f,
+                                    __global FP* w,
+                                    __global FP* sums,
+                                    __local  FP* inputs,
+                                    __local  FP* summands,
+                                    int n2)
         { // workgroups are organized so that get_group_id(0) is always 0.
           int row = get_local_id(0);
           int col = get_local_id(1);
@@ -348,7 +331,7 @@ class Application {
       }
       assert(status == CL_SUCCESS, cl_strerror(status));
       cl_kernel[2] kernels;
-      kernels[0] = clCreateKernel(program, "layerforward_optimized", &status);
+      kernels[0] = clCreateKernel(program, "forward_layer", &status);
       assert(status == CL_SUCCESS, cl_strerror(status));
       kernels[1] = clCreateKernel(program, "adjust_weights", &status);
       assert(status == CL_SUCCESS, cl_strerror(status));
@@ -382,7 +365,8 @@ class Application {
         foreach (k; 0 .. num_blocks)
         {
           sum += partial_sum[k * hidden_n + j - 1];
-          debug (DEBUG) writefln("partial_sum[%2d] %.12f", k * hidden_n + j - 1 ,partial_sum[k * hidden_n + j - 1]);
+          debug (DEBUG)
+            writefln("partial_sum[%2d] %.12f", k * hidden_n + j - 1, partial_sum[k * hidden_n + j - 1]);
         }
         hidden_units[j] = ONEF / (ONEF + exp(-sum));
       }
@@ -427,6 +411,43 @@ class Application {
     {
       writeln(e);
       return false;
+    }
+  }
+
+  /++
+   + This version of layerforward performs additions in exactly the
+   + same order as the kernel version does.  In principle the results
+   + should be precisely equal.
+   +/
+  void layerforward_parallel_for_clop(NDArray!CL_FP f, NDArray!CL_FP t, NDArray!CL_FP w)
+  {
+    f[0] = ONEF;
+
+    auto sums = new NDArray!CL_FP(hidden_n + 1, input_n + 1);
+
+    foreach (row; 0 .. hidden_n + 1)
+    {
+      foreach (col; 0 .. input_n + 1)
+      {
+        sums[row, col] = w[row, col] * f[col];
+      }
+    }
+    for (auto i = 1; i < input_n + 1; i *= 2)
+    {
+      foreach (row; 0 .. hidden_n)
+      {
+        foreach (col; 0 .. input_n)
+        {
+          if (col % (2 * i) == 0)
+          {
+            sums[row, col] += sums[row, col + i];
+          }
+        }
+      }
+    }
+    foreach (j; 1 .. hidden_n + 1)
+    {
+      t[j] = ONEF / (ONEF + exp(-sums[j,0]));
     }
   }
 
@@ -554,24 +575,28 @@ class Application {
     CL_FP eo, eh;
     StopWatch timer;
     TickDuration ticks;
+    size_t size = runtime.get_work_group_size();
 
-    timer.reset();
-    timer.start();
-    valid = opencl_train_kernel(eo, eh);
-    timer.stop();
-    ticks = timer.peek();
-    writefln("OPENCL %5.3f [s]", ticks.usecs / 1E6);
-    if (!valid)
-      writefln("bp: out error %f, hidden error %f", eo, eh);
+    if (size >= hidden_n * hidden_n)
+    {
+      timer.reset();
+      timer.start();
+      valid = opencl_back_propagation(eo, eh);
+      timer.stop();
+      ticks = timer.peek();
+      writefln("OPENCL %5.3f [s]", ticks.usecs / 1E6);
+      if (!valid)
+        writefln("bp: out error %f, hidden error %f", eo, eh);
 
-    timer.reset();
-    timer.start();
-    valid = clop_train_kernel(eo, eh);
-    timer.stop();
-    ticks = timer.peek();
-    writefln("CLOPs %5.3f [s]", ticks.usecs / 1E6);
-    if (!valid)
-      writefln("bp: out error %f, hidden error %f", eo, eh);
+      timer.reset();
+      timer.start();
+      valid = clop_back_propagation(eo, eh);
+      timer.stop();
+      ticks = timer.peek();
+      writefln("CLOPs %5.3f [s]", ticks.usecs / 1E6);
+      if (!valid)
+        writefln("bp: out error %f, hidden error %f", eo, eh);
+    }
   }
 }
 
