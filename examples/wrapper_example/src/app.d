@@ -21,9 +21,7 @@ import clop.rt.clid.matrix;
 
 
 void RunClidMatrixExample()
-{
-	Matrix!(double).LoadMatrixProgram();
-	
+{	
 	auto mat = new Matrix!double(4, 1);
 	mat.fill(2);
 	mat.scale(2);
@@ -81,7 +79,6 @@ int main(string[] args)
 {
 	//Settings.Instance().setUseGPU();
 	Settings.Instance().setUseCPU();
-	Context c = Context.GetDefault();
 	RunBasicMatrixExample(); 
 	RunClidMatrixExample();
 	return 0;

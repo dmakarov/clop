@@ -21,6 +21,7 @@ class Matrix(T) {
 		this(int rows, int cols)
 		{
 			if(!programLoaded) {
+				writeln("[Warning] loading default Matrix program");
 				bool ok = LoadMatrixProgram();
 				assert(ok); 
 				if(!ok) {
@@ -46,15 +47,16 @@ class Matrix(T) {
 				return false;
 			}
 
-
 			kfill = program.createKernel("Fill");
 			kscale = program.createKernel("Scale");
 			ksubtract = program.createKernel("Subtract");
+			kmmmultiply = program.createKernel("MMMultiply");
+			programLoaded = true;
 			return true;
 		}
 
 		int size() { return rows*cols; }
-	
+
 		void fill(T value)
 		{
 			kfill.setGlobalWorkSize(size());
@@ -88,27 +90,46 @@ class Matrix(T) {
 		{
 			mem.updateHost();
 		}
+
+		Matrix opMul(Matrix other)
+		{
+			Matrix result = new Matrix(rows, other.cols);
+			result.fill(0);
+
+			ArgList args = new ArgList();
+			args.arg(0, mem);
+			args.arg(1, other.mem);
+			args.arg(2, result.mem);
+			args.arg(3, MakeNumber!int(rows));
+			args.arg(4, MakeNumber!int(other.cols));
+			
+			kmmmultiply.call(args);
+			return result;
+		}
 	}
 
 	private {
-			int rows, cols;
-			T[] data;
-			Memory!(T[]) mem;
+		int rows, cols;
+		T[] data;
+		Memory!(T[]) mem;
 
-			ArgList simpleArgList(T value)
-			{
-				ArgList args = new ArgList();
-				args.arg(0, mem);
-				args.arg(1, MakeNumber!int(size()));
-				args.arg(2, MakeNumber!T(value));
-				return args;
-			}
+		ArgList simpleArgList(T value)
+		{
+			ArgList args = new ArgList();
+			args.arg(0, mem);
+			args.arg(1, MakeNumber!int(size()));
+			args.arg(2, MakeNumber!T(value));
+			return args;
+		}
 
-			static bool programLoaded = false;
+		static bool programLoaded = false;
 
 			//simple args fun
 			static Kernel ksubtract;
 			static Kernel kscale;
 			static Kernel kfill;
+
+			//permutations
+			static Kernel kmmmultiply;
+		}
 	}
-}
