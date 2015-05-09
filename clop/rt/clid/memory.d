@@ -14,7 +14,7 @@ class Memory(T) : IMemory {
 		override {
 			size_t size()  { return 1; }
 			
-			cl_mem implementation() { return *(cast(cl_mem *) &_hostValue); }
+			ref cl_mem implementation() { return *(cast(cl_mem *) &_hostValue); }
 
 
 			bool initialize(Context context = Context.GetDefault())

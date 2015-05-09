@@ -44,8 +44,11 @@ void RunMatrixExample()
 	assert(ok);
 	if(!ok) return;
 
-	Matrix!double mat = new Matrix!double(2, 10);
-	fill(mat.data, 1);
+	Matrix!double mat = new Matrix!double(2, 2);
+
+
+	Kernel pfill = program.createKernel("Fill");
+	pfill.setGlobalWorkSize(mat.size());
 
 	Kernel scale = program.createKernel("Scale");
 	scale.setGlobalWorkSize(mat.size());
@@ -58,13 +61,16 @@ void RunMatrixExample()
 	args.arg(1, MakeNumber!int(mat.size()));
 	args.arg(2, MakeNumber!double(2));
 
+	pfill.call(args);
 	scale.call(args);	
-	args.arg(2, MakeNumber!double(-1));
+
+	args.arg(2, MakeNumber!double(-4));
 	subtract.call(args);	
 
 	args.updateHost();
 	writeln(mat.data);
 }
+
 
 
 int main(string[] args)

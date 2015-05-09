@@ -13,7 +13,7 @@ import clop.rt.clid.clerror;
 class ArrayMemory(T) : IMemory {
 	public {
 		override {
-			cl_mem implementation()
+			ref cl_mem implementation()
 			{
 				return _mem;
 			}

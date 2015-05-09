@@ -8,11 +8,7 @@ abstract class IMemory {
 	public {
 		~this() {}
 	
-		cl_mem implementation()  
-		{
-			IMemory that = cast(IMemory)(this);
-			return that.implementation();
-		}
+		
 
 		abstract {
 			size_t size();
@@ -21,6 +17,7 @@ abstract class IMemory {
 			bool updateHost( Queue queue = Queue.GetDefault());
 			bool finalize( Queue queue = Queue.GetDefault());
 			bool commit( Context context = Context.GetDefault(),  Queue queue = Queue.GetDefault());
+			ref cl_mem implementation();
 		}
 
 		size_t sizeOfMemory()  
@@ -30,7 +27,7 @@ abstract class IMemory {
 
 		void * pointer()
 		{
-			return cast(void *) implementation();
+			return cast(void *) &implementation();
 		}
 	}
 }

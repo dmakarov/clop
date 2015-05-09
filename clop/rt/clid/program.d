@@ -14,6 +14,7 @@ class Program {
 	public {
 		bool compile(string program, string flags = "")
 		{
+
 			if(program is null || program.length == 0)
 				return false;
 
@@ -71,8 +72,13 @@ class Program {
 
 		Kernel createKernel(string name)
 		{
+			if(_program is null) {
+				writeln("[Error] cannot load kernel from invalid program");
+				return null;
+			}
+
 			cl_int err;
-			Kernel kernel = new Kernel( clCreateKernel(_program, name.ptr, &err) );
+			Kernel kernel = new Kernel( clCreateKernel(_program, cast(char*)name, &err) );
 			if(!CLError.Check(err)) {
 				writeln("[CLError] unable to create kernel\n");
 				return null;
@@ -83,12 +89,13 @@ class Program {
 		}
 
 		bool load(string path, string flags = "") {
-			string program;
-			if(!readText(path)) {
+			string program = readText(path);
+			if(program is null || program == "") {
+				writeln("[Error] Failed to load program at ", path);
 				return false;
 			}
 
-			return compile(path, flags);
+			return compile(program, flags);
 		}
 	}
 

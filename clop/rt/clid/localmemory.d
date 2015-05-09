@@ -13,7 +13,7 @@ class LocalMemory(T) : IMemory {
 	public {
 		size_t size() const  { return _size; }
 
-		cl_mem implementation()
+		ref cl_mem implementation()
 		{
 			static cl_mem * ptr = NULL;
 			return *ptr;
