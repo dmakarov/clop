@@ -20,11 +20,21 @@ class Matrix(T) {
 	public {
 		this(int rows, int cols)
 		{
+			if(!programLoaded) {
+				bool ok = LoadMatrixProgram();
+				assert(ok); 
+				if(!ok) {
+					writeln("[Error] unable to load program");
+				}
+			}
+
 			this.rows = rows;
 			this.cols = cols;
 			this.data = new T[rows*cols];
 			this.mem = MakeMemory(data);
 		}
+
+
 
 		static bool LoadMatrixProgram(string path = "/Users/patrick/Desktop/Code/moonolith/clipp/data/matrix_program.cl")
 		{
@@ -93,6 +103,8 @@ class Matrix(T) {
 				args.arg(2, MakeNumber!T(value));
 				return args;
 			}
+
+			static bool programLoaded = false;
 
 			//simple args fun
 			static Kernel ksubtract;
