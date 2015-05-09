@@ -1,3 +1,4 @@
+module clop.rt.clid.program;
 
 import std.container.array;
 import std.stdio;

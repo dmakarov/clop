@@ -20,7 +20,33 @@ import clop.rt.clid.matrix;
 
 
 
-void RunMatrixExample()
+void RunClidMatrixExample()
+{
+	Matrix!(double).LoadMatrixProgram();
+	
+	auto mat = new Matrix!double(4, 1);
+	mat.fill(2);
+	mat.scale(2);
+	mat.subtract(-4);
+	mat.describe();
+}
+
+class BasicMatrix(T) {
+	public {
+		this(int rows, int cols)
+		{
+			this.rows = rows;
+			this.cols = cols;
+			this.data = new T[rows*cols];
+		}
+
+		int size() { return rows*cols; }
+		int rows, cols;
+		T[] data;
+	}
+}
+
+void RunBasicMatrixExample()
 {
 	string path = "/Users/patrick/Desktop/Code/moonolith/clipp/data/matrix_program.cl";
 	Program program = new Program();
@@ -28,11 +54,8 @@ void RunMatrixExample()
 	assert(ok);
 	if(!ok) return;
 
-	Matrix!double mat = new Matrix!double(2, 2);
-
-
-	Kernel pfill = program.createKernel("Fill");
-	pfill.setGlobalWorkSize(mat.size());
+	BasicMatrix!double mat = new BasicMatrix!double(2, 10);
+	fill(mat.data, 1);
 
 	Kernel scale = program.createKernel("Scale");
 	scale.setGlobalWorkSize(mat.size());
@@ -45,11 +68,8 @@ void RunMatrixExample()
 	args.arg(1, MakeNumber!int(mat.size()));
 	args.arg(2, MakeNumber!double(2));
 
-	pfill.call(args);
 	scale.call(args);	
-
-	args.arg(2, MakeNumber!double(-4));
-
+	args.arg(2, MakeNumber!double(-1));
 	subtract.call(args);	
 
 	args.updateHost();
@@ -62,6 +82,7 @@ int main(string[] args)
 	//Settings.Instance().setUseGPU();
 	Settings.Instance().setUseCPU();
 	Context c = Context.GetDefault();
-	RunMatrixExample(); 
+	RunBasicMatrixExample(); 
+	RunClidMatrixExample();
 	return 0;
 }

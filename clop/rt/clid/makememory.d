@@ -29,13 +29,13 @@ struct MemoryMaker(T : IMemory)
 	}
 }
 
-IMemory MakeMemory(T)(T arg)
+auto MakeMemory(T)(T arg)
 {
 	MemoryMaker!T mm;
 	return mm.make(arg);
 }
 
-IMemory MakeNumber(T)(T arg)
+Memory!T MakeNumber(T)(T arg)
 {
 	return new Memory!T(arg);
 }
