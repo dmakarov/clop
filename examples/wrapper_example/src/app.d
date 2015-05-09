@@ -16,25 +16,9 @@ import clop.rt.clid.program;
 import clop.rt.clid.kernel;
 import clop.rt.clid.arglist;
 import clop.rt.clid.makememory;
+import clop.rt.clid.matrix;
 
 
-alias Memory!(Array!(double)) VecMemRefDouble;
-
-
-class Matrix(T) {
-	public {
-		this(int rows, int cols)
-		{
-			this.rows = rows;
-			this.cols = cols;
-			this.data = new T[rows*cols];
-		}
-
-		int size() { return rows*cols; }
-		int rows, cols;
-		T[] data;
-	}
-}
 
 void RunMatrixExample()
 {
@@ -65,12 +49,12 @@ void RunMatrixExample()
 	scale.call(args);	
 
 	args.arg(2, MakeNumber!double(-4));
+
 	subtract.call(args);	
 
 	args.updateHost();
 	writeln(mat.data);
 }
-
 
 
 int main(string[] args)
