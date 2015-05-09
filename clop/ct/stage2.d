@@ -275,7 +275,6 @@ template Backend(TList...)
               {
                 if (p.name == symbol)
                 {
-                  debug (UNITTEST_DEBUG) writefln("// FOUND PARAMETER %s", symbol);
                   p.type = `"` ~ type ~ ` "`;
                   p.qual = "__local ";
                   p.size = array_size ~ " * " ~ current_type ~ ".sizeof";
