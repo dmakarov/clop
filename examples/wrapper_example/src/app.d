@@ -21,7 +21,7 @@ import clop.rt.clid.matrix;
 
 
 void RunClidMatrixExample()
-{	
+{
 	auto mat = new Matrix!double(4, 4);
 	mat.fill(2);
 	mat.scale(2);
@@ -92,9 +92,9 @@ void RunBasicMatrixExample2()
 	args.arg(1, MakeNumber!int(mat.size()));
 	args.arg(2, MakeNumber!double(2));
 
-	scale.call(args);	
+	scale.call(args);
 	args.arg(2, MakeNumber!double(-1));
-	subtract.call(args);	
+	subtract.call(args);
 
 	args.updateHost();
 	//writeln(mat.data);
@@ -106,7 +106,7 @@ int main(string[] args)
 	//Settings.Instance().setUseGPU();
 	Settings.Instance().setUseCPU();
 	RunBasicMatrixExample1();
-	RunBasicMatrixExample2(); 
+	RunBasicMatrixExample2();
 	RunClidMatrixExample();
 	return 0;
 }

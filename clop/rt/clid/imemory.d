@@ -7,8 +7,8 @@ import clop.rt.clid.context;
 abstract class IMemory {
 	public {
 		~this() {}
-	
-		
+
+
 
 		abstract {
 			size_t size();
@@ -20,7 +20,7 @@ abstract class IMemory {
 			ref cl_mem implementation();
 		}
 
-		size_t sizeOfMemory()  
+		size_t sizeOfMemory()
 		{
 			return implementation().sizeof;
 		}

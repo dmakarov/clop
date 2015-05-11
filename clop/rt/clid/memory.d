@@ -13,7 +13,6 @@ class Memory(T) : IMemory {
 	public {
 		override {
 			size_t size()  { return 1; }
-			
 			ref cl_mem implementation() { return *(cast(cl_mem *) &_hostValue); }
 
 
@@ -22,18 +21,18 @@ class Memory(T) : IMemory {
 				return true;
 			}
 
-			bool updateHost(Queue queue = Queue.GetDefault()) 
+			bool updateHost(Queue queue = Queue.GetDefault())
 			{
 				return true;
 			}
 
-			bool updateDevice(Queue queue = Queue.GetDefault()) 
+			bool updateDevice(Queue queue = Queue.GetDefault())
 			{
 				return true;
 			}
 
 
-			bool finalize(Queue queue = Queue.GetDefault()) 
+			bool finalize(Queue queue = Queue.GetDefault())
 			{
 				return true;
 			}
@@ -86,7 +85,7 @@ class Memory(T : T[]) : ArrayMemory!T {
 				return super.initialize(context);
 			}
 
-			bool finalize(Queue queue = Queue.GetDefault()) 
+			bool finalize(Queue queue = Queue.GetDefault())
 			{
 				return super.finalize(queue);
 			}

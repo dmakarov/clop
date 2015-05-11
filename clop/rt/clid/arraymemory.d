@@ -36,7 +36,7 @@ class ArrayMemory(T) : IMemory {
 				return _isFinalized;
 			}
 
-			bool updateHost(Queue queue = Queue.GetDefault()) 
+			bool updateHost(Queue queue = Queue.GetDefault())
 			{
 				assert(_isInitialized);
 				return fromDeviceToHost(queue);
@@ -50,7 +50,7 @@ class ArrayMemory(T) : IMemory {
 				return _isFinalized;
 			}
 
-			bool commit(Context context = Context.GetDefault(), Queue queue = Queue.GetDefault()) 
+			bool commit(Context context = Context.GetDefault(), Queue queue = Queue.GetDefault())
 			{
 				if(_isFinalized) return true;
 
@@ -106,7 +106,7 @@ class ArrayMemory(T) : IMemory {
 		}
 
 		T * ptr() { return _ptr.ptr; }
-		
+
 
 		~this()
 		{
@@ -121,7 +121,7 @@ class ArrayMemory(T) : IMemory {
 			}
 		}
 
-		
+
 		void setPtr(T[] ptr)
 		{
 			_ptr = ptr;
@@ -144,7 +144,7 @@ class ArrayMemory(T) : IMemory {
 
 		bool fromHostToDevice(Queue queue = Queue.GetDefault())
 		{
-			alias CLType!T.Type DType; 
+			alias CLType!T.Type DType;
 
 			if(_flags & CL_MEM_WRITE_ONLY) {
 				return true;
@@ -163,14 +163,14 @@ class ArrayMemory(T) : IMemory {
 				return false;
 			}
 
-			clEnqueueUnmapMemObject(queue.implementation(), _mem, clBuffer, 0, null, null); 
+			clEnqueueUnmapMemObject(queue.implementation(), _mem, clBuffer, 0, null, null);
 			clFinish(queue.implementation());  //just to make sure
 			return true;
 		}
 
 		bool fromDeviceToHost(Queue queue = Queue.GetDefault())
 		{
-			alias CLType!T.Type DType; 
+			alias CLType!T.Type DType;
 
 			if(_flags & CL_MEM_READ_ONLY) {
 				return true;
@@ -189,7 +189,7 @@ class ArrayMemory(T) : IMemory {
 				return false;
 			}
 
-			clEnqueueUnmapMemObject(queue.implementation(), _mem, clBuffer, 0, null, null); 
+			clEnqueueUnmapMemObject(queue.implementation(), _mem, clBuffer, 0, null, null);
 			clFinish(queue.implementation());  //just to make sure
 			return true;
 		}
