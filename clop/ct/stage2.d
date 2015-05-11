@@ -1008,6 +1008,111 @@ template Backend(TList...)
     /++
      +
      +/
+    string infer_type(ParseTree t)
+    {
+      switch (t.name)
+      {
+      case "CLOP.PrimaryExpr":
+        {
+          switch (t.children[0].name)
+          {
+          case "CLOP.FloatLiteral":
+            return "float";
+          case "CLOP.IntegerLiteral":
+            return "int";
+          case "CLOP.Identifier":
+            auto id = t.children[0].matches[0];
+            if (id in symtable)
+            {
+              return symtable[id].type;
+            }
+            else
+            {
+              return "float";
+            }
+          default:
+            return "float";
+          }
+        }
+      case "CLOP.PostfixExpr":
+        {
+          // FIXME handle function calls, arrays, etc.
+          auto type = infer_type(t.children[0]);
+          if (type == "")
+            return "float";
+          if (type[$ - 1] == '*')
+            return type[0 .. $ - 1];
+          return type;
+        }
+      case "CLOP.ArgumentExprList":
+        {
+          return "float";
+        }
+      case "CLOP.UnaryExpr":
+        {
+          return infer_type(t.children[0]);
+        }
+      case "CLOP.CastExpr":
+        {
+          return infer_type(t.children[0]);
+        }
+      case "CLOP.MultiplicativeExpr":
+      case "CLOP.AdditiveExpr":
+      case "CLOP.ShiftExpr":
+      case "CLOP.RelationalExpr":
+      case "CLOP.EqualityExpr":
+        {
+          if (t.children.length > 1)
+          {
+            auto type1 = infer_type(t.children[0]);
+            auto type2 = infer_type(t.children[2]);
+            if (type1 == type2)
+              return type1;
+            if (type1 == "float" || type2 == "float")
+              return "float";
+            return "int";
+          }
+          else
+          {
+            return infer_type(t.children[0]);
+          }
+        }
+      case "CLOP.ANDExpr":
+      case "CLOP.ExclusiveORExpr":
+      case "CLOP.InclusiveORExpr":
+      case "CLOP.LogicalANDExpr":
+      case "CLOP.LogicalORExpr":
+        {
+          if (t.children.length > 1)
+          {
+            auto type1 = infer_type(t.children[0]);
+            auto type2 = infer_type(t.children[1]);
+            if (type1 == type2)
+              return type1;
+            if (type1 == "float" || type2 == "float")
+              return "float";
+            return "int";
+          }
+          else
+          {
+            return infer_type(t.children[0]);
+          }
+        }
+      case "CLOP.ConditionalExpr":
+        {
+          return infer_type(t.children[0]);
+        }
+      case "CLOP.Expression":
+        {
+          return infer_type(t.children[0]);
+        }
+      default: return "float";
+      }
+    }
+
+    /++
+     +
+     +/
     ParseTree[] lower_expression(ParseTree t)
     {
       // this is an empty list of statements
@@ -1021,6 +1126,7 @@ template Backend(TList...)
 
     ParseTree lower_expression_internal(ParseTree t, ref ParseTree[] sl)
     {
+      debug (UNITTEST_DEBUG) writefln("lower_expression_internal %s: %s", t.name, t.matches);
       ParseTree nt;
       switch (t.name)
       {
@@ -1071,7 +1177,7 @@ template Backend(TList...)
           {
             // lower the expression in parenthesis
             // FIXME: auto type = infer_type(t.children[0]);
-            auto type = "float";
+            auto type = infer_type(t.children[0]);
             // FIXME: generate new temporary
             auto name = format("clop_temp_%s", temporary_index++);
             auto code = type ~ " " ~ name ~ " = " ~ reduce!"a ~ b"("", t.children[0].matches) ~ ";";
@@ -1085,7 +1191,7 @@ template Backend(TList...)
           else if (t.children.length > 1)
           {
             auto function_literal = t.children[1].matches[0];
-            auto return_type = "float";
+            auto return_type = current_type;
             auto x = clop.ct.templates.SnippetContainer.binary_function(function_literal, return_type);
             debug (UNITTEST_DEBUG) writefln("lower PrimaryExpr add an external %s", x);
             external ~= x;
@@ -1095,8 +1201,6 @@ template Backend(TList...)
       case "CLOP.PostfixExpr":
         {
           debug (UNITTEST_DEBUG) writefln("lower PostfixExpr %s", t.matches);
-          nt = lower_expression_internal(t.children[0], sl);
-          t.children[0] = nt;
           if (t.children.length > 1)
           {
             if (t.children[1].name == "CLOP.Expression")
@@ -1109,6 +1213,9 @@ template Backend(TList...)
             else if (t.children[1].name == "CLOP.ArgumentExprList")
             {
               // lower the actual parameters
+              current_type = infer_type(t.children[1]);
+              nt = lower_expression_internal(t.children[0], sl);
+              t.children[0] = nt;
               nt = lower_expression_internal(t.children[1], sl);
               t.children[1] = nt;
               t.matches = nt.matches;
@@ -1117,6 +1224,8 @@ template Backend(TList...)
           else
           {
             debug (UNITTEST_DEBUG) writefln("lower PostfixExpr replace %s with %s", t.matches, nt.matches);
+            nt = lower_expression_internal(t.children[0], sl);
+            t.children[0] = nt;
             t.matches = nt.matches;
           }
         }
@@ -1166,15 +1275,17 @@ template Backend(TList...)
           debug (UNITTEST_DEBUG) writefln("lower %s %s", t.name, t.matches);
           if (t.children.length > 1)
           {
-            auto type1 = "float";
+            auto type1 = infer_type(t.children[0]);
             auto name1 = format("clop_temp_%s", temporary_index++);
             auto code1 = type1 ~ " " ~ name1 ~ " = " ~ reduce!"a ~ b"("", t.children[0].matches) ~ ";";
+            debug (UNITTEST_DEBUG) writefln("code1 %s", code1);
             auto tree1 = CLOP.decimateTree(CLOP.Declaration(code1));
             nt = lower_expression_internal(tree1, sl);
             sl ~= nt;
-            auto type2 = "float";
+            auto type2 = infer_type(t.children[2]);
             auto name2 = format("clop_temp_%s", temporary_index++);
             auto code2 = type2 ~ " " ~ name2 ~ " = " ~ reduce!"a ~ b"("", t.children[2].matches) ~ ";";
+            debug (UNITTEST_DEBUG) writefln("code2 %s", code2);
             auto tree2 = CLOP.decimateTree(CLOP.Declaration(code2));
             nt = lower_expression_internal(tree2, sl);
             sl ~= nt;
