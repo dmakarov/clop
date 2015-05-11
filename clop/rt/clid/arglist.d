@@ -98,7 +98,7 @@ class ArgList
 
 		CLError err = new CLError(clSetKernelArg(kernel.implementation(), argNum, mem.sizeOfMemory(), mem.pointer()));
 		if(!err.success()) {
-			writeln("[Error] CLKernel setting arg %d", argNum);
+			writefln("[Error] CLKernel setting arg %d", argNum);
 		}
 
 		return err.success();
