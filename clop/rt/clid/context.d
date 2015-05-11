@@ -64,11 +64,6 @@ class Context {
 		return _queues;
 	}
 
-	Array!Queue queues() 
-	{
-		return _queues;
-	}
-
 	Queue queue(size_t index) 
 	{
 		return _queues[index];
