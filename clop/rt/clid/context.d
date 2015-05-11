@@ -69,7 +69,6 @@ class Context {
 		return _queues[index];
 	}
 
-
 	bool initialize(Device device)
 	{
 		Array!Device vec = [device];
