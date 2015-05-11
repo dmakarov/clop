@@ -33,10 +33,12 @@ __kernel void MMMultiply(__global double *left, __global double *right, __global
 		for(int j = get_global_id(1); j < cols; j+= get_global_size(1)) {
 			int offsetI = i*cols;
 			double tmp = 0;
-			for (int k=0; k < cols; k++) { 
-				tmp += left[offsetI+k] * right[k*cols+j]; 
+			for (int k=0; k < cols; k++) {
+				tmp += left[offsetI+k] * right[k*cols+j];
 			}
-			printf("%g\n", result[i]);
+                        // FIXME disable this printf for now.
+                        // on travis-ci it doesn't work even on CPU
+			//printf("%g\n", result[i]);
 			result[i*cols+j] = tmp;
 		}
 	}
