@@ -1493,43 +1493,64 @@ template Backend(TList...)
 
 unittest
 {
-  // test 1
+  // test 0
   version (DISABLED)
   {
-  auto AST = clop.ct.parser.CLOP(q{NDRange(i: 0 .. 8){c = a + b;}});
-  alias T1 = std.typetuple.TypeTuple!(int, int, int);
-  auto be1 = Backend!T1(AST, __FILE__, __LINE__, ["a", "b", "c"]);
-  be1.analyze(AST);
-  be1.lower(AST);
-  auto output = be1.generate_code();
-  assert(output !is null && output != "");
+    auto AST = clop.ct.parser.CLOP(q{NDRange(i: 0 .. 8){c = a + b;}});
+    alias T1 = std.typetuple.TypeTuple!(int, int, int);
+    auto be1 = Backend!T1(AST, __FILE__, __LINE__, ["a", "b", "c"]);
+    be1.analyze(AST);
+    be1.lower(AST);
+    auto output = be1.generate_code();
+    assert(output !is null && output != "");
+  }
+
+  // test 1
+  {
+    auto AST = clop.ct.parser.CLOP(q{
+        NDRange(j : 1 .. n)
+        {
+          s[j - 1] = inputs[j] * weights[i * n + j];
+        }});
+    alias A = NDArray!float;
+    alias T2 = std.typetuple.TypeTuple!(size_t, int, A, A, A);
+    auto be2 = Backend!T2(AST, __FILE__, __LINE__, ["n", "i", "inputs", "weights", "s"]);
+    be2.analyze(AST);
+    be2.update_parameters();
+    debug (UNITTEST_DEBUG)
+    {
+      writefln("%s", be2.dump_symtable());
+      writeln(be2.dump_parameters());
+    }
+    be2.lower(AST);
   }
 
   // test 2
+  version (DISABLED)
   {
-  auto AST = clop.ct.parser.CLOP(q{
-      NDRange(i : 1 .. h_n, j : 0 .. i_n)
-      {
-        local float t[i_n];
-        t[j] = inputs[j] * weights[i, j];
-        float s = reduce!"a + b"(0, t);
-        if (j == 0)
+    auto AST = clop.ct.parser.CLOP(q{
+        NDRange(i : 1 .. h_n, j : 0 .. i_n)
         {
-          hidden[i] = ONEF / (ONEF + exp(-s));
-        }
-      }});
-  alias A = NDArray!float;
-  alias T2 = std.typetuple.TypeTuple!(size_t, float*, size_t, A, A, A);
-  auto be2 = Backend!T2(AST, __FILE__, __LINE__, ["h_n", "t", "i_n", "inputs", "weights", "hidden"]);
-  be2.analyze(AST);
-  be2.update_parameters();
-  debug (UNITTEST_DEBUG)
-  {
-    writefln("%s", be2.dump_symtable());
-    writeln(be2.dump_parameters());
-  }
-  be2.lower(AST);
-  debug (UNITTEST_DEBUG) writeln(AST.toString());
+          local float t[i_n];
+          t[j] = inputs[j] * weights[i, j];
+          float s = reduce!"a + b"(0, t);
+          if (j == 0)
+          {
+            hidden[i] = ONEF / (ONEF + exp(-s));
+          }
+        }});
+    alias A = NDArray!float;
+    alias T2 = std.typetuple.TypeTuple!(size_t, float*, size_t, A, A, A);
+    auto be2 = Backend!T2(AST, __FILE__, __LINE__, ["h_n", "t", "i_n", "inputs", "weights", "hidden"]);
+    be2.analyze(AST);
+    be2.update_parameters();
+    debug (UNITTEST_DEBUG)
+    {
+      writefln("%s", be2.dump_symtable());
+      writeln(be2.dump_parameters());
+    }
+    be2.lower(AST);
+    debug (UNITTEST_DEBUG) writeln(AST.toString());
   }
 }
 

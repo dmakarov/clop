@@ -44,7 +44,7 @@ CLOP:
  Declarator             <  (Identifier / '(' Declarator ')')
                            ('[' ']' / '(' ')' / '[' ConditionalExpr ']' / '(' ParameterList ')' / '(' IdentifierList ')')*
  StorageClassSpecifier  <- "local"
- TypeSpecifier          <- "void" / "char" / "short" / "int" / "long" / "float" / "double" / StructSpecifier
+ TypeSpecifier          <- "void" / "char" / "short" / "int" / "uint" / "long" / "ulong" / "float" / "double" / StructSpecifier
  DeclarationSpecifiers  <  (StorageClassSpecifier / TypeSpecifier) DeclarationSpecifiers?
  StructSpecifier        <  "struct" (Identifier ('{' StructDeclarationList '}')? / '{' StructDeclarationList '}')
  StructDeclarationList  <  StructDeclaration (:Spacing StructDeclaration)*
@@ -828,7 +828,7 @@ struct GenericCLOP(TParseTree)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.literal!("void"), pegged.peg.literal!("char"), pegged.peg.literal!("short"), pegged.peg.literal!("int"), pegged.peg.literal!("long"), pegged.peg.literal!("float"), pegged.peg.literal!("double"), StructSpecifier), "CLOP.TypeSpecifier")(p);
+            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.literal!("void"), pegged.peg.literal!("char"), pegged.peg.literal!("short"), pegged.peg.literal!("int"), pegged.peg.literal!("uint"), pegged.peg.literal!("long"), pegged.peg.literal!("ulong"), pegged.peg.literal!("float"), pegged.peg.literal!("double"), StructSpecifier), "CLOP.TypeSpecifier")(p);
         }
         else
         {
@@ -836,7 +836,7 @@ struct GenericCLOP(TParseTree)
                 return *m;
             else
             {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.literal!("void"), pegged.peg.literal!("char"), pegged.peg.literal!("short"), pegged.peg.literal!("int"), pegged.peg.literal!("long"), pegged.peg.literal!("float"), pegged.peg.literal!("double"), StructSpecifier), "CLOP.TypeSpecifier"), "TypeSpecifier")(p);
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.literal!("void"), pegged.peg.literal!("char"), pegged.peg.literal!("short"), pegged.peg.literal!("int"), pegged.peg.literal!("uint"), pegged.peg.literal!("long"), pegged.peg.literal!("ulong"), pegged.peg.literal!("float"), pegged.peg.literal!("double"), StructSpecifier), "CLOP.TypeSpecifier"), "TypeSpecifier")(p);
                 memo[tuple(`TypeSpecifier`,p.end)] = result;
                 return result;
             }
@@ -847,12 +847,12 @@ struct GenericCLOP(TParseTree)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.literal!("void"), pegged.peg.literal!("char"), pegged.peg.literal!("short"), pegged.peg.literal!("int"), pegged.peg.literal!("long"), pegged.peg.literal!("float"), pegged.peg.literal!("double"), StructSpecifier), "CLOP.TypeSpecifier")(TParseTree("", false,[], s));
+            return         pegged.peg.defined!(pegged.peg.or!(pegged.peg.literal!("void"), pegged.peg.literal!("char"), pegged.peg.literal!("short"), pegged.peg.literal!("int"), pegged.peg.literal!("uint"), pegged.peg.literal!("long"), pegged.peg.literal!("ulong"), pegged.peg.literal!("float"), pegged.peg.literal!("double"), StructSpecifier), "CLOP.TypeSpecifier")(TParseTree("", false,[], s));
         }
         else
         {
             memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.literal!("void"), pegged.peg.literal!("char"), pegged.peg.literal!("short"), pegged.peg.literal!("int"), pegged.peg.literal!("long"), pegged.peg.literal!("float"), pegged.peg.literal!("double"), StructSpecifier), "CLOP.TypeSpecifier"), "TypeSpecifier")(TParseTree("", false,[], s));
+            return hooked!(pegged.peg.defined!(pegged.peg.or!(pegged.peg.literal!("void"), pegged.peg.literal!("char"), pegged.peg.literal!("short"), pegged.peg.literal!("int"), pegged.peg.literal!("uint"), pegged.peg.literal!("long"), pegged.peg.literal!("ulong"), pegged.peg.literal!("float"), pegged.peg.literal!("double"), StructSpecifier), "CLOP.TypeSpecifier"), "TypeSpecifier")(TParseTree("", false,[], s));
         }
     }
     static string TypeSpecifier(GetName g)
