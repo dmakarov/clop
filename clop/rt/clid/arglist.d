@@ -1,6 +1,5 @@
 module clop.rt.clid.arglist;
 
-import std.container.array;
 import std.stdio;
 
 import clop.rt.clid.imemory;
@@ -10,10 +9,9 @@ import clop.rt.clid.kernel;
 import clop.rt.clid.clerror;
 import clop.rt.clid.platform;
 
-
-
-
-class ArgList {
+class ArgList
+{
+  import std.container.array;
 	public
 	void setNArgs(size_t n)
 	{
@@ -109,7 +107,4 @@ class ArgList {
 private:
 	Array!IMemory _args;
 
-
-
 }
-

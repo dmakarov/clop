@@ -1,6 +1,5 @@
 module clop.rt.clid.context;
-import std.array;
-import std.container.array;
+
 import std.stdio;
 import std.exception;
 import std.format;
@@ -13,7 +12,9 @@ import clop.rt.clid.clerror;
 import clop.rt.clid.settings;
 
 
-class Context {
+class Context
+{
+  import std.container.array : Array;
 	public
 
 	static Context GetDefault()
@@ -29,7 +30,7 @@ class Context {
 			writeln(s.deviceType());
 
 			switch(s.deviceType()) {
-				case "cpu" : 
+				case "cpu" :
 				{
 					device = Platform.GetDefault().cpu();
 					break;
@@ -41,7 +42,7 @@ class Context {
 					break;
 				}
 
-				default: 
+				default:
 				{
 					break;
 				}
@@ -51,10 +52,10 @@ class Context {
 				writeln("[Error] invalid context");
 				return null;
 			}
-			
+
 			device.describe();
 			def.initialize(device);
-		} 
+		}
 
 		return def;
 	}
@@ -64,12 +65,7 @@ class Context {
 		return _queues;
 	}
 
-	Array!Queue queues() 
-	{
-		return _queues;
-	}
-
-	Queue queue(size_t index) 
+	Queue queue(size_t index)
 	{
 		return _queues[index];
 	}
@@ -81,19 +77,19 @@ class Context {
 		return initialize(vec);
 	}
 
-	bool initialize(Array!Device devices) 
+	bool initialize(Array!Device devices)
 	{
 		DerelictCL.load();
 		cl_int err = 0;
 		//FIXME Arg0 is platform to use
 		cl_device_id[] devIds;
 		devIds.length = devices.length;
-		
+
 		int i = 0;
 		foreach(Device it; devices) {
 			devIds[i++] = it.getId();
 		}
-		
+
 		long[] empty;
 		_context = clCreateContext(null, cast(uint)devIds.length, &devIds[0], null, null, &err);
 
@@ -120,18 +116,18 @@ class Context {
 	{
 		return _devices;
 	}
-	
-	Device device(size_t index) 
+
+	Device device(size_t index)
 	{
 		return _devices[index];
 	}
 
-	cl_context implementation() 
+	cl_context implementation()
 	{
 		return _context;
 	}
 
-	this() 
+	this()
 	{
 		_initialized = false;
 	}
@@ -143,7 +139,7 @@ class Context {
 		cl_int ret = clReleaseContext(_context);
 		assert(ret == CL_SUCCESS);
 	}
-	
+
 
 	private
 	bool _initialized;

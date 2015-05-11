@@ -1,14 +1,16 @@
 module clop.rt.clid.queue;
 
-import std.array;
 import std.stdio;
+
 import derelict.opencl.cl;
 import clop.rt.clid.kernel;
 import clop.rt.clid.clerror;
 import clop.rt.clid.context;
 
 
-class Queue {
+class Queue
+{
+  import std.array;
 	public {
 
 		this(cl_command_queue queue)
@@ -27,11 +29,11 @@ class Queue {
 			cl_ulong[] gws = null;
 			cl_ulong[] lws = null;
 
-			if(!kernel.localWorkSize().empty) {
+			if(!kernel.localWorkSize().empty()) {
 				lws = kernel.localWorkSize();
 			}
 
-			if(!kernel.globalWorkSize().empty) {
+			if(!kernel.globalWorkSize().empty()) {
 				gws = kernel.globalWorkSize();
 			}
 
@@ -41,7 +43,7 @@ class Queue {
 			void[][] empty2;
 
 			cl_event event;
-			CLError err = new CLError( 
+			CLError err = new CLError(
 				clEnqueueNDRangeKernel(
 					_queue,
 					kernel.implementation(),
@@ -49,9 +51,9 @@ class Queue {
 					null,
 					gws.ptr,
 					lws.ptr,
-					0, 
-					null, 
-					&event) 
+					0,
+					null,
+					&event)
 				);
 
 			return err.success();
@@ -82,13 +84,10 @@ class Queue {
 		void release()
 		{
 			clReleaseCommandQueue(_queue);
-		} 
+		}
 	}
 
 	private {
 		cl_command_queue _queue;
 	}
 }
-
-
-

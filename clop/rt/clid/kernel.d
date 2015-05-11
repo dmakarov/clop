@@ -1,4 +1,3 @@
-
 module clop.rt.clid.kernel;
 
 import derelict.opencl.cl;
@@ -16,7 +15,7 @@ class Kernel {
 		{
 			bool ok = args.commit(_context, queue);
 			if(!ok) return false;
-			
+
 			ok = args.setTo(this);
 			if(!ok) return false;
 
@@ -52,7 +51,7 @@ class Kernel {
 		}
 
 		void setLocalWorkSize(ulong localWorkSize0, ulong localWorkSize1)
-		{	
+		{
 			_localWorkSize.length = 2;
 			_localWorkSize[0] = localWorkSize0;
 			_localWorkSize[1] = localWorkSize1;
@@ -74,7 +73,7 @@ class Kernel {
 			_localWorkSize[2] = localWorkSize2;
 		}
 
-		ulong nWorkDims() 
+		ulong nWorkDims()
 		{
 			assert(_localWorkSize.length == 0 || _localWorkSize.length == _globalWorkSize.length);
 			return _globalWorkSize.length;
@@ -84,7 +83,7 @@ class Kernel {
 		{
 			clReleaseKernel(_kernel);
 		}
-		
+
 
 		this(cl_kernel kernel)
 		{
@@ -130,7 +129,7 @@ class Kernel {
 		Context _context;
 
 
-		IMemory makeMemory(Arg)(Arg arg) 	
+		IMemory makeMemory(Arg)(Arg arg)
 		{
 			return MakeMemory(arg);
 		}
@@ -139,7 +138,7 @@ class Kernel {
 		{
 			auto mem = makeMemory(arg);
 			if(!mem.commit(_context)) return false;
-			al.arg(index, mem);	
+			al.arg(index, mem);
 			return true;
 		}
 
@@ -152,11 +151,3 @@ class Kernel {
 		}
 	}
 }
-
-
-
-
-
-
-
-
