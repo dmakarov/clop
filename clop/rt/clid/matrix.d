@@ -37,7 +37,7 @@ class Matrix(T) {
 
 
 
-		static bool LoadMatrixProgram(string path = "/Users/patrick/Desktop/Code/moonolith/clipp/data/matrix_program.cl")
+		static bool LoadMatrixProgram(string path = "./examples/wrapper_example/src/matrix_program.cl")
 		{
 			Program program = new Program();
 			bool ok = program.load(path);
@@ -103,6 +103,7 @@ class Matrix(T) {
 			args.arg(3, MakeNumber!int(rows));
 			args.arg(4, MakeNumber!int(other.cols));
 			
+			kmmmultiply.setGlobalWorkSize(rows, other.cols);
 			kmmmultiply.call(args);
 			return result;
 		}

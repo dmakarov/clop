@@ -22,11 +22,16 @@ import clop.rt.clid.matrix;
 
 void RunClidMatrixExample()
 {	
-	auto mat = new Matrix!double(4, 1);
+	auto mat = new Matrix!double(4, 4);
 	mat.fill(2);
 	mat.scale(2);
-	mat.subtract(-4);
+	mat.subtract(-2);
 	mat.describe();
+
+	auto mat2 = new Matrix!double(4, 3);
+	mat2.fill(4);
+	auto result = mat * mat2;
+	result.describe();
 }
 
 class BasicMatrix(T) {
@@ -47,7 +52,7 @@ class BasicMatrix(T) {
 void RunBasicMatrixExample1()
 {
 
-	string path = "/Users/patrick/Desktop/Code/moonolith/clipp/data/matrix_program.cl";
+	string path = "./examples/wrapper_example/src/matrix_program.cl";
 	Program program = new Program();
 	bool ok = program.load(path);
 	assert(ok);
@@ -58,16 +63,16 @@ void RunBasicMatrixExample1()
 
 	Kernel scale = program.createKernel("Scale");
 	scale.setGlobalWorkSize(mat.size());
-	
+
 	scale.call(mat.data, int(mat.size()), 2.0);
 
-	writeln(mat.data);
+	//writeln(mat.data);
 
 }
 
 void RunBasicMatrixExample2()
 {
-	string path = "/Users/patrick/Desktop/Code/moonolith/clipp/data/matrix_program.cl";
+	string path = "./examples/wrapper_example/src/matrix_program.cl";
 	Program program = new Program();
 	bool ok = program.load(path);
 	assert(ok);
@@ -92,7 +97,7 @@ void RunBasicMatrixExample2()
 	subtract.call(args);	
 
 	args.updateHost();
-	writeln(mat.data);
+	//writeln(mat.data);
 }
 
 
