@@ -44,7 +44,28 @@ class BasicMatrix(T) {
 	}
 }
 
-void RunBasicMatrixExample()
+void RunBasicMatrixExample1()
+{
+
+	string path = "/Users/patrick/Desktop/Code/moonolith/clipp/data/matrix_program.cl";
+	Program program = new Program();
+	bool ok = program.load(path);
+	assert(ok);
+	if(!ok) return;
+
+	BasicMatrix!double mat = new BasicMatrix!double(2, 10);
+	fill(mat.data, 1.5);
+
+	Kernel scale = program.createKernel("Scale");
+	scale.setGlobalWorkSize(mat.size());
+	
+	scale.call(mat.data, int(mat.size()), 2.0);
+
+	writeln(mat.data);
+
+}
+
+void RunBasicMatrixExample2()
 {
 	string path = "/Users/patrick/Desktop/Code/moonolith/clipp/data/matrix_program.cl";
 	Program program = new Program();
@@ -79,7 +100,8 @@ int main(string[] args)
 {
 	//Settings.Instance().setUseGPU();
 	Settings.Instance().setUseCPU();
-	RunBasicMatrixExample(); 
+	RunBasicMatrixExample1();
+	RunBasicMatrixExample2(); 
 	RunClidMatrixExample();
 	return 0;
 }

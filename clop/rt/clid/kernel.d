@@ -5,6 +5,9 @@ import derelict.opencl.cl;
 import clop.rt.clid.queue;
 import clop.rt.clid.context;
 import clop.rt.clid.arglist;
+import clop.rt.clid.imemory;
+import clop.rt.clid.memory;
+import clop.rt.clid.makememory;
 
 
 class Kernel {
@@ -112,7 +115,7 @@ class Kernel {
 
 		bool call(Args...)(Args args)
 		{
-			ArgList al;
+			ArgList al = new ArgList();
 			if(!fillList(al, 0, args)) return false;
 			if(!call(al)) return false;
 			if(!al.updateHost()) return false;
