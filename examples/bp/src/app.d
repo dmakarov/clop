@@ -575,9 +575,8 @@ class Application {
     CL_FP eo, eh;
     StopWatch timer;
     TickDuration ticks;
-    size_t size = runtime.get_work_group_size();
 
-    if (size >= hidden_n * hidden_n)
+    if (runtime.is_valid_work_group([hidden_n * hidden_n]))
     {
       timer.reset();
       timer.start();

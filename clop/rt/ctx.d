@@ -47,7 +47,7 @@ struct Runtime
 
   cl_kernel kernel_copy;
   cl_kernel kernel_madd;
-  size_t work_group_size;
+  size_t[3] work_item_sizes;
 
   Instance[] clops;
 
@@ -133,14 +133,16 @@ struct Runtime
     assert(status == CL_SUCCESS, "Can't create kernel madd " ~ cl_strerror(status));
     status = clReleaseProgram(program);
     assert(status == CL_SUCCESS, "Can't release program " ~ cl_strerror(status));
-    status = clGetKernelWorkGroupInfo(kernel_copy, runtime.device, CL_KERNEL_WORK_GROUP_SIZE,
-                                      work_group_size.sizeof, &work_group_size, null);
-    assert(status == CL_SUCCESS, "Can't get kernel work group size " ~ cl_strerror(status));
+    status = clGetDeviceInfo(device, CL_DEVICE_MAX_WORK_ITEM_SIZES, work_item_sizes.sizeof, work_item_sizes.ptr, null);
+    assert(status == CL_SUCCESS, "Can't get max work item sizes " ~ cl_strerror(status));
   }
 
-  size_t get_work_group_size()
+  bool is_valid_work_group(size_t[] sizes)
   {
-    return work_group_size;
+    foreach (i, s; sizes)
+      if (i > 2 || s > work_item_sizes[i])
+        return false;
+    return true;
   }
 
   uint[] get_platforms()
