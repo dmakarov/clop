@@ -41,7 +41,9 @@ CLOP:
  Declarator             <  (Identifier / '(' Declarator ')')
                            ('[' ']' / '(' ')' / '[' ConditionalExpr ']' / '(' ParameterList ')' / '(' IdentifierList ')')*
  StorageClassSpecifier  <- "local"
- TypeSpecifier          <- "void" / "char" / "short" / "int" / "uint" / "long" / "ulong" / "float" / "double" / StructSpecifier
+ TypeSpecifier          <- "void" / "bool" / "char" / "uchar" /
+                           "short" / "ushort" / "int" / "uint" / "long" / "ulong" /
+                           "float" / "double" / "half" / "size_t" / StructSpecifier
  DeclarationSpecifiers  <  (StorageClassSpecifier / TypeSpecifier) DeclarationSpecifiers?
  StructSpecifier        <  "struct" (Identifier ('{' StructDeclarationList '}')? / '{' StructDeclarationList '}')
  StructDeclarationList  <  StructDeclaration (:Spacing StructDeclaration)*
