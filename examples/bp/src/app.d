@@ -80,6 +80,7 @@ class Application {
   NDArray!CL_FP i2h_changes;
   NDArray!CL_FP h2o_weights;    // weights from hidden to output layer
   NDArray!CL_FP h2o_changes;
+  NDArray!CL_FP h2o_weights_backup;
 
   // validation data
   NDArray!CL_FP h_hidden_units;
@@ -120,6 +121,7 @@ class Application {
     h_hidden_units = new NDArray!CL_FP(hidden_n + 1);
     h_i2h_weights  = new NDArray!CL_FP(hidden_n + 1, input_n + 1);
     h_i2h_changes  = new NDArray!CL_FP(hidden_n + 1, input_n + 1);
+    h2o_weights_backup = new NDArray!CL_FP(output_n + 1, hidden_n + 1);
 
     Mt19937 gen;
     gen.seed(SEED);
@@ -129,6 +131,7 @@ class Application {
     foreach (i; 0 .. target.length     ) target[i]      = uniform(0.0, 1.0, gen);
     foreach (i; 0 .. i2h_weights.length) i2h_weights[i] = 0.00001f * uniform(0.0, 1.0, gen);
     foreach (i; 0 .. h2o_weights.length) h2o_weights[i] = 0.00001f * uniform(0.0, 1.0, gen);
+    foreach (i; 0 .. h2o_weights.length) h2o_weights_backup[i] = h2o_weights[i];
   }
 
   /++
@@ -143,7 +146,9 @@ class Application {
     {
       auto sum = w[i, 0];
       foreach (j; 1 .. f.length)
+      {
         sum += w[i, j] * f[j];
+      }
       t[i] = ONEF / (ONEF + exp(-sum));
     }
   }
@@ -167,7 +172,9 @@ class Application {
     {
       CL_FP sum = 0.0;
       foreach (i; 1 .. output_units.length)
+      {
         sum += output_deltas[i] * h2o_weights[i, j];
+      }
       hidden_deltas[j] = hidden_units[j] * (ONEF - hidden_units[j]) * sum;
       errsum += abs(hidden_deltas[j]);
     }
@@ -190,6 +197,8 @@ class Application {
   {
     foreach (i; 0 .. i2h_changes.length) i2h_changes[i] = 0;
     foreach (i; 0 .. h2o_changes.length) h2o_changes[i] = 0;
+    foreach (i; 0 .. h2o_weights.length) h2o_weights[i] = h2o_weights_backup[i];
+
     auto h = hidden_n + 1;
     auto n = input_n + 1;
     mixin (compile(q{
@@ -217,7 +226,7 @@ class Application {
     adjust_weights(output_deltas, hidden_units, h2o_weights, h2o_changes);
 
     mixin (compile(q{
-          NDRange(i : 1 .. hidden_n, j : 1 .. input_n)
+          NDRange(i : 1 .. h, j : 1 .. n)
           {
             float adjust = MOMENTUM * i2h_changes[i, j] + (ONEF - MOMENTUM) * ETA * input_units[j] * hidden_deltas[i];
             i2h_changes[i, j]  = adjust;
@@ -324,6 +333,10 @@ class Application {
       cl_kernel[2] kernels;
       kernels[0] = clCreateKernel(program, "forward_layer", &status);
       assert(status == CL_SUCCESS, cl_strerror(status));
+      size_t param_value;
+      status = clGetKernelWorkGroupInfo(kernels[0], runtime.device, CL_KERNEL_WORK_GROUP_SIZE, param_value.sizeof, &param_value, null);
+      // stop here, this device can't run the kernel.
+      if (status != CL_SUCCESS || param_value < hidden_n * hidden_n) return true;
       kernels[1] = clCreateKernel(program, "adjust_weights", &status);
       assert(status == CL_SUCCESS, cl_strerror(status));
       status = clReleaseProgram(program);
@@ -350,16 +363,16 @@ class Application {
       assert(status == CL_SUCCESS, cl_strerror(status));
       status = clEnqueueReadBuffer(runtime.queue, d_partial_sum, CL_TRUE, 0, partial_sum.length * CL_FP.sizeof, partial_sum.ptr, 0, null, null);
       assert(status == CL_SUCCESS, cl_strerror(status));
-      foreach (j; 1 .. hidden_n + 1)
+      foreach (i; 1 .. hidden_n + 1)
       {
-        auto sum = i2h_weights[j, 0];
+        auto sum = i2h_weights[i, 0];
         foreach (k; 0 .. num_blocks)
         {
-          sum += partial_sum[k * hidden_n + j - 1];
+          sum += partial_sum[k * hidden_n + i - 1];
           debug (DEBUG)
-            writefln("partial_sum[%2d] %.12f", k * hidden_n + j - 1, partial_sum[k * hidden_n + j - 1]);
+            writefln("partial_sum[%2d] %.12f", k * hidden_n + i - 1, partial_sum[k * hidden_n + i - 1]);
         }
-        hidden_units[j] = ONEF / (ONEF + exp(-sum));
+        hidden_units[i] = ONEF / (ONEF + exp(-sum));
       }
       clReleaseMemObject(d_partial_sum);
       layerforward(hidden_units, output_units, h2o_weights);
@@ -403,43 +416,6 @@ class Application {
     {
       writeln(e);
       return false;
-    }
-  }
-
-  /++
-   + This version of layerforward performs additions in exactly the
-   + same order as the kernel version does.  In principle the results
-   + should be precisely equal.
-   +/
-  void layerforward_parallel_for_clop(NDArray!CL_FP f, NDArray!CL_FP t, NDArray!CL_FP w)
-  {
-    f[0] = ONEF;
-
-    auto sums = new NDArray!CL_FP(hidden_n + 1, input_n + 1);
-
-    foreach (row; 0 .. hidden_n + 1)
-    {
-      foreach (col; 0 .. input_n + 1)
-      {
-        sums[row, col] = w[row, col] * f[col];
-      }
-    }
-    for (auto i = 1; i < input_n + 1; i *= 2)
-    {
-      foreach (row; 0 .. hidden_n)
-      {
-        foreach (col; 0 .. input_n)
-        {
-          if (col % (2 * i) == 0)
-          {
-            sums[row, col] += sums[row, col + i];
-          }
-        }
-      }
-    }
-    foreach (j; 1 .. hidden_n + 1)
-    {
-      t[j] = ONEF / (ONEF + exp(-sums[j,0]));
     }
   }
 
