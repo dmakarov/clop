@@ -25,8 +25,8 @@ class Kernel {
 		cl_ulong getPrefferedWorkGroupSizeMultiple(cl_device_id devId = Context.GetDefault().device(0).getId() )
 		{
 			cl_ulong wgSize;
-			ulong[] empty;
-			clGetKernelWorkGroupInfo(this.implementation(), devId, cast(int)CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE, ulong.sizeof, cast(void *)&wgSize, empty.ptr);
+			cl_ulong[] empty;
+			clGetKernelWorkGroupInfo(this.implementation(), devId, cast(int)CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE, cl_ulong.sizeof, cast(void *)&wgSize, empty.ptr);
 			return wgSize;
 		}
 

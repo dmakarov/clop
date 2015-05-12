@@ -14,6 +14,7 @@ import clop.rt.clid.program;
 import clop.rt.clid.kernel;
 import clop.rt.clid.arglist;
 import clop.rt.clid.makememory;
+import clop.rt.clid.type;
 
 
 class Matrix(T) {
@@ -59,8 +60,9 @@ class Matrix(T) {
 
 		void fill(T value)
 		{
+			alias CLType!T.Type DType;
 			kfill.setGlobalWorkSize(size());
-			kfill.call(simpleArgList(value));
+			kfill.call(simpleArgList(cast(DType)value));
 		}
 
 		void scale(T value)
@@ -100,8 +102,8 @@ class Matrix(T) {
 			args.arg(0, mem);
 			args.arg(1, other.mem);
 			args.arg(2, result.mem);
-			args.arg(3, MakeNumber!int(rows));
-			args.arg(4, MakeNumber!int(other.cols));
+			args.arg(3, MakeNumber!cl_int(rows));
+			args.arg(4, MakeNumber!cl_int(other.cols));
 			
 			kmmmultiply.setGlobalWorkSize(rows, other.cols);
 			kmmmultiply.call(args);
@@ -118,7 +120,7 @@ class Matrix(T) {
 		{
 			ArgList args = new ArgList();
 			args.arg(0, mem);
-			args.arg(1, MakeNumber!int(size()));
+			args.arg(1, MakeNumber!cl_int(size()));
 			args.arg(2, MakeNumber!T(value));
 			return args;
 		}

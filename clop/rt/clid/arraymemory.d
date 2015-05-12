@@ -18,6 +18,11 @@ class ArrayMemory(T) : IMemory {
 				return _mem;
 			}
 
+			size_t sizeOfMemory()
+			{
+				return _mem.sizeof;
+			}
+
 			bool initialize(Context context = Context.GetDefault())
 			{
 				if(_isInitialized) return true;

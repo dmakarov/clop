@@ -14,6 +14,7 @@ class Memory(T) : IMemory {
 		override {
 			size_t size()  { return 1; }
 			ref cl_mem implementation() { return *(cast(cl_mem *) &_hostValue); }
+			size_t sizeOfMemory() { return T.sizeof; }
 
 
 			bool initialize(Context context = Context.GetDefault())

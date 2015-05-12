@@ -12,18 +12,18 @@ abstract class IMemory {
 
 		abstract {
 			size_t size();
+			size_t sizeOfMemory();
+
 			bool initialize( Context context = Context.GetDefault());
 			bool updateDevice( Queue queue = Queue.GetDefault());
 			bool updateHost( Queue queue = Queue.GetDefault());
 			bool finalize( Queue queue = Queue.GetDefault());
 			bool commit( Context context = Context.GetDefault(),  Queue queue = Queue.GetDefault());
 			ref cl_mem implementation();
+
 		}
 
-		size_t sizeOfMemory()
-		{
-			return implementation().sizeof;
-		}
+		
 
 		void * pointer()
 		{
