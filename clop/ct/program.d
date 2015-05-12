@@ -1221,7 +1221,7 @@ unittest
   be.update_parameters();
   be.lower(t);
   be.compute_intervals();
-  auto p = Program(be.symtable, [], be.parameters, be.KBT, be.range, be.pattern, "", "", be.suffix);
+  auto p = Program(be.symtable, [], be.parameters, be.KBT, be.range, be.lws, be.pattern, "", "", be.suffix);
   auto k = p.translate(be.KBT);
   debug (UNITTEST_DEBUG) writefln("UT:%s k:\n%s", be.suffix, k);
   auto c = p.generate_code();
