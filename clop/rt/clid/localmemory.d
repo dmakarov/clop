@@ -49,13 +49,7 @@ class LocalMemory(T) : IMemory {
 			_size = size;
 		}
 		
-		void clear()
-		{
-			//			if(_isInitialized) {
-			//				clReleaseMemObject(_mem);
-			//				_isInitialized = false;
-			//			}
-		}
+		void clear() {}
 		
 		~this()
 		{

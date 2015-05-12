@@ -14,135 +14,136 @@ import clop.rt.clid.settings;
 
 
 class Context {
-	public
+	public {
 
-	static Context GetDefault()
-	{
-		static Context def = null;
-		if(def is null) {
-			writeln("Creating context singleton");
-			def = new Context();
+		static Context GetDefault()
+		{
+			static Context def = null;
+			if(def is null) {
+				writeln("Creating context singleton");
+				def = new Context();
 
-			Settings s = Settings.Instance();
-			Device device = null;
+				Settings s = Settings.Instance();
+				Device device = null;
 
-			writeln(s.deviceType());
+				writeln(s.deviceType());
 
-			switch(s.deviceType()) {
-				case "cpu" : 
-				{
-					device = Platform.GetDefault().cpu();
-					break;
+				switch(s.deviceType()) {
+					case "cpu" : 
+					{
+						device = Platform.GetDefault().cpu();
+						break;
+					}
+
+					case "gpu":
+					{
+						device = Platform.GetDefault().gpu();
+						break;
+					}
+
+					default: 
+					{
+						break;
+					}
 				}
 
-				case "gpu":
-				{
-					device = Platform.GetDefault().gpu();
-					break;
+				if(device is null) {
+					writeln("[Error] invalid context");
+					return null;
 				}
 
-				default: 
-				{
-					break;
-				}
-			}
+				device.describe();
+				def.initialize(device);
+			} 
 
-			if(device is null) {
-				writeln("[Error] invalid context");
-				return null;
+			return def;
+		}
+
+		Array!Queue queues()
+		{
+			return _queues;
+		}
+
+		Queue queue(size_t index) 
+		{
+			return _queues[index];
+		}
+
+		bool initialize(Device device)
+		{
+			Array!Device vec = [device];
+			return initialize(vec);
+		}
+
+		bool initialize(Array!Device devices) 
+		{
+			DerelictCL.load();
+			cl_int err = 0;
+
+			cl_device_id[] devIds;
+			devIds.length = devices.length;
+			
+			int i = 0;
+			foreach(Device it; devices) {
+				devIds[i++] = it.getId();
 			}
 			
-			device.describe();
-			def.initialize(device);
-		} 
+			long[] empty;
+			_context = clCreateContext(null, cast(uint)devIds.length, &devIds[0], null, null, &err);
 
-		return def;
-	}
+			CLError ret = new CLError(err);
+			if(!ret.success())
+				return false;
 
-	Array!Queue queues()
-	{
-		return _queues;
-	}
+			_queues.length = devices.length;
 
-	Queue queue(size_t index) 
-	{
-		return _queues[index];
-	}
+			bool ok = true;
+			cl_ulong nDevices = devices.length;
+			for(i = 0; i < nDevices; ++i) {
+				_queues[i] = new Queue(clCreateCommandQueue(_context,  devIds[i], 0, &err));
+				ok &= ret.check(err);
+			}
 
-	bool initialize(Device device)
-	{
-		Array!Device vec = [device];
-		return initialize(vec);
-	}
+			_devices = devices;
 
-	bool initialize(Array!Device devices) 
-	{
-		DerelictCL.load();
-		cl_int err = 0;
-		//FIXME Arg0 is platform to use
-		cl_device_id[] devIds;
-		devIds.length = devices.length;
-		
-		int i = 0;
-		foreach(Device it; devices) {
-			devIds[i++] = it.getId();
-		}
-		
-		long[] empty;
-		_context = clCreateContext(null, cast(uint)devIds.length, &devIds[0], null, null, &err);
-
-		CLError ret = new CLError(err);
-		if(!ret.success())
-			return false;
-
-		_queues.length = devices.length;
-
-		bool ok = true;
-		cl_ulong nDevices = devices.length;
-		for(i = 0; i < nDevices; ++i) {
-			_queues[i] = new Queue(clCreateCommandQueue(_context,  devIds[i], 0, &err));
-			ok &= ret.check(err);
+			_initialized = true;
+			return ok;
 		}
 
-		_devices = devices;
+		Array!Device devices()
+		{
+			return _devices;
+		}
+		
+		Device device(size_t index) 
+		{
+			return _devices[index];
+		}
 
-		_initialized = true;
-		return ok;
+		cl_context implementation() 
+		{
+			return _context;
+		}
+
+		this() 
+		{
+			_initialized = false;
+		}
+
+		~this()
+		{
+			if(!_initialized) return;
+
+			cl_int ret = clReleaseContext(_context);
+			assert(ret == CL_SUCCESS);
+		}
 	}
 
-	Array!Device devices()
-	{
-		return _devices;
+	private {
+		bool _initialized;
+		cl_context _context;
+		Array!Queue _queues;
+		Array!Device _devices;
 	}
-	
-	Device device(size_t index) 
-	{
-		return _devices[index];
-	}
-
-	cl_context implementation() 
-	{
-		return _context;
-	}
-
-	this() 
-	{
-		_initialized = false;
-	}
-
-	~this()
-	{
-		if(!_initialized) return;
-
-		cl_int ret = clReleaseContext(_context);
-		assert(ret == CL_SUCCESS);
-	}
-	
-
-	private
-	bool _initialized;
-	cl_context _context;
-	Array!Queue _queues;
-	Array!Device _devices;
 }
 

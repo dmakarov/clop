@@ -68,52 +68,53 @@ class Device {
 
 			if(CL_INVALID_VALUE == ret) {
 				writeln("CL_INVALID_VALUE");
-			//assert(ret == CL_SUCCESS);
-			return false;
+
+				
+				return false;
+			}
+
+			assert(ret == CL_SUCCESS);
+			return ret == CL_SUCCESS;
 		}
 
-		assert(ret == CL_SUCCESS);
-		return ret == CL_SUCCESS;
-	}
 
-
-	string info2String(string infoName, cl_device_info info)
-	{
-		static const int MAX_BUFFER_SIZE = 2048;
-		char[] buffer= new char[MAX_BUFFER_SIZE];
-		if(!checkValid(clGetDeviceInfo(_id, info, buffer.length * char.sizeof, cast(void *)buffer.ptr, null))) {
-			return infoName ~ " = " ~ "[Error]";
+		string info2String(string infoName, cl_device_info info)
+		{
+			static const int MAX_BUFFER_SIZE = 2048;
+			char[] buffer= new char[MAX_BUFFER_SIZE];
+			if(!checkValid(clGetDeviceInfo(_id, info, buffer.length * char.sizeof, cast(void *)buffer.ptr, null))) {
+				return infoName ~ " = " ~ "[Error]";
+			}
+			string str = text(fromStringz(cast(char *)buffer.ptr));
+			return infoName ~ " = " ~ str;
 		}
-		string str = text(fromStringz(cast(char *)buffer.ptr));
-		return infoName ~ " = " ~ str;
+
+
+
+		string info2StringWithType(T)(string infoName, cl_device_info info)
+		{
+			T buf;
+			checkValid(clGetDeviceInfo(getId(), info, buf.sizeof, cast(void *)&buf, null));
+			return infoName ~ " = " ~ text(buf);
+		}
+
+		this( cl_device_id id)
+		{
+			_id = id;
+		}
+
+		this()
+		{
+			_id = null;
+		}
+
+		~this()
+		{
+			clReleaseDevice(_id);
+		}
 	}
 
-
-
-	string info2StringWithType(T)(string infoName, cl_device_info info)
-	{
-		T buf;
-		checkValid(clGetDeviceInfo(getId(), info, buf.sizeof, cast(void *)&buf, null));
-		return infoName ~ " = " ~ text(buf);
+	private {
+		cl_device_id _id;
 	}
-
-	this( cl_device_id id)
-	{
-		_id = id;
-	}
-
-	this()
-	{
-		_id = null;
-	}
-
-	~this()
-	{
-		clReleaseDevice(_id);
-	}
-}
-
-private {
-	cl_device_id _id;
-}
 }

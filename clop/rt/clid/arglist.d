@@ -11,100 +11,102 @@ import clop.rt.clid.platform;
 
 class ArgList
 {
-  import std.container.array;
-	public
-	void setNArgs(size_t n)
-	{
-		_args.length(n);
-	}
-
-	void pushBack(IMemory arg)
-	{
-		_args.insertBack(arg);
-	}
-
-	void arg(size_t argNum, IMemory arg)
-	{
-		uint nArgs =  cast(uint)_args.length();
-		if(argNum >= nArgs) {
-			_args.length(argNum+1);
-		}
-		_args[argNum] = arg;
-	}
-
-	void clear()
-	{
-		_args.clear();
-	}
-
-	size_t nArgs() 	{
-		return _args.length();
-	}
-
-	IMemory arg(size_t index) {
-		return _args[index];
-	}
-
-	bool setTo(Kernel kernel)
-	{
-		bool ok = true;
-		for(uint argNum = 0; argNum < nArgs(); ++argNum) {
-			ok = setTo(kernel, argNum);
+	import std.container.array;
+	public {
+		void setNArgs(size_t n)
+		{
+			_args.length(n);
 		}
 
-		return ok;
-	}
-
-	bool finalize(Queue queue = Queue.GetDefault())
-	{
-		bool ok = true;
-		for(size_t argNum = 0; argNum < nArgs(); ++argNum) {
-			ok = _args[argNum].finalize(queue);
+		void pushBack(IMemory arg)
+		{
+			_args.insertBack(arg);
 		}
 
-		return ok;
-	}
-
-	bool commit(Context context = Context.GetDefault(), Queue queue = Queue.GetDefault())
-	{
-		bool ok = true;
-		for(size_t argNum = 0; argNum < nArgs(); ++argNum) {
-			ok = _args[argNum].commit(context, queue);
+		void arg(size_t argNum, IMemory arg)
+		{
+			uint nArgs =  cast(uint)_args.length();
+			if(argNum >= nArgs) {
+				_args.length(argNum+1);
+			}
+			_args[argNum] = arg;
 		}
 
-		return ok;
-	}
-
-	bool updateHost(Queue queue = Queue.GetDefault())
-	{
-		bool ok = true;
-		for(size_t argNum = 0; argNum < nArgs(); ++argNum) {
-			ok = _args[argNum].updateHost(queue);
+		void clear()
+		{
+			_args.clear();
 		}
 
-		return ok;
-	}
-
-	bool setTo(Kernel kernel, uint argNum)
-	{
-		assert(!(kernel.implementation() is null));
-		if(kernel is null || kernel.implementation() is null) {
-			return false;
+		size_t nArgs() 	{
+			return _args.length();
 		}
 
-		IMemory mem = _args[argNum];
-
-		assert(!(mem.pointer() is null));
-
-		CLError err = new CLError(clSetKernelArg(kernel.implementation(), argNum, mem.sizeOfMemory(), mem.pointer()));
-		if(!err.success()) {
-			writefln("[Error] CLKernel setting arg %d", argNum);
+		IMemory arg(size_t index) {
+			return _args[index];
 		}
 
-		return err.success();
+		bool setTo(Kernel kernel)
+		{
+			bool ok = true;
+			for(uint argNum = 0; argNum < nArgs(); ++argNum) {
+				ok = setTo(kernel, argNum);
+			}
+
+			return ok;
+		}
+
+		bool finalize(Queue queue = Queue.GetDefault())
+		{
+			bool ok = true;
+			for(size_t argNum = 0; argNum < nArgs(); ++argNum) {
+				ok = _args[argNum].finalize(queue);
+			}
+
+			return ok;
+		}
+
+		bool commit(Context context = Context.GetDefault(), Queue queue = Queue.GetDefault())
+		{
+			bool ok = true;
+			for(size_t argNum = 0; argNum < nArgs(); ++argNum) {
+				ok = _args[argNum].commit(context, queue);
+			}
+
+			return ok;
+		}
+
+		bool updateHost(Queue queue = Queue.GetDefault())
+		{
+			bool ok = true;
+			for(size_t argNum = 0; argNum < nArgs(); ++argNum) {
+				ok = _args[argNum].updateHost(queue);
+			}
+
+			return ok;
+		}
+
+		bool setTo(Kernel kernel, uint argNum)
+		{
+			assert(!(kernel.implementation() is null));
+			if(kernel is null || kernel.implementation() is null) {
+				return false;
+			}
+
+			IMemory mem = _args[argNum];
+
+			assert(!(mem.pointer() is null));
+
+			CLError err = new CLError(clSetKernelArg(kernel.implementation(), argNum, mem.sizeOfMemory(), mem.pointer()));
+			if(!err.success()) {
+				writefln("[Error] CLKernel setting arg %d", argNum);
+			}
+
+			return err.success();
+		}
 	}
 
-private:
-	Array!IMemory _args;
+	private {
+		Array!IMemory _args;
+	}
 
 }

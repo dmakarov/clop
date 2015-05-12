@@ -58,7 +58,7 @@ void RunBasicMatrixExample1()
 	assert(ok);
 	if(!ok) return;
 
-	BasicMatrix!double mat = new BasicMatrix!double(2, 10);
+	BasicMatrix!double mat = new BasicMatrix!cl_double(2, 10);
 	fill(mat.data, 1.5);
 
 	Kernel scale = program.createKernel("Scale");
@@ -78,7 +78,7 @@ void RunBasicMatrixExample2()
 	assert(ok);
 	if(!ok) return;
 
-	BasicMatrix!double mat = new BasicMatrix!double(2, 10);
+	BasicMatrix!cl_double mat = new BasicMatrix!cl_double(2, 10);
 	fill(mat.data, 1);
 
 	Kernel scale = program.createKernel("Scale");
@@ -89,11 +89,11 @@ void RunBasicMatrixExample2()
 
 	ArgList args = new ArgList();
 	args.arg(0, MakeMemory(mat.data));
-	args.arg(1, MakeNumber!int(mat.size()));
-	args.arg(2, MakeNumber!double(2));
+	args.arg(1, MakeNumber!cl_int(mat.size()));
+	args.arg(2, MakeNumber!cl_double(2));
 
 	scale.call(args);
-	args.arg(2, MakeNumber!double(-1));
+	args.arg(2, MakeNumber!cl_double(-1));
 	subtract.call(args);
 
 	args.updateHost();
