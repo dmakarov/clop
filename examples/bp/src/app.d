@@ -186,40 +186,28 @@ class Application {
       }
   }
 
-  /++
-   + This function ensures that elements of s are summed in the same
-   + order they are summed in layerforward_parallel() so that the
-   + results are the same exactly.
-   +/
-  auto mysum(NDArray!CL_FP s)
-  {
-    for (auto i = 1; i < s.length; i *= 2)
-    {
-      foreach (j; 0 .. s.length)
-        if (j % (2 * i) == 0)
-          s[j] += s[j + i];
-    }
-    return s[0];
-  }
-
   bool clop_back_propagation(ref CL_FP eo, ref CL_FP eh)
   {
-    import std.algorithm : sum;
     foreach (i; 0 .. i2h_changes.length) i2h_changes[i] = 0;
     foreach (i; 0 .. h2o_changes.length) h2o_changes[i] = 0;
-    auto s = new NDArray!CL_FP(input_n);
-    auto n = input_units.length;
-    auto h = hidden_units.length;
-    foreach (i; 1 .. hidden_units.length)
-    {
-      mixin (compile(q{
-            NDRange(j : 1 .. n)
+    auto h = hidden_n + 1;
+    auto n = input_n + 1;
+    mixin (compile(q{
+          NDRange(i : 1 .. h $ 1, j : 1 .. n $ input_n)
+          {
+            local float t[n - 1];
+            t[j - 1] = input_units[j] * i2h_weights[i, j];
+            float s = reduce!"a + b"(0, t);
+            if (j == 1)
             {
-              s[j - 1] = input_units[j] * i2h_weights[i * n + j];
-            }}));
-      hidden_units[i] = ONEF / (ONEF + exp(-mysum(s) - i2h_weights[i, 0]));
+              partial_sum[i] = s;
+            }
+          }}));
+    foreach (i; 1 .. hidden_n + 1)
+    {
+      auto sum = i2h_weights[i, 0] + partial_sum[i];
+      hidden_units[i] = ONEF / (ONEF + exp(-sum));
     }
-
     layerforward(hidden_units, output_units, h2o_weights);
     eo = output_error();
     eh = hidden_error();
@@ -271,29 +259,28 @@ class Application {
                                     __local  FP* summands,
                                     int n2)
         { // workgroups are organized so that get_group_id(0) is always 0.
-          int row = get_local_id(0);
-          int col = get_local_id(1);
-          int gid = get_group_id(1);
-          int len = get_num_groups(1) * n2 + 1;
+          int lid = get_local_id(0);
+          int row = lid / n2;
+          int col = lid - row * n2;
+          int gid = get_group_id(0);
+          int len = get_num_groups(0) * n2 + 1;
           // hidden_n threads in the group load the hidden_n input values
           if (row == 0)
           {
             inputs[col] = f[gid * n2 + col + 1];
           }
           barrier(CLK_LOCAL_MEM_FENCE);
-          // the index of an element at row, col in the first square
-          int point = row * n2 + col;
           // the index of a weight element at row, col in group gid
           int index = (row + 1) * len + gid * n2 + col + 1;
           // compute products of every pair of weigths and inputs
-          summands[point] = w[index] * inputs[col];
+          summands[lid] = w[index] * inputs[col];
           barrier(CLK_LOCAL_MEM_FENCE);
           // compute sums of log_2(n2) products
           for (int i = 1; i < n2; i = i * 2)
           {
             if (col % (2 * i) == 0)
             {
-              summands[point] += summands[row * n2 + col + i];
+              summands[lid] += summands[row * n2 + col + i];
             }
             barrier(CLK_LOCAL_MEM_FENCE);
           }
@@ -306,11 +293,15 @@ class Application {
         __kernel void adjust_weights(__global FP* od,
                                      __global FP* iu,
                                      __global FP* w,
-                                     __global FP* c)
-        { // ii and jj have the same meaning as in host version of adjust_weights.
-          int i = get_global_id(0) + 1;
-          int j = get_global_id(1) + 1;
-          int index = i * (1 + get_global_size(1)) + j;
+                                     __global FP* c,
+                                     int n)
+        { // ii and jj have the same meaning as in host version of
+          // adjust_weights.
+          int gid = get_global_id(0);
+          int g = gid / n;
+          int j = gid - g * n + 1;
+          int i = g + 1;
+          int index = i * (n + 1) + j;
           FP adjust = MOMENTUM * c[index] + (ONEF - MOMENTUM) * ETA * iu[j] * od[i];
           c[index]  = adjust;
           w[index] += adjust;
@@ -353,9 +344,9 @@ class Application {
       clSetKernelArg(kernels[0], 3, CL_FP.sizeof * hidden_n           , null          );
       clSetKernelArg(kernels[0], 4, CL_FP.sizeof * hidden_n * hidden_n, null          );
       clSetKernelArg(kernels[0], 5, cl_int.sizeof                     , &hidden_n     );
-      size_t[] global_work = [hidden_n, input_n];
-      size_t[] local_work  = [hidden_n, hidden_n];
-      status = clEnqueueNDRangeKernel(runtime.queue, kernels[0], 2, null, global_work.ptr, local_work.ptr, 0, null, null);
+      size_t[] global_work = [hidden_n * input_n];
+      size_t[] local_work  = [hidden_n * hidden_n];
+      status = clEnqueueNDRangeKernel(runtime.queue, kernels[0], 1, null, global_work.ptr, local_work.ptr, 0, null, null);
       assert(status == CL_SUCCESS, cl_strerror(status));
       status = clEnqueueReadBuffer(runtime.queue, d_partial_sum, CL_TRUE, 0, partial_sum.length * CL_FP.sizeof, partial_sum.ptr, 0, null, null);
       assert(status == CL_SUCCESS, cl_strerror(status));
@@ -392,7 +383,8 @@ class Application {
       clSetKernelArg(kernels[1], 1, cl_mem.sizeof, &d_input_units);
       clSetKernelArg(kernels[1], 2, cl_mem.sizeof, &d_i2h_weights);
       clSetKernelArg(kernels[1], 3, cl_mem.sizeof, &d_i2h_changes);
-      status = clEnqueueNDRangeKernel(runtime.queue, kernels[1], 2, null, global_work.ptr, null, 0, null, null);
+      clSetKernelArg(kernels[1], 4, cl_int.sizeof, &input_n);
+      status = clEnqueueNDRangeKernel(runtime.queue, kernels[1], 1, null, global_work.ptr, null, 0, null, null);
       assert(status == CL_SUCCESS, cl_strerror(status));
       status = clEnqueueReadBuffer(runtime.queue, d_i2h_weights, CL_TRUE, 0, i2h_weights.length * CL_FP.sizeof, i2h_weights.ptr, 0, null, null);
       assert(status == CL_SUCCESS, cl_strerror(status));

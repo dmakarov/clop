@@ -31,7 +31,8 @@ CLOP:
  SyncPattern            <  Identifier
  RangeDecl              <  "NDRange" '(' RangeList ')'
  RangeList              <  RangeSpec (',' RangeSpec)*
- RangeSpec              <  Identifier ':' ConditionalExpr ".." ConditionalExpr
+ RangeSpec              <  Identifier ':' ConditionalExpr ".." ConditionalExpr (local_work_size_specifier)?
+ local_work_size_specifier < '$' ConditionalExpr
  Transformations        <  "apply" '(' TransList ')'
  TransList              <  TransSpec (',' TransSpec)*
  TransSpec              <  Identifier ('(' ')' / '(' ArgumentExprList ')')

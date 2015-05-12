@@ -87,6 +87,7 @@ struct Program
   Argument[] parameters;   ///
   ParseTree AST;           ///
   Box range;               ///
+  string[] lws;            ///
   string pattern;          ///
   string external;         ///
   string errors;           ///
@@ -647,11 +648,12 @@ struct Program
   {
     if (pattern is null)
     {
+      auto wgsize = lws is null ? "null" : "[" ~ reduce!`a ~ "," ~ b`(lws[0], lws[1 .. $]) ~ "]";
       auto global = "[" ~ range.get_interval_sizes() ~ "]";
       auto offset = "[" ~ range.get_lower_bounds() ~ "]";
       auto kernel = "instance_" ~ suffix ~ ".kernel";
       auto dimensions = range.get_dimensions();
-      return format(clop.ct.templates.template_plain_invoke_kernel, offset, global, kernel, dimensions);
+      return format(clop.ct.templates.template_plain_invoke_kernel, offset, global, wgsize, kernel, dimensions);
     }
     if (pattern == "Antidiagonal")
     {
@@ -769,9 +771,9 @@ struct Program
             {
               auto func_name = "clop_binary_function";
               auto type = "float";
-              auto length = "input_n";
+              auto length = "n - 1";
               value = "reduce_result";
-              stmts = "        " ~ type ~ " " ~ value ~ ";";
+              stmts = "              " ~ type ~ " " ~ value ~ ";";
               stmts ~= clop.ct.templates.reduce.instantiate_template(func_name, t.children[1], value, length);
               debug (UNITTEST_DEBUG) writefln("UT:%s template expanded to %s", suffix, stmts);
             }

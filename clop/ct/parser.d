@@ -34,7 +34,8 @@ CLOP:
  SyncPattern            <  Identifier
  RangeDecl              <  "NDRange" '(' RangeList ')'
  RangeList              <  RangeSpec (',' RangeSpec)*
- RangeSpec              <  Identifier ':' ConditionalExpr ".." ConditionalExpr
+ RangeSpec              <  Identifier ':' ConditionalExpr ".." ConditionalExpr (local_work_size_specifier)?
+ local_work_size_specifier < '$' ConditionalExpr
  Transformations        <  "apply" '(' TransList ')'
  TransList              <  TransSpec (',' TransSpec)*
  TransSpec              <  Identifier ('(' ')' / '(' ArgumentExprList ')')
@@ -168,6 +169,7 @@ struct GenericCLOP(TParseTree)
         rules["RangeDecl"] = toDelegate(&RangeDecl);
         rules["RangeList"] = toDelegate(&RangeList);
         rules["RangeSpec"] = toDelegate(&RangeSpec);
+        rules["local_work_size_specifier"] = toDelegate(&local_work_size_specifier);
         rules["Transformations"] = toDelegate(&Transformations);
         rules["TransList"] = toDelegate(&TransList);
         rules["TransSpec"] = toDelegate(&TransSpec);
@@ -578,7 +580,7 @@ struct GenericCLOP(TParseTree)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(":"), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(".."), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing)), "CLOP.RangeSpec")(p);
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(":"), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(".."), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, pegged.peg.wrapAround!(Spacing, local_work_size_specifier, Spacing), Spacing))), "CLOP.RangeSpec")(p);
         }
         else
         {
@@ -586,7 +588,7 @@ struct GenericCLOP(TParseTree)
                 return *m;
             else
             {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(":"), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(".."), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing)), "CLOP.RangeSpec"), "RangeSpec")(p);
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(":"), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(".."), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, pegged.peg.wrapAround!(Spacing, local_work_size_specifier, Spacing), Spacing))), "CLOP.RangeSpec"), "RangeSpec")(p);
                 memo[tuple(`RangeSpec`,p.end)] = result;
                 return result;
             }
@@ -597,17 +599,53 @@ struct GenericCLOP(TParseTree)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(":"), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(".."), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing)), "CLOP.RangeSpec")(TParseTree("", false,[], s));
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(":"), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(".."), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, pegged.peg.wrapAround!(Spacing, local_work_size_specifier, Spacing), Spacing))), "CLOP.RangeSpec")(TParseTree("", false,[], s));
         }
         else
         {
             memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(":"), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(".."), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing)), "CLOP.RangeSpec"), "RangeSpec")(TParseTree("", false,[], s));
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, Identifier, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(":"), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(".."), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, pegged.peg.wrapAround!(Spacing, local_work_size_specifier, Spacing), Spacing))), "CLOP.RangeSpec"), "RangeSpec")(TParseTree("", false,[], s));
         }
     }
     static string RangeSpec(GetName g)
     {
         return "CLOP.RangeSpec";
+    }
+
+    static TParseTree local_work_size_specifier(TParseTree p)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("$"), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing)), "CLOP.local_work_size_specifier")(p);
+        }
+        else
+        {
+            if(auto m = tuple(`local_work_size_specifier`,p.end) in memo)
+                return *m;
+            else
+            {
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("$"), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing)), "CLOP.local_work_size_specifier"), "local_work_size_specifier")(p);
+                memo[tuple(`local_work_size_specifier`,p.end)] = result;
+                return result;
+            }
+        }
+    }
+
+    static TParseTree local_work_size_specifier(string s)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("$"), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing)), "CLOP.local_work_size_specifier")(TParseTree("", false,[], s));
+        }
+        else
+        {
+            memo = null;
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("$"), Spacing), pegged.peg.wrapAround!(Spacing, ConditionalExpr, Spacing)), "CLOP.local_work_size_specifier"), "local_work_size_specifier")(TParseTree("", false,[], s));
+        }
+    }
+    static string local_work_size_specifier(GetName g)
+    {
+        return "CLOP.local_work_size_specifier";
     }
 
     static TParseTree Transformations(TParseTree p)

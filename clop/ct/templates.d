@@ -65,8 +65,8 @@ template_create_opencl_kernel = q{
 template_plain_invoke_kernel = q{
           // kernel invocation
 
-          size_t[] offset = %s, global = %s;
-          runtime.status = clEnqueueNDRangeKernel(runtime.queue, %s, %s, offset.ptr, global.ptr, null, 0, null, null);
+          size_t[] clop_global_work_offset = %s, clop_global_work_size = %s, clop_local_work_size = %s;
+          runtime.status = clEnqueueNDRangeKernel(runtime.queue, %s, %s, clop_global_work_offset.ptr, clop_global_work_size.ptr, clop_local_work_size.ptr, 0, null, null);
           assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clEnqueueNDRangeKernel"));
 },
 
@@ -135,24 +135,22 @@ template_2d_index = "(%s) * (%s) + (%s)";
 struct ReduceSnippet
 {
   private static immutable reduce_snippet = q{
-    {
-      barrier(CLK_LOCAL_MEM_FENCE);
-      uint clop_work_dim = get_work_dim();
-      size_t clop_local_thread_id = get_local_id(0); // = get_local_linear_id();
-      if (clop_work_dim > 1)
-        clop_local_thread_id += get_local_id(1) * get_local_size(0);
-      if (clop_work_dim > 2)
-        clop_local_thread_id += get_local_id(2) * get_local_size(1) * get_local_size(0);
-      for (int i = 1; i < %s; i *= 2)
-      {
-        if (clop_local_thread_id %% (2 * i) == 0)
-          %s[clop_local_thread_id] = %s(%s[clop_local_thread_id], %s[clop_local_thread_id + i]);
-        barrier(CLK_LOCAL_MEM_FENCE);
-      }
-      if (clop_local_thread_id == 0)
-        %s = %s(%s, %s[0]);
-    }
-  };
+              {
+                barrier(CLK_LOCAL_MEM_FENCE);
+                uint clop_work_dim = get_work_dim();
+                size_t clop_local_thread_id = get_local_id(0); // = get_local_linear_id();
+                if (clop_work_dim > 1) clop_local_thread_id += get_local_id(1) * get_local_size(0);
+                if (clop_work_dim > 2) clop_local_thread_id += get_local_id(2) * get_local_size(1) * get_local_size(0);
+                for (int i = 1; i < %s; i *= 2)
+                {
+                  if (clop_local_thread_id %% (2 * i) == 0)
+                    %s[clop_local_thread_id] = %s(%s[clop_local_thread_id], %s[clop_local_thread_id + i]);
+                  barrier(CLK_LOCAL_MEM_FENCE);
+                }
+                if (clop_local_thread_id == 0)
+                  %s = %s(%s, %s[0]);
+              }
+};
 
   string instantiate_template(string func, ParseTree argument_list, string result, string length)
   {

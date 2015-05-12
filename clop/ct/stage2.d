@@ -57,6 +57,7 @@ template Backend(TList...)
   struct Backend
   {
     Box range;                /// box of intervals for this piece
+    string[] lws;             /// local work size
     ParseTree AST;            /// the tree for this piece
     ParseTree KBT;            /// kernel body compound statement AST
     Program[] variants;       /// one variant for each set of transformations
@@ -225,6 +226,10 @@ template Backend(TList...)
           analyze(t.children[1]);
           analyze(t.children[2]);
           global_scope = saved_global_scope_value;
+          if (t.children.length == 4)
+          {
+            lws ~= [reduce!"a ~ b"("", t.children[3].matches[1 .. $])];
+          }
           break;
         }
       case "CLOP.Transformations":
@@ -766,17 +771,17 @@ template Backend(TList...)
       auto items = trans.get_items_as_array();
       auto length = items.length;
       auto index = 0;
-      variants ~= Program(symtable, [], parameters, t.dup, range, pattern, external, errors,
+      variants ~= Program(symtable, [], parameters, t.dup, range, lws, pattern, external, errors,
                           format("%s_%s", suffix, index++));
       for (auto i = 0; i < length; ++i)
       {
         auto set = [items[i]];
-        variants ~= Program(symtable, set, parameters, t.dup, range, pattern, external, errors,
+        variants ~= Program(symtable, set, parameters, t.dup, range, lws, pattern, external, errors,
                             format("%s_%s", suffix, index++));
         for (auto j = i + 1; j < length; ++j)
         {
           set ~= items[j];
-          variants ~= Program(symtable, set, parameters, t.dup, range, pattern, external, errors,
+          variants ~= Program(symtable, set, parameters, t.dup, range, lws, pattern, external, errors,
                               format("%s_%s", suffix, index++));
         }
       }
@@ -1506,6 +1511,7 @@ unittest
   }
 
   // test 1
+  version (DISABLED)
   {
     auto AST = clop.ct.parser.CLOP(q{
         NDRange(j : 1 .. n)
@@ -1526,7 +1532,6 @@ unittest
   }
 
   // test 2
-  version (DISABLED)
   {
     auto AST = clop.ct.parser.CLOP(q{
         NDRange(i : 1 .. h_n, j : 0 .. i_n)
