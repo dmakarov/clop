@@ -34,10 +34,11 @@ struct Symbol
   ParseTree[] uses;
   ParseTree[] defs;
   Interval[]  box;
-  string      shadow;
-  bool        is_local;
-  bool        is_array;
-  bool        can_cache;
+  string      length;    /// number of elements of an array
+  string      shadow;    /// name that backs this object in local memory
+  bool        is_local;  /// linkage
+  bool        is_array;  ///
+  bool        can_cache; ///
 
   this(this)
   {
@@ -49,12 +50,13 @@ struct Symbol
   @property
   string toString()
   {
-    return format("name %16s, type %6s, #uses %2d, #defs %2d, %6s, %6s, cache %s",
+    return format("name %16s, type %6s, #uses %2d, #defs %2d, %6s, %6s, %6s, cache %s",
                   name,
-                  (type == null ? "N/A" : type),
-                  (uses == null ? 0 : uses.length),
-                  (defs == null ? 0 : defs.length),
-                  (is_local ? "local" : "global"),
+                  (type is null ? "N/A" : type),
+                  (uses is null ? 0 : uses.length),
+                  (defs is null ? 0 : defs.length),
+                  (length is null ? "" : length),
+                  (is_local ? "internal" : "external"),
                   (is_array ? "array" : "scalar"),
                   (can_cache ? "can" : "cannot" ) ~ " put in local memory");
   }

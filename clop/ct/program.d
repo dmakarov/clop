@@ -498,7 +498,7 @@ struct Program
     {
       ParseTree u = t.children[c];
       string name = u.matches[0];
-      symtable[name] = Symbol(name, "int", t, null, null, null, null, true, false, false);
+      symtable[name] = Symbol(name, "int", t, null, null, null, null, null, true, false, false);
       s ~= "  int " ~ name ~ " = get_global_id(" ~ to!string(n - 1 - c) ~ ");\n";
     }
     return s;
@@ -769,9 +769,13 @@ struct Program
           {
           case "reduce":
             {
+              // FIXME: replace the hardcoded values with code that
+              // generates the necessary information.
+              auto array_name = t.children[1].children[1].matches[0];
+              auto array_symbol = symtable[array_name];
               auto func_name = "clop_binary_function";
-              auto type = "float";
-              auto length = "n - 1";
+              auto type = array_symbol.type[0 .. $ - 1];
+              auto length = array_symbol.length;
               value = "reduce_result";
               stmts = "              " ~ type ~ " " ~ value ~ ";";
               stmts ~= clop.ct.templates.reduce.instantiate_template(func_name, t.children[1], value, length);

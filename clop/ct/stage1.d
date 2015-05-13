@@ -177,7 +177,7 @@ struct Frontend
     case "CLOP.RangeSpec":
       {
         auto s = t.matches[0];
-        symtable[s] = Symbol(s, "int", t, null, null, null, "clop_local_index_" ~ s, true, false, false);
+        symtable[s] = Symbol(s, "int", t, null, null, null, "clop_local_index_" ~ s, null, true, false, false);
         bool saved_global_scope_value = global_scope;
         global_scope = true;
         analyze(t.children[1]);
@@ -439,7 +439,7 @@ struct Frontend
         auto s = t.matches[0];
         if (s !in symtable)
         {
-          symtable[s] = Symbol(s, "", t, [], [], null, null, !global_scope, false, false);
+          symtable[s] = Symbol(s, "", t, [], [], null, null, null, !global_scope, false, false);
         }
         break;
       }

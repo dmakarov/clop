@@ -217,7 +217,7 @@ template Backend(TList...)
         {
           auto s = t.matches[0];
           auto d = range.get_dimensions();
-          symtable[s] = Symbol(s, "int", t, null, null, null, "clop_local_index_" ~ s, true, false, false);
+          symtable[s] = Symbol(s, "int", t, null, null, null, null, "clop_local_index_" ~ s, true, false, false);
           range.intervals ~= [Interval(t.children[1], t.children[2])];
           range.symbols ~= [s];
           range.s2i[s] = d;
@@ -273,9 +273,10 @@ template Backend(TList...)
             {
               auto symbol = t.children[0].matches[0];
               auto type = current_type ~ "*";
+              auto array_size = reduce!"a ~ b"("", t.children[1].matches);
               symtable[symbol].is_array = true;
               symtable[symbol].type = type;
-              string array_size = reduce!"a ~ b"("", t.children[1].matches);
+              symtable[symbol].length = array_size;
               foreach (ref p; parameters)
               {
                 if (p.name == symbol)
@@ -507,7 +508,7 @@ template Backend(TList...)
           if (s !in symtable)
           {
             debug (UNITTEST_DEBUG) writefln("new identifier %s", s);
-            symtable[s] = Symbol(s, current_type, t, [], [], null, null, !global_scope, false, false);
+            symtable[s] = Symbol(s, current_type, t, [], [], null, null, null, !global_scope, false, false);
           }
           break;
         }
