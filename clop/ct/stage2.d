@@ -1037,7 +1037,7 @@ template Backend(TList...)
               return "float";
             }
           default:
-            return "float";
+            return infer_type(t.children[0]);
           }
         }
       case "CLOP.PostfixExpr":
@@ -1108,11 +1108,23 @@ template Backend(TList...)
         {
           return infer_type(t.children[0]);
         }
+      case "CLOP.AssignmentExpr":
+        {
+          if (t.children.length == 1)
+          {
+            return infer_type(t.children[0]);
+          }
+          return infer_type(t.children[2]);
+        }
       case "CLOP.Expression":
         {
           return infer_type(t.children[0]);
         }
-      default: return "float";
+      default:
+        {
+          debug (UNITTEST_DEBUG) writefln("infer_type default case: %s %s", t.name, t.matches);
+          return "float";
+        }
       }
     }
 
@@ -1184,6 +1196,7 @@ template Backend(TList...)
             // lower the expression in parenthesis
             // FIXME: auto type = infer_type(t.children[0]);
             auto type = infer_type(t.children[0]);
+            debug (UNITTEST_DEBUG) writefln("inferred type %s", type);
             // FIXME: generate new temporary
             auto name = format("clop_temp_%s", temporary_index++);
             auto code = type ~ " " ~ name ~ " = " ~ reduce!"a ~ b"("", t.children[0].matches) ~ ";";
@@ -1499,7 +1512,9 @@ template Backend(TList...)
 
 unittest
 {
-  // test 0
+  alias A = NDArray!float;
+
+  // test 1
   version (DISABLED)
   {
     auto AST = clop.ct.parser.CLOP(q{NDRange(i: 0 .. 8){c = a + b;}});
@@ -1511,7 +1526,7 @@ unittest
     assert(output !is null && output != "");
   }
 
-  // test 1
+  // test 2
   version (DISABLED)
   {
     auto AST = clop.ct.parser.CLOP(q{
@@ -1519,7 +1534,6 @@ unittest
         {
           s[j - 1] = inputs[j] * weights[i * n + j];
         }});
-    alias A = NDArray!float;
     alias T2 = std.typetuple.TypeTuple!(size_t, int, A, A, A);
     auto be2 = Backend!T2(AST, __FILE__, __LINE__, ["n", "i", "inputs", "weights", "s"]);
     be2.analyze(AST);
@@ -1532,9 +1546,10 @@ unittest
     be2.lower(AST);
   }
 
-  // test 2
+  // test 3
+  version (DISABLED)
   {
-    auto AST = clop.ct.parser.CLOP(q{
+    auto t3 = clop.ct.parser.CLOP(q{
         NDRange(i : 1 .. h_n, j : 0 .. i_n)
         {
           local float t[i_n];
@@ -1545,18 +1560,53 @@ unittest
             hidden[i] = ONEF / (ONEF + exp(-s));
           }
         }});
-    alias A = NDArray!float;
-    alias T2 = std.typetuple.TypeTuple!(size_t, float*, size_t, A, A, A);
-    auto be2 = Backend!T2(AST, __FILE__, __LINE__, ["h_n", "t", "i_n", "inputs", "weights", "hidden"]);
-    be2.analyze(AST);
-    be2.update_parameters();
+    alias T3 = std.typetuple.TypeTuple!(size_t, float*, size_t, A, A, A);
+    auto be3 = clop.ct.stage2.Backend!T3(t3, __FILE__, __LINE__,
+                                         ["h_n", "t", "i_n", "inputs", "weights", "hidden"]);
+    be3.analyze(t3);
+    be3.update_parameters();
     debug (UNITTEST_DEBUG)
     {
-      writefln("%s", be2.dump_symtable());
-      writeln(be2.dump_parameters());
+      writefln("%s", be3.dump_symtable());
+      writeln(be3.dump_parameters());
     }
-    be2.lower(AST);
-    debug (UNITTEST_DEBUG) writeln(AST.toString());
+    be3.lower(t3);
+    debug (UNITTEST_DEBUG) writeln(t3.toString());
+  }
+
+  // test 4
+  {
+    auto t4 = clop.ct.parser.CLOP(q{
+        NDRange(tid : 0 .. gws $ wgs)
+        {
+          int group_index = get_group_id(0) + 1;
+          int local_index = get_local_id(0);
+          local float scratch[wgs];
+          float s = 0.0;
+          int j;
+          for (j = 1; tid + j < input_n + 1; j += gws)
+          {
+            s += input_units[j] * i2h_weights[group_index * (input_n + 1) + j];
+          }
+          scratch[local_index] = s;
+          s = reduce!"a + b"(0, scratch);
+          if (local_index == 0)
+          {
+            hidden_units[group_index] = s;
+          }
+        }});
+    alias T4 = std.typetuple.TypeTuple!(size_t, size_t, size_t, float*, A, A, A);
+    auto be4 = clop.ct.stage2.Backend!T4(t4, __FILE__, __LINE__,
+                                         ["gws", "wgs", "input_n", "scratch", "input_units", "i2h_weights", "hidden_units"]);
+    be4.analyze(t4);
+    be4.update_parameters();
+    debug (UNITTEST_DEBUG)
+    {
+      writefln("%s", be4.dump_symtable());
+      writeln(be4.dump_parameters());
+    }
+    be4.lower(t4);
+    debug (UNITTEST_DEBUG) writeln(t4.toString());
   }
 }
 

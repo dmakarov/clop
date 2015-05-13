@@ -199,22 +199,38 @@ class Application {
     foreach (i; 0 .. h2o_changes.length) h2o_changes[i] = 0;
     foreach (i; 0 .. h2o_weights.length) h2o_weights[i] = h2o_weights_backup[i];
 
+    // here we need to have the number of work groups equal to the
+    // number of hidden nodes, so that each work group produces
+    // exactly one result for each hidden node.  We take the max size
+    // and multiply it by the number of hidden nodes.  This is our
+    // global work size.
     auto h = hidden_n + 1;
     auto n = input_n + 1;
+    auto wgs = (input_n > 256) ? 256 : input_n;
+    auto gws = wgs * hidden_n;
+    writefln("global work size %d, work group size %d", gws, wgs);
     mixin (compile(q{
-          NDRange(i : 1 .. h $ 1, j : 1 .. n $ input_n)
+          NDRange(tid : 0 .. gws $ wgs)
           {
-            local float t[n - 1];
-            t[j - 1] = input_units[j] * i2h_weights[i, j];
-            float s = reduce!"a + b"(0, t);
-            if (j == 1)
+            int group_index = get_group_id(0) + 1;
+            int local_index = get_local_id(0);
+            local float t[wgs];
+            float s = 0.0;
+            int j;
+            for (j = 1; local_index + j < input_n + 1; j += wgs)
             {
-              partial_sum[i] = s;
+              s += input_units[j + local_index] * i2h_weights[group_index * (input_n + 1) + j + local_index];
+            }
+            t[local_index] = s;
+            s = reduce!"a + b"(0, t);
+            if (local_index == 0)
+            {
+              hidden_units[group_index] = s;
             }
           }}));
     foreach (i; 1 .. hidden_n + 1)
     {
-      auto sum = i2h_weights[i, 0] + partial_sum[i];
+      auto sum = i2h_weights[i, 0] + hidden_units[i];
       hidden_units[i] = ONEF / (ONEF + exp(-sum));
     }
     layerforward(hidden_units, output_units, h2o_weights);

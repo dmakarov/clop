@@ -690,6 +690,11 @@ struct Program
     string value = "", stmts = "";
     if (t.children.length == 1 || t.children.length != range.get_dimensions() || v !in symtable || symtable[v].box is null)
     {
+      debug (UNITTEST_DEBUG)
+      {
+        writefln("Can't linearize index expression %s %s not in st %s, box is null %s",
+                 v, t.matches, v !in symtable, symtable[v].box is null);
+      }
       return translate_expression(t);
     }
     auto r = translate_expression(t.children[0]);
@@ -1207,29 +1212,66 @@ unittest
   static import clop.ct.stage2;
   static import clop.rt.ndarray;
 
-  auto t = clop.ct.parser.CLOP(q{
-      NDRange(i : 1 .. h_n, j : 0 .. i_n)
-      {
-        local float t[i_n];
-        t[j] = inputs[j] * weights[i, j];
-        float s = reduce!"a + b"(0, t);
-        if (j == 0)
-        {
-          hidden[i] = ONEF / (ONEF + exp(-s));
-        }
-      }});
   alias A = clop.rt.ndarray.NDArray!float;
-  alias T = std.typetuple.TypeTuple!(size_t, float*, size_t, A, A, A);
-  auto be = clop.ct.stage2.Backend!T(t, __FILE__, __LINE__, ["h_n", "t", "i_n", "inputs", "weights", "hidden"]);
-  be.analyze(t);
-  be.update_parameters();
-  be.lower(t);
-  be.compute_intervals();
-  auto p = Program(be.symtable, [], be.parameters, be.KBT, be.range, be.lws, be.pattern, "", "", be.suffix);
-  auto k = p.translate(be.KBT);
-  debug (UNITTEST_DEBUG) writefln("UT:%s k:\n%s", be.suffix, k);
-  auto c = p.generate_code();
-  debug (UNITTEST_DEBUG) writefln("UT:%s c:\n%s", be.suffix, c);
+
+  // test 1
+  {
+    auto t1 = clop.ct.parser.CLOP(q{
+        NDRange(i : 1 .. h_n, j : 0 .. i_n)
+        {
+          local float t[i_n];
+          t[j] = inputs[j] * weights[i, j];
+          float s = reduce!"a + b"(0, t);
+          if (j == 0)
+          {
+            hidden[i] = ONEF / (ONEF + exp(-s));
+          }
+        }});
+    alias T1 = std.typetuple.TypeTuple!(size_t, float*, size_t, A, A, A);
+    auto be1 = clop.ct.stage2.Backend!T1(t1, __FILE__, __LINE__, ["h_n", "t", "i_n", "inputs", "weights", "hidden"]);
+    be1.analyze(t1);
+    be1.update_parameters();
+    be1.lower(t1);
+    be1.compute_intervals();
+    auto p1 = Program(be1.symtable, [], be1.parameters, be1.KBT, be1.range, be1.lws, be1.pattern, "", "", be1.suffix);
+    auto k1 = p1.translate(be1.KBT);
+    debug (UNITTEST_DEBUG) writefln("UT:%s k:\n%s", be1.suffix, k1);
+    auto c1 = p1.generate_code();
+    debug (UNITTEST_DEBUG) writefln("UT:%s c:\n%s", be1.suffix, c1);
+  }
+
+  {
+    auto t2 = clop.ct.parser.CLOP(q{
+        NDRange(tid : 0 .. gws $ wgs)
+        {
+          int group_index = get_group_id(0) + 1;
+          int local_index = get_local_id(0);
+          local float scratch[wgs];
+          float s = 0.0;
+          int j;
+          for (j = 1; tid + j < input_n + 1; j += gws)
+          {
+            s += input_units[j] * i2h_weights[group_index * (input_n + 1) + j];
+          }
+          scratch[local_index] = s;
+          s = reduce!"a + b"(0, scratch);
+          if (local_index == 0)
+          {
+            hidden_units[group_index] = s;
+          }
+        }});
+    alias T2 = std.typetuple.TypeTuple!(size_t, size_t, size_t, float*, A, A, A);
+    auto be2 = clop.ct.stage2.Backend!T2(t2, __FILE__, __LINE__, ["gws", "wgs", "input_n", "scratch", "input_units", "i2h_weights", "hidden_units"]);
+    be2.analyze(t2);
+    be2.update_parameters();
+    be2.lower(t2);
+    be2.compute_intervals();
+    auto p2 = Program(be2.symtable, [], be2.parameters, be2.KBT, be2.range, be2.lws, be2.pattern, "", "", be2.suffix);
+    auto k2 = p2.translate(be2.KBT);
+    debug (UNITTEST_DEBUG) writefln("UT:%s k:\n%s", be2.suffix, k2);
+    auto c2 = p2.generate_code();
+    debug (UNITTEST_DEBUG) writefln("UT:%s c:\n%s", be2.suffix, c2);
+  }
 }
 
 // Local Variables:

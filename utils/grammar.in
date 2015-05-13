@@ -38,14 +38,14 @@ CLOP:
  TransSpec              <  Identifier ('(' ')' / '(' ArgumentExprList ')')
 
 # CLOP_Decl:
- Declaration            <  DeclarationSpecifiers InitDeclaratorList? ';'
+ Declaration            <- (DeclarationSpecifiers :Spacing) InitDeclaratorList? ';'
  Declarator             <  (Identifier / '(' Declarator ')')
                            ('[' ']' / '(' ')' / '[' ConditionalExpr ']' / '(' ParameterList ')' / '(' IdentifierList ')')*
  StorageClassSpecifier  <- "local"
  TypeSpecifier          <- "void" / "bool" / "char" / "uchar" /
                            "short" / "ushort" / "int" / "uint" / "long" / "ulong" /
                            "float" / "double" / "half" / "size_t" / StructSpecifier
- DeclarationSpecifiers  <  (StorageClassSpecifier / TypeSpecifier) DeclarationSpecifiers?
+ DeclarationSpecifiers  <- (StorageClassSpecifier :Spacing)? TypeSpecifier
  StructSpecifier        <  "struct" (Identifier ('{' StructDeclarationList '}')? / '{' StructDeclarationList '}')
  StructDeclarationList  <  StructDeclaration (:Spacing StructDeclaration)*
  StructDeclaration      <  TypeSpecifier StructDeclaratorList ';'

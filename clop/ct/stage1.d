@@ -564,11 +564,12 @@ struct Frontend
 } // Frontend class
 
 unittest {
+  // test 1
   debug (UNITTEST_DEBUG)
   {
     writeln("STAGE 1 UNIT TESTS");
   }
-  auto t = clop.ct.parser.CLOP(q{
+  auto t1 = clop.ct.parser.CLOP(q{
       NDRange(i : 1 .. h_n, j : 0 .. i_n)
       {
         local float t[i_n];
@@ -579,12 +580,41 @@ unittest {
           hidden[i] = ONEF / (ONEF + exp(-s));
         }
       }});
-  auto f = Frontend(t, __FILE__, __LINE__);
-  auto c = f.generate_stage2_code();
+  auto f1 = Frontend(t1, __FILE__, __LINE__);
+  auto c1 = f1.generate_stage2_code();
   debug (UNITTEST_DEBUG)
   {
-    writefln("%s", f.dump_symtable());
-    writefln("// STAGE 1 GENERATED CODE:%s\n", c);
+    writefln("%s", f1.dump_symtable());
+    writefln("// STAGE 1 GENERATED CODE:%s\n", c1);
+  }
+
+  // test 2
+  auto t2 = clop.ct.parser.CLOP(q{
+      NDRange(tid : 0 .. gws $ wgs)
+      {
+        int group_index = get_group_id(0) + 1;
+        int local_index = get_local_id(0);
+        local float t[wgs];
+        float s = 0.0;
+        int j;
+        for (j = 1; tid + j < input_n + 1; j += gws)
+        {
+          s += input_units[j] * i2h_weights[group_index, j];
+        }
+        t[local_index] = s;
+        s = reduce!"a + b"(0, t);
+        if (local_index == 0)
+        {
+          hidden_units[group_index] = s;
+        }
+      }});
+  auto f2 = Frontend(t2, __FILE__, __LINE__);
+  auto c2 = f2.generate_stage2_code();
+  debug (UNITTEST_DEBUG)
+  {
+    writefln("%s", f2.dump_symtable());
+    writefln("// STAGE 1 GENERATED CODE:%s\n", c2);
+    writefln("The ParseTree:\n%s", t2.toString());
   }
 }
 
