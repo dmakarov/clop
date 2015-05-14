@@ -235,7 +235,14 @@ class Application {
     eo = output_error();
     eh = hidden_error();
 
-    auto valid = validation_block_1(eo, eh);
+    debug (VERBOSE)
+    {
+      auto valid = validation_block_1(eo, eh);
+    }
+    else
+    {
+      auto valid = true;
+    }
 
     adjust_weights(output_deltas, hidden_units, h2o_weights, h2o_changes);
 
@@ -249,7 +256,10 @@ class Application {
             i2h_weights[i, j] += adjust;
           }}));
 
-    valid = valid && validation_block_2();
+    debug (VERBOSE)
+    {
+      valid = valid && validation_block_2();
+    }
 
     return valid;
   }
@@ -394,7 +404,14 @@ class Application {
       eo = output_error();
       eh = hidden_error();
 
-      auto valid = validation_block_1(eo, eh);
+      debug (VERBOSE)
+      {
+        auto valid = validation_block_1(eo, eh);
+      }
+      else
+      {
+        auto valid = true;
+      }
 
       adjust_weights(output_deltas, hidden_units, h2o_weights, h2o_changes);
       cl_mem d_hidden_deltas = clCreateBuffer(runtime.context, CL_MEM_READ_ONLY, hidden_deltas.length * CL_FP.sizeof, null, &status);
@@ -419,7 +436,10 @@ class Application {
       status = clEnqueueReadBuffer(runtime.queue, d_i2h_changes, CL_TRUE, 0, i2h_changes.length * CL_FP.sizeof, i2h_changes.ptr, 0, null, null);
       assert(status == CL_SUCCESS, cl_strerror(status));
 
-      valid = valid && validation_block_2();
+      debug (VERBOSE)
+      {
+        valid = valid && validation_block_2();
+      }
 
       clReleaseMemObject(d_input_units);
       clReleaseMemObject(d_i2h_weights);
