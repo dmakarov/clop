@@ -208,7 +208,6 @@ class Application {
     auto n = input_n + 1;
     auto wgs = (input_n > 256) ? 256 : input_n;
     auto gws = wgs * hidden_n;
-    writefln("global work size %d, work group size %d", gws, wgs);
     mixin (compile(q{
           NDRange(tid : 0 .. gws $ wgs)
           {

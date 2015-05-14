@@ -141,10 +141,12 @@ struct ReduceSnippet
                 size_t clop_local_thread_id = get_local_id(0); // = get_local_linear_id();
                 if (clop_work_dim > 1) clop_local_thread_id += get_local_id(1) * get_local_size(0);
                 if (clop_work_dim > 2) clop_local_thread_id += get_local_id(2) * get_local_size(1) * get_local_size(0);
-                for (int i = 1; i < %s; i *= 2)
+                for (int i = (%s) / 2; i > 0; i /= 2)
                 {
-                  if (clop_local_thread_id %% (2 * i) == 0)
+                  if (clop_local_thread_id < i)
+                  {
                     %s[clop_local_thread_id] = %s(%s[clop_local_thread_id], %s[clop_local_thread_id + i]);
+                  }
                   barrier(CLK_LOCAL_MEM_FENCE);
                 }
                 if (clop_local_thread_id == 0)

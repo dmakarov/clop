@@ -88,7 +88,7 @@ class Application {
 
     /**
      *
-     * 
+     *
      */
     char[] code = q{
       #define MOV3( w, s, e ) ( ((w) < (s)) ? ((w) < (e) ?  1  : -1 ) : ((s) < (e) ?  0  :  -1) )
