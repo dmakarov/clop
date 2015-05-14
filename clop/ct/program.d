@@ -1240,6 +1240,7 @@ unittest
     debug (UNITTEST_DEBUG) writefln("UT:%s c:\n%s", be1.suffix, c1);
   }
 
+  // test 2
   {
     auto t2 = clop.ct.parser.CLOP(q{
         NDRange(tid : 0 .. gws $ wgs)

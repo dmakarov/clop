@@ -57,6 +57,7 @@ class Application {
   static immutable CL_FP ETA      = 0.3f;
   static immutable CL_FP MOMENTUM = 0.3f;
   static immutable CL_FP ONEF     = 1.0f;
+  static immutable size_t OPTIMAL_WORK_GROUP_SIZE = 256;
 
   size_t input_n;               // number of input units
   size_t hidden_n;              // number of hidden units
@@ -105,7 +106,7 @@ class Application {
     }
     output_n       = 1;
     hidden_n       = BLOCK_SIZE;
-    num_blocks     = input_n / BLOCK_SIZE;
+    num_blocks     = input_n / hidden_n;
     i2h_weights    = new NDArray!CL_FP(hidden_n + 1, input_n + 1);
     i2h_changes    = new NDArray!CL_FP(hidden_n + 1, input_n + 1);
     h2o_weights    = new NDArray!CL_FP(output_n + 1, hidden_n + 1);
@@ -204,9 +205,7 @@ class Application {
     // exactly one result for each hidden node.  We take the max size
     // and multiply it by the number of hidden nodes.  This is our
     // global work size.
-    auto h = hidden_n + 1;
-    auto n = input_n + 1;
-    auto wgs = (input_n > 256) ? 256 : input_n;
+    auto wgs = (input_n > OPTIMAL_WORK_GROUP_SIZE) ? OPTIMAL_WORK_GROUP_SIZE : input_n;
     auto gws = wgs * hidden_n;
     mixin (compile(q{
           NDRange(tid : 0 .. gws $ wgs)
@@ -240,6 +239,8 @@ class Application {
 
     adjust_weights(output_deltas, hidden_units, h2o_weights, h2o_changes);
 
+    auto h = hidden_n + 1;
+    auto n = input_n + 1;
     mixin (compile(q{
           NDRange(i : 1 .. h, j : 1 .. n)
           {
@@ -259,7 +260,6 @@ class Application {
     {
       char[] code = q{
         #pragma OPENCL EXTENSION cl_khr_fp64 : enable
-        #define BLOCK_SIZE 16
         #define ETA        0.3f
         #define MOMENTUM   0.3f
         #define ONEF       1.0f
@@ -281,12 +281,12 @@ class Application {
                                     __global FP* sums,
                                     __local  FP* inputs,
                                     __local  FP* summands,
-                                    int n2)
+                                    ulong n2)
         { // workgroups are organized so that get_group_id(0) is always 0.
+          int gid = get_group_id(0);
           int lid = get_local_id(0);
           int row = lid / n2;
           int col = lid - row * n2;
-          int gid = get_group_id(0);
           int len = get_num_groups(0) * n2 + 1;
           // hidden_n threads in the group load the hidden_n input values
           if (row == 0)
@@ -300,9 +300,9 @@ class Application {
           summands[lid] = w[index] * inputs[col];
           barrier(CLK_LOCAL_MEM_FENCE);
           // compute sums of log_2(n2) products
-          for (int i = 1; i < n2; i = i * 2)
+          for (int i = n2 / 2; i > 0; i /= 2)
           {
-            if (col % (2 * i) == 0)
+            if (col < i)
             {
               summands[lid] += summands[row * n2 + col + i];
             }
@@ -371,7 +371,7 @@ class Application {
       clSetKernelArg(kernels[0], 2, cl_mem.sizeof                     , &d_partial_sum);
       clSetKernelArg(kernels[0], 3, CL_FP.sizeof * hidden_n           , null          );
       clSetKernelArg(kernels[0], 4, CL_FP.sizeof * hidden_n * hidden_n, null          );
-      clSetKernelArg(kernels[0], 5, cl_int.sizeof                     , &hidden_n     );
+      clSetKernelArg(kernels[0], 5, cl_ulong.sizeof                   , &hidden_n     );
       size_t[] global_work = [hidden_n * input_n];
       size_t[] local_work  = [hidden_n * hidden_n];
       status = clEnqueueNDRangeKernel(runtime.queue, kernels[0], 1, null, global_work.ptr, local_work.ptr, 0, null, null);
@@ -443,65 +443,30 @@ class Application {
   {
     f[0] = ONEF;
 
-    auto sums = new CL_FP[input_n];
-    auto inputs = new CL_FP[hidden_n];
-    auto summands = new NDArray!CL_FP(hidden_n, hidden_n);
+    auto work_group_size = (input_n > OPTIMAL_WORK_GROUP_SIZE) ? OPTIMAL_WORK_GROUP_SIZE : input_n;
+    auto global_work_size = work_group_size * hidden_n;
+    auto work_groups_number = global_work_size / work_group_size;
+    auto summands = new NDArray!CL_FP(work_group_size);
 
-    foreach (gid; 0 .. num_blocks)
+    foreach (group_index; 1 .. work_groups_number + 1)
     {
-      foreach (col; 0 .. hidden_n)
+      foreach (local_index; 0 .. work_group_size)
       {
-        inputs[col] = f[gid * hidden_n + col + 1];
-      }
-      foreach (row; 0 .. hidden_n)
-      {
-        foreach (col; 0 .. hidden_n)
+        summands[local_index] = 0.0f;
+        for (auto j = 1; local_index + j < input_n + 1; j += work_group_size)
         {
-          summands[row, col] = w[row + 1, gid * hidden_n + col + 1] * inputs[col];
-          debug (DEBUG) writefln("summands[%2d, %2d] <- w[%2d, %2d] * f[%2d]", row, col, row + 1, gid * hidden_n + col + 1, gid * hidden_n + col + 1);
+          summands[local_index] += w[group_index * (input_n + 1) + j + local_index] * f[j + local_index];
         }
       }
-      for (auto i = 1; i < hidden_n; i *= 2)
+      for (auto i = work_group_size / 2; i > 0; i /= 2)
       {
-        foreach (row; 0 .. hidden_n)
+        foreach (j; 0 .. i)
         {
-          foreach (col; 0 .. hidden_n)
-          {
-            if (col % (2 * i) == 0)
-            {
-              summands[row, col] += summands[row, col + i];
-              debug (DEBUG) writefln("summands[%2d, %2d] += summands[%2d, %2d]", row, col, row, col + i);
-            }
-          }
+          summands[j] += summands[j + i];
         }
       }
-      foreach (row; 0 .. hidden_n)
-      {
-        sums[gid * hidden_n + row] = summands[row, 0];
-        debug (DEBUG) writefln("sums[%2d] <- summands[%2d, %2d]", gid * hidden_n + row, row, 0);
-      }
-    }
-
-    debug (DEBUG)
-    foreach (i; 0 .. input_n)
-    {
-      if (sums[i] != partial_sum[i])
-      {
-        writefln("%2d sums %.12f != %.12f partial_sum", i, sums[i], partial_sum[i]);
-      }
-    }
-
-    foreach (j; 1 .. hidden_n + 1)
-    {
-      auto sum = i2h_weights[j, 0];
-      debug (DEBUG) writefln("sum <- i2h_weights[%2d, 0]", j);
-      foreach (k; 0 .. num_blocks)
-      {
-        sum += sums[k * hidden_n + j - 1];
-        debug (DEBUG) writefln("sum += sums[%2d]", k*hidden_n+j -1);
-      }
-      t[j] = ONEF / (ONEF + exp(-sum));
-      debug (DEBUG) writefln("t[%2d] <- sum", j);
+      auto sum = i2h_weights[group_index, 0] + summands[0];
+      t[group_index] = ONEF / (ONEF + exp(-sum));
     }
   }
 
