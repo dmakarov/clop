@@ -15,5 +15,15 @@
         "verbose"      : { "debugVersions" : ["VERBOSE"] },
         "grammar"      : { "debugVersions" : ["GRAMMAR"] },
         "coverage"     : { "buildOptions"  : ["releaseMode", "coverage"] }
-    }
+    },
+    "configurations" : [
+        {
+            "name" : "column_major",
+            "versions" : ["COLUMN_MAJOR"]
+        },
+        {
+            "name" : "row_major",
+            "versions" : ["ROW_MAJOR"]
+        }
+    ]
 }

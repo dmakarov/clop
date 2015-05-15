@@ -107,10 +107,20 @@ class Application {
     output_n       = 1;
     hidden_n       = BLOCK_SIZE;
     num_blocks     = input_n / hidden_n;
+    version (COLUMN_MAJOR)
+    {
     i2h_weights    = new NDArray!CL_FP(hidden_n + 1, input_n + 1);
     i2h_changes    = new NDArray!CL_FP(hidden_n + 1, input_n + 1);
     h2o_weights    = new NDArray!CL_FP(output_n + 1, hidden_n + 1);
     h2o_changes    = new NDArray!CL_FP(output_n + 1, hidden_n + 1);
+    }
+    else
+    {
+    i2h_weights    = new NDArray!CL_FP(input_n + 1, hidden_n + 1);
+    i2h_changes    = new NDArray!CL_FP(input_n + 1, hidden_n + 1);
+    h2o_weights    = new NDArray!CL_FP(hidden_n + 1, output_n + 1);
+    h2o_changes    = new NDArray!CL_FP(hidden_n + 1, output_n + 1);
+    }
     input_units    = new NDArray!CL_FP(input_n + 1);
     hidden_units   = new NDArray!CL_FP(hidden_n + 1);
     hidden_deltas  = new NDArray!CL_FP(hidden_n + 1);
@@ -120,10 +130,18 @@ class Application {
     target         = new NDArray!CL_FP(output_n + 1);
     // validation data
     h_hidden_units = new NDArray!CL_FP(hidden_n + 1);
+    version (COLUMN_MAJOR)
+    {
     h_i2h_weights  = new NDArray!CL_FP(hidden_n + 1, input_n + 1);
     h_i2h_changes  = new NDArray!CL_FP(hidden_n + 1, input_n + 1);
     h2o_weights_backup = new NDArray!CL_FP(output_n + 1, hidden_n + 1);
-
+    }
+    else
+    {
+    h_i2h_weights  = new NDArray!CL_FP(input_n + 1, hidden_n + 1);
+    h_i2h_changes  = new NDArray!CL_FP(input_n + 1, hidden_n + 1);
+    h2o_weights_backup = new NDArray!CL_FP(hidden_n + 1, output_n + 1);
+    }
     Mt19937 gen;
     gen.seed(SEED);
     foreach (i; 0 .. i2h_changes.length) i2h_changes[i] = 0;
@@ -138,11 +156,13 @@ class Application {
   /++
    + w[i, j] is the weight of edge connecting f[i] and t[j]
    +/
-  void layerforward(NDArray!CL_FP f, NDArray!CL_FP t, NDArray!CL_FP w)
+  void layerforward(NDArray!CL_FP w, NDArray!CL_FP f, NDArray!CL_FP t)
   {
     // Set up thresholding unit
     f[0] = ONEF;
     // For each unit in layer t compute weighted sum of its inputs f
+    version (COLUMN_MAJOR)
+    {
     foreach (i; 1 .. t.length)
     {
       auto sum = w[i, 0];
@@ -151,6 +171,19 @@ class Application {
         sum += w[i, j] * f[j];
       }
       t[i] = ONEF / (ONEF + exp(-sum));
+    }
+    }
+    else
+    {
+    foreach (j; 1 .. t.length)
+    {
+      auto sum = w[0, j];
+      foreach (i; 1 .. f.length)
+      {
+        sum += w[i, j] * f[i];
+      }
+      t[j] = ONEF / (ONEF + exp(-sum));
+    }
     }
   }
 
@@ -169,6 +202,7 @@ class Application {
   CL_FP hidden_error()
   {
     CL_FP errsum = 0.0;
+    version (COLUMN_MAJOR)
     foreach (j; 1 .. hidden_units.length)
     {
       CL_FP sum = 0.0;
@@ -179,16 +213,36 @@ class Application {
       hidden_deltas[j] = hidden_units[j] * (ONEF - hidden_units[j]) * sum;
       errsum += abs(hidden_deltas[j]);
     }
+    else
+    foreach (i; 1 .. hidden_units.length)
+    {
+      CL_FP sum = 0.0;
+      foreach (j; 1 .. output_units.length)
+      {
+        sum += output_deltas[j] * h2o_weights[i, j];
+      }
+      hidden_deltas[i] = hidden_units[i] * (ONEF - hidden_units[i]) * sum;
+      errsum += abs(hidden_deltas[i]);
+    }
     return errsum;
   }
 
   void adjust_weights(NDArray!CL_FP od, NDArray!CL_FP iu, NDArray!CL_FP w, NDArray!CL_FP c)
   {
     iu[0] = ONEF;
+    version (COLUMN_MAJOR)
     foreach (i; 1 .. od.length)
       foreach (j; 1 .. iu.length)
       {
         auto adjust = MOMENTUM * c[i, j] + (ONEF - MOMENTUM) * ETA * iu[j] * od[i];
+        c[i, j]  = adjust;
+        w[i, j] += adjust;
+      }
+    else
+    foreach (i; 1 .. iu.length)
+      foreach (j; 1 .. od.length)
+      {
+        auto adjust = MOMENTUM * c[i, j] + (ONEF - MOMENTUM) * ETA * iu[i] * od[j];
         c[i, j]  = adjust;
         w[i, j] += adjust;
       }
@@ -207,6 +261,8 @@ class Application {
     // global work size.
     auto wgs = (input_n > OPTIMAL_WORK_GROUP_SIZE) ? OPTIMAL_WORK_GROUP_SIZE : input_n;
     auto gws = wgs * hidden_n;
+    version (COLUMN_MAJOR)
+    {
     mixin (compile(q{
           NDRange(tid : 0 .. gws $ wgs)
           {
@@ -231,7 +287,35 @@ class Application {
       auto sum = i2h_weights[i, 0] + hidden_units[i];
       hidden_units[i] = ONEF / (ONEF + exp(-sum));
     }
-    layerforward(hidden_units, output_units, h2o_weights);
+    }
+    else
+    {
+    mixin (compile(q{
+          NDRange(tid : 0 .. gws $ wgs)
+          {
+            int group_index = get_group_id(0) + 1;
+            int local_index = get_local_id(0);
+            local float t[wgs];
+            float s = 0.0;
+            int i;
+            for (i = 1; local_index + i < input_n + 1; i += wgs)
+            {
+              s += input_units[i + local_index] * i2h_weights[(i + local_index) * (hidden_n + 1) + group_index];
+            }
+            t[local_index] = s;
+            s = reduce!"a + b"(0, t);
+            if (local_index == 0)
+            {
+              hidden_units[group_index] = s;
+            }
+          }}));
+    foreach (j; 1 .. hidden_n + 1)
+    {
+      auto sum = i2h_weights[0, j] + hidden_units[j];
+      hidden_units[j] = ONEF / (ONEF + exp(-sum));
+    }
+    }
+    layerforward(h2o_weights, hidden_units, output_units);
     eo = output_error();
     eh = hidden_error();
 
@@ -248,6 +332,8 @@ class Application {
 
     auto h = hidden_n + 1;
     auto n = input_n + 1;
+    version (COLUMN_MAJOR)
+    {
     mixin (compile(q{
           NDRange(i : 1 .. h, j : 1 .. n)
           {
@@ -255,7 +341,17 @@ class Application {
             i2h_changes[i, j]  = adjust;
             i2h_weights[i, j] += adjust;
           }}));
-
+    }
+    else
+    {
+    mixin (compile(q{
+          NDRange(i : 1 .. n, j : 1 .. h)
+          {
+            float adjust = MOMENTUM * i2h_changes[i, j] + (ONEF - MOMENTUM) * ETA * input_units[i] * hidden_deltas[j];
+            i2h_changes[i, j]  = adjust;
+            i2h_weights[i, j] += adjust;
+          }}));
+    }
     debug (VERBOSE)
     {
       valid = valid && validation_block_2();
@@ -268,6 +364,8 @@ class Application {
   {
     try
     {
+      version (COLUMN_MAJOR)
+      {
       char[] code = q{
         #pragma OPENCL EXTENSION cl_khr_fp64 : enable
         #define ETA        0.3f
@@ -291,36 +389,36 @@ class Application {
                                     __global FP* sums,
                                     __local  FP* inputs,
                                     __local  FP* summands,
-                                    ulong n2)
+                                    ulong h)
         { // workgroups are organized so that get_group_id(0) is always 0.
-          int gid = get_group_id(0);
-          int lid = get_local_id(0);
-          int row = lid / n2;
-          int col = lid - row * n2;
-          int len = get_num_groups(0) * n2 + 1;
+          size_t gid = get_group_id(0);
+          size_t lid = get_local_id(0);
+          size_t row = lid / h;
+          size_t col = lid - row * h;
+          size_t len = get_num_groups(0) * h + 1;
           // hidden_n threads in the group load the hidden_n input values
           if (row == 0)
           {
-            inputs[col] = f[gid * n2 + col + 1];
+            inputs[col] = f[gid * h + col + 1];
           }
           barrier(CLK_LOCAL_MEM_FENCE);
           // the index of a weight element at row, col in group gid
-          int index = (row + 1) * len + gid * n2 + col + 1;
+          size_t index = (row + 1) * len + gid * h + col + 1;
           // compute products of every pair of weigths and inputs
           summands[lid] = w[index] * inputs[col];
           barrier(CLK_LOCAL_MEM_FENCE);
-          // compute sums of log_2(n2) products
-          for (int i = n2 / 2; i > 0; i /= 2)
+          // compute sums of log_2(h) products
+          for (size_t i = h / 2; i > 0; i /= 2)
           {
             if (col < i)
             {
-              summands[lid] += summands[row * n2 + col + i];
+              summands[lid] += summands[row * h + col + i];
             }
             barrier(CLK_LOCAL_MEM_FENCE);
           }
           if (col == 0)
           {
-            sums[gid * n2 + row] = summands[row * n2];
+            sums[gid * h + row] = summands[row * h];
           }
         }
 
@@ -328,20 +426,95 @@ class Application {
                                      __global FP* iu,
                                      __global FP* w,
                                      __global FP* c,
-                                     int n)
+                                     ulong h)
         { // ii and jj have the same meaning as in host version of
           // adjust_weights.
-          int gid = get_global_id(0);
-          int g = gid / n;
-          int j = gid - g * n + 1;
-          int i = g + 1;
-          int index = i * (n + 1) + j;
+          size_t tid = get_global_id(0);
+          size_t g = tid / h;
+          size_t j = tid - g * h + 1;
+          size_t i = g + 1;
+          size_t index = i * (h + 1) + j;
           FP adjust = MOMENTUM * c[index] + (ONEF - MOMENTUM) * ETA * iu[j] * od[i];
           c[index]  = adjust;
           w[index] += adjust;
         }
       }.dup;
+      }
+      else
+      {
+      char[] code = q{
+        #pragma OPENCL EXTENSION cl_khr_fp64 : enable
+        #define ETA        0.3f
+        #define MOMENTUM   0.3f
+        #define ONEF       1.0f
+        #define FP         float
 
+        /**
+         * The kernel implements partial reduction
+         * The global index space is hidden_n x input_n, i.e. a rectangle
+         * with hidden_n height and input_n width.
+         * The local index space is hidden_n x hidden_n, i.e. a square.
+         * The local square are lined up in a row of input_n / hidden_n
+         * squares in the global index space.
+         * @param inputs holds hidden_n elements
+         * @param summands holds hidden_n x hidden_n elements
+         * @param n2 is equal to hidden_n
+         */
+        __kernel void forward_layer(__global FP* f,
+                                    __global FP* w,
+                                    __global FP* sums,
+                                    __local  FP* inputs,
+                                    __local  FP* summands,
+                                    ulong h)
+        { // workgroups are organized so that get_group_id(0) is always 0.
+          size_t gid = get_group_id(0);
+          size_t lid = get_local_id(0);
+          size_t row = lid / h;
+          size_t col = lid - row * h;
+          // hidden_n threads in the group load the hidden_n input values
+          if (col == 0)
+          {
+            inputs[row] = f[gid * h + row + 1];
+          }
+          barrier(CLK_LOCAL_MEM_FENCE);
+          // the index of a weight element at row, col in group gid
+          size_t index = (gid * h + row + 1) * (h + 1) + col + 1;
+          // compute products of every pair of weigths and inputs
+          summands[lid] = w[index] * inputs[row];
+          barrier(CLK_LOCAL_MEM_FENCE);
+          // compute sums of log_2(n2) products
+          for (size_t i = h / 2; i > 0; i /= 2)
+          {
+            if (row < i)
+            {
+              summands[lid] += summands[(row + i) * h + col];
+            }
+            barrier(CLK_LOCAL_MEM_FENCE);
+          }
+          if (row == 0)
+          {
+            sums[gid * h + col] = summands[col];
+          }
+        }
+
+        __kernel void adjust_weights(__global FP* od,
+                                     __global FP* iu,
+                                     __global FP* w,
+                                     __global FP* c,
+                                     ulong h)
+        { // ii and jj have the same meaning as in host version of
+          // adjust_weights.
+          size_t tid = get_global_id(0);
+          size_t tmp = tid / h;
+          size_t col = tid - tmp * h + 1;
+          size_t row = row + 1;
+          size_t index = row * (h + 1) + col;
+          FP adjust = MOMENTUM * c[index] + (ONEF - MOMENTUM) * ETA * iu[row] * od[col];
+          c[index]  = adjust;
+          w[index] += adjust;
+        }
+      }.dup;
+      }
       cl_int status;
       char*[] strs = [code.ptr];
       size_t code_length = code.length;
@@ -388,6 +561,8 @@ class Application {
       assert(status == CL_SUCCESS, cl_strerror(status));
       status = clEnqueueReadBuffer(runtime.queue, d_partial_sum, CL_TRUE, 0, partial_sum.length * CL_FP.sizeof, partial_sum.ptr, 0, null, null);
       assert(status == CL_SUCCESS, cl_strerror(status));
+      version (COLUMN_MAJOR)
+      {
       foreach (i; 1 .. hidden_n + 1)
       {
         auto sum = i2h_weights[i, 0];
@@ -399,8 +574,21 @@ class Application {
         }
         hidden_units[i] = ONEF / (ONEF + exp(-sum));
       }
+      }
+      else
+      {
+      foreach (i; 0 .. hidden_n)
+      {
+        auto sum = i2h_weights[0, i + 1];
+        foreach (k; 0 .. num_blocks)
+        {
+          sum += partial_sum[k * hidden_n + i];
+        }
+        hidden_units[i + 1] = ONEF / (ONEF + exp(-sum));
+      }
+      }
       clReleaseMemObject(d_partial_sum);
-      layerforward(hidden_units, output_units, h2o_weights);
+      layerforward(h2o_weights, hidden_units, output_units);
       eo = output_error();
       eh = hidden_error();
 
@@ -428,7 +616,10 @@ class Application {
       clSetKernelArg(kernels[1], 1, cl_mem.sizeof, &d_input_units);
       clSetKernelArg(kernels[1], 2, cl_mem.sizeof, &d_i2h_weights);
       clSetKernelArg(kernels[1], 3, cl_mem.sizeof, &d_i2h_changes);
-      clSetKernelArg(kernels[1], 4, cl_int.sizeof, &input_n);
+      version (COLUMN_MAJOR)
+      clSetKernelArg(kernels[1], 4, cl_ulong.sizeof, &input_n);
+      else
+      clSetKernelArg(kernels[1], 4, cl_ulong.sizeof, &hidden_n);
       status = clEnqueueNDRangeKernel(runtime.queue, kernels[1], 1, null, global_work.ptr, null, 0, null, null);
       assert(status == CL_SUCCESS, cl_strerror(status));
       status = clEnqueueReadBuffer(runtime.queue, d_i2h_weights, CL_TRUE, 0, i2h_weights.length * CL_FP.sizeof, i2h_weights.ptr, 0, null, null);
@@ -468,6 +659,8 @@ class Application {
     auto work_groups_number = global_work_size / work_group_size;
     auto summands = new NDArray!CL_FP(work_group_size);
 
+    version (COLUMN_MAJOR)
+    {
     foreach (group_index; 1 .. work_groups_number + 1)
     {
       foreach (local_index; 0 .. work_group_size)
@@ -488,13 +681,37 @@ class Application {
       auto sum = i2h_weights[group_index, 0] + summands[0];
       t[group_index] = ONEF / (ONEF + exp(-sum));
     }
+    }
+    else
+    {
+    foreach (group_index; 1 .. work_groups_number + 1)
+    {
+      foreach (local_index; 0 .. work_group_size)
+      {
+        summands[local_index] = 0.0f;
+        for (auto i = 1; local_index + i < input_n + 1; i += work_group_size)
+        {
+          summands[local_index] += w[(i + local_index) * (hidden_n + 1) + group_index] * f[i + local_index];
+        }
+      }
+      for (auto j = work_group_size / 2; j > 0; j /= 2)
+      {
+        foreach (i; 0 .. j)
+        {
+          summands[i] += summands[i + j];
+        }
+      }
+      auto sum = i2h_weights[0, group_index] + summands[0];
+      t[group_index] = ONEF / (ONEF + exp(-sum));
+    }
+    }
   }
 
   bool validation_block_1(CL_FP eo, CL_FP eh)
   {
     bool valid = true;
     layerforward_parallel(input_units, h_hidden_units, i2h_weights);
-    layerforward(h_hidden_units, output_units, h2o_weights);
+    layerforward(h2o_weights, h_hidden_units, output_units);
     auto h_eo = output_error();
     auto h_eh = hidden_error();
     if (h_eo != eo || h_eh != eh)
@@ -511,8 +728,16 @@ class Application {
         valid = false;
         break;
       }
+    version (COLUMN_MAJOR)
     foreach (i; 0 .. hidden_n + 1)
       foreach (j; 0 .. input_n + 1)
+      {
+        h_i2h_weights[i, j] = i2h_weights[i, j];
+        h_i2h_changes[i, j] = 0.0f;
+      }
+    else
+    foreach (i; 0 .. input_n + 1)
+      foreach (j; 0 .. hidden_n + 1)
       {
         h_i2h_weights[i, j] = i2h_weights[i, j];
         h_i2h_changes[i, j] = 0.0f;
@@ -524,6 +749,8 @@ class Application {
   {
     bool valid = true;
     adjust_weights(hidden_deltas, input_units, h_i2h_weights, h_i2h_changes);
+    version (COLUMN_MAJOR)
+    {
     foreach (i; 1 .. hidden_n + 1)
       foreach (j; 1 .. input_n + 1)
         if (abs(h_i2h_weights[i, j] - i2h_weights[i, j]) > 1E-10)
@@ -534,6 +761,20 @@ class Application {
           valid = false;
           break;
         }
+    }
+    else
+    {
+    foreach (i; 1 .. input_n + 1)
+      foreach (j; 1 .. hidden_n + 1)
+        if (abs(h_i2h_weights[i, j] - i2h_weights[i, j]) > 1E-10)
+        {
+          writeln("validation block 2, host computed weights do not match device results.");
+          writefln("%6s->%2s %.12f %.12f (diff %g)",
+                   j, i, h_i2h_weights[i, j], i2h_weights[i, j], h_i2h_weights[i, j] - i2h_weights[i, j]);
+          valid = false;
+          break;
+        }
+    }
     return valid;
   }
 
