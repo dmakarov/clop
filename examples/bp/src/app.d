@@ -810,6 +810,10 @@ class Application {
 
 int main(string[] args)
 {
+  version (COLUMN_MAJOR)
+    writeln("CONFIGURATION COLUMN MAJOR ");
+  else
+    writeln("CONFIGURATION ROW MAJOR");
   auto platforms = runtime.get_platforms();
   foreach (p; 0 .. platforms.length)
     foreach (d; 0 .. platforms[p])
