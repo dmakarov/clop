@@ -125,3 +125,12 @@ template stage2_codegen(TList...)
     return dump ~ code;
   }
 }
+
+unittest
+{
+  import std.stdio;
+  auto s = compile(q{
+      NDRange(i : 0 .. size) { C[i] = A[i] + B[i]; }
+    });
+  writeln(s);
+}
