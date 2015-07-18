@@ -177,9 +177,19 @@ class NDArray(T)
     return data[get_index(indices)];
   }
 
+  void opIndexAssign(NDArray!T c)
+  {
+    data[] = c.data[];
+  }
+
   void opIndexAssign(T c)
   {
     data[] = c;
+  }
+
+  void OpIndexAssign(T[] c)
+  {
+    data[] = c[];
   }
 
   void opIndexAssign(T c, size_t[] indices...)
@@ -205,16 +215,6 @@ class NDArray(T)
   body
   {
     mixin ("data[get_index(indices)] " ~ op ~ "= c;");
-  }
-
-  T[] OpSlice()
-  {
-    return data[];
-  }
-
-  T[] opSlice(size_t i, size_t j)
-  {
-    return data[i .. j];
   }
 
   private size_t get_index(size_t[] indices...)
