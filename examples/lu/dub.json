@@ -1,0 +1,19 @@
+{
+    "name"          : "lu",
+    "authors"       : ["Dmitri Makarov"],
+    "description"   : "LUD algorithm implementation.",
+    "targetType"    : "executable",
+    "targetPath"    : "./bin",
+    "importPaths"   : ["../../clop"],
+    "lflags-linux"  : ["-Llib", "-lOpenCL", "-lrt"],
+    "lflags-osx"    : ["-Llib", "-framework", "OpenCL"],
+    "dependencies"  : {
+        "clop:compiler": "*",
+        "clop:runtime" : "*"
+    },
+    "buildTypes"    : {
+        "verbose"      : { "debugVersions" : ["VERBOSE"] },
+        "grammar"      : { "debugVersions" : ["GRAMMAR"] },
+        "coverage"     : { "buildOptions"  : ["releaseMode", "coverage"] }
+    }
+}

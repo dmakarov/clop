@@ -47,6 +47,7 @@
         "./tools",
         "./examples/algebra",
         "./examples/bp",
+        "./examples/lu",
         "./examples/nw",
         "./examples/pf",
         "./examples/stencil",
