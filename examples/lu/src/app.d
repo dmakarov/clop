@@ -45,11 +45,12 @@ struct History {
 }
 
 alias make_list = make!(SList!(History.Update));
+static auto run_once = true;
 
 /++
  +/
 class Application {
-  static immutable auto BLOCK_SIZE = 16;
+  const uint    BLOCK_SIZE;
   cl_kernel     diagonal;
   cl_kernel     perimeter;
   cl_kernel     internal;
@@ -58,18 +59,21 @@ class Application {
   size_t        matrix_dim = 32;
   bool          do_verify = false;
   bool          do_animate = false;
+  bool          doolittle = false;
   NDArray!float m;
   NDArray!float mm;
   History[long] mh;
+  File          animfile;
 
   /++
    +/
   this(string[] args)
   {
-    getopt(args, "size|s", &matrix_dim, "verify|v", &do_verify);
+    uint block_size = 16;
+    getopt(args, "size|s", &matrix_dim, "verify|v", &do_verify, "animate|a", &do_animate, "doolittle|d", &doolittle, "block_size|b", &block_size);
     if (args.length > 1 || 0 == matrix_dim)
     {
-      writefln("Usage: %s [-v] -s matrix_size", args[0]);
+      writefln("Usage: %s [-a -b block_size -d -v] -s matrix_size", args[0]);
       throw new Exception("invalid command line arguments");
     }
     m = new NDArray!float(matrix_dim, matrix_dim);
@@ -77,6 +81,9 @@ class Application {
     {
       mm = new NDArray!float(matrix_dim, matrix_dim);
     }
+    do_animate = do_animate && run_once;
+    doolittle = doolittle && run_once;
+    BLOCK_SIZE = block_size;
     /++
      +/
     char[] code = q{
@@ -271,7 +278,20 @@ class Application {
     assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
     status = clReleaseProgram(program);
     assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
+    if (do_animate)
+    {
+      animfile = File("a.tex", "w");
+      animfile.write("\\documentclass{article}\n\\usepackage{animate}\n\\usepackage[margin=1cm]{geometry}\n\\usepackage{tikz}\n\\usetikzlibrary{backgrounds,calc,matrix}\n\\begin{document}\n\\pagestyle{empty}\n");
+    }
   } // this()
+
+  ~this()
+  {
+    if (do_animate)
+    {
+      animfile.write("\\end{document}\n");
+    }
+  }
 
   // Generate well-conditioned matrix internally by Ke Wang 2013/08/07 22:20:06
   void create_matrix()
@@ -349,68 +369,49 @@ class Application {
     }
   }
 
-  void output_frame(File f, long[] cells)
+  void output_frame(long[] cells)
   {
     import std.math : abs;
-    static auto frame_open = "  \\begin{tikzpicture}
-    \\matrix (magic) [matrix of nodes, nodes={text height=3mm, text width=3mm, font=\\footnotesize, draw}, nodes in empty cells]
-    {
-";
-    static auto frame_close = "    };
-  \\end{tikzpicture}
-";
-    f.write(frame_open);
+    static auto frame_open = "  \\begin{tikzpicture}\n    \\matrix (magic) [matrix of nodes, nodes={text height=3mm, text width=3mm, font=\\footnotesize, draw}, nodes in empty cells]\n    {\n";
+    static auto frame_close = "    };\n  \\end{tikzpicture}\n";
+    animfile.write(frame_open);
     foreach (i; 0 .. matrix_dim)
     {
       auto started = false;
       foreach (j; 0 .. matrix_dim)
       {
         if (started)
-          f.write(" &");
+          animfile.write(" &");
         else
           started = true;
         auto encoded = cells[i * matrix_dim + j];
         auto decoded = encoded < 0 ? -encoded : encoded;
         auto color = decoded % 10;
         auto tid = encoded < 0 ? -1 : decoded / 10;
-        if      (color == 1) f.write(" |[fill=red]|   ");
-        else if (color == 2) f.write(" |[fill=green]| ");
-        else if (color == 3) f.write(" |[fill=yellow]|");
-        else                 f.write("                ");
-        if (tid >= 0 && color > 0 && color < 3) f.write(tid);
+        if      (color == 1) animfile.write(" |[fill=red]|   ");
+        else if (color == 2) animfile.write(" |[fill=green]| ");
+        else if (color == 3) animfile.write(" |[fill=yellow]|");
+        else                 animfile.write("                ");
+        if (tid >= 0 && color > 0 && color < 3) animfile.write(tid);
       }
-      f.writeln(" \\\\");
+      animfile.writeln(" \\\\");
     }
-    f.write(frame_close);
+    animfile.write(frame_close);
   }
 
-  void animate(string name)
+  void animate()
   {
     import std.algorithm.sorting;
-    static auto foreword = `\documentclass{article}
-\usepackage{animate}
-\usepackage[margin=1cm]{geometry}
-\usepackage{tikz}
-\usetikzlibrary{backgrounds,calc,matrix}
-
-\begin{document}
-\pagestyle{empty}
-
-\begin{animateinline}[controls]{2}
-`;
-    static auto afterword = `\end{animateinline}
-\end{document}
-`;
+    if (!do_animate) return;
     auto cells = new long[matrix_dim * matrix_dim];
     auto cache = new long[matrix_dim * matrix_dim];
-    auto f = File(name, "w");
     auto started = false;
-    f.write(foreword);
+    animfile.write("\\begin{animateinline}[controls]{2}\n");
     foreach (ts; sort(mh.keys))
     {
       auto it = mh[ts];
       if (started)
-        f.writeln("  \\newframe");
+        animfile.writeln("  \\newframe");
       else started = true;
       foreach (t, el; it.targets)
       {
@@ -423,10 +424,10 @@ class Application {
             cells[s] = tid < 0 ? tid - 2 : tid + 2;
         }
       }
-      output_frame(f, cells);
+      output_frame(cells);
       cells[] = cache[];
     }
-    f.write(afterword);
+    animfile.write("\\end{animateinline}\n");
   }
 
   void trace(long ts, long tx, long t, long[] s)
@@ -759,17 +760,25 @@ class Application {
     StopWatch timer;
     TickDuration ticks;
 
-    timer.start();
-    doolittle_lud();
-    timer.stop();
-    ticks = timer.peek();
-    writefln( "SERIAL %5.3f [s]", ticks.usecs / 1E6 );
-    validate();
-    animate("a.tex");
+    if (doolittle)
+    {
+      timer.start();
+      doolittle_lud();
+      timer.stop();
+      ticks = timer.peek();
+      writefln( "SERIAL %5.3f [s]", ticks.usecs / 1E6 );
+      validate();
+      animate();
+      run_once = false;
+    }
 
-    sequential_lud();
-    validate();
-    animate("b.tex");
+    if (do_animate)
+    {
+      sequential_lud();
+      validate();
+      animate();
+      run_once = false;
+    }
 
     timer.reset();
     timer.start();
