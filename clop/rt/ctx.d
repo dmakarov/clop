@@ -32,6 +32,7 @@ import std.string;
 import derelict.opencl.cl;
 
 public import clop.rt.ndarray;
+public import clop.rt.visualization;
 import clop.rt.instance;
 
 struct Runtime

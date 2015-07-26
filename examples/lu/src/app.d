@@ -22,10 +22,8 @@
  *  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  *  SOFTWARE.
  */
-module clop.examples.lu;
+module clop.examples.lu.app;
 
-import std.container.slist;
-import std.container.util;
 import std.conv;
 import std.datetime;
 import std.format;
@@ -33,21 +31,12 @@ import std.getopt;
 import std.stdio;
 
 import derelict.opencl.cl;
-
 import clop.compiler;
 
-struct History {
-  struct Update {
-    long thread_id;
-    long[] sources;
-  }
-  SList!Update[long] targets;
-}
-
-alias make_list = make!(SList!(History.Update));
 static auto run_once = true;
 
 /**
+ *  LU Decomposition implementation.
  */
 class Application {
   const uint    BLOCK_SIZE;
@@ -62,8 +51,7 @@ class Application {
   bool          doolittle = false;
   NDArray!float m;
   NDArray!float mm;
-  History[long] mh;
-  File          animfile;
+  History       history;
 
   /**
    *  Process the command line arguments, and compile kernels.
@@ -282,18 +270,9 @@ class Application {
     assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
     if (do_animate)
     {
-      animfile = File("a.tex", "w");
-      animfile.write("\\documentclass{article}\n\\usepackage{animate}\n\\usepackage[margin=1cm]{geometry}\n\\usepackage{tikz}\n\\usetikzlibrary{backgrounds,calc,matrix}\n\\begin{document}\n\\pagestyle{empty}\n");
+      history = new History("a.tex", matrix_dim);
     }
   } // this()
-
-  ~this()
-  {
-    if (do_animate)
-    {
-      animfile.write("\\end{document}\n");
-    }
-  }
 
   long I(long i, long j)
   {
@@ -376,94 +355,6 @@ class Application {
     }
   }
 
-  void output_frame(long[] cells)
-  {
-    import std.math : abs;
-    static auto frame_open = "  \\begin{tikzpicture}\n    \\matrix (magic) [matrix of nodes, nodes={text height=3mm, text width=3mm, font=\\footnotesize, draw}, nodes in empty cells]\n    {\n";
-    static auto frame_close = "    };\n  \\end{tikzpicture}\n";
-    animfile.write(frame_open);
-    foreach (i; 0 .. matrix_dim)
-    {
-      auto started = false;
-      foreach (j; 0 .. matrix_dim)
-      {
-        if (started)
-          animfile.write(" &");
-        else
-          started = true;
-        auto encoded = cells[i * matrix_dim + j];
-        auto decoded = encoded < 0 ? -encoded : encoded;
-        auto color = decoded % 10;
-        auto tid = encoded < 0 ? -1 : decoded / 10;
-        if      (color == 1) animfile.write(" |[fill=red]|   ");
-        else if (color == 2) animfile.write(" |[fill=green]| ");
-        else if (color == 3) animfile.write(" |[fill=yellow]|");
-        else if (color == 4) animfile.write(" |[fill=gray]|  ");
-        else                 animfile.write("                ");
-        if (tid >= 0 && color > 0 && color < 3) animfile.write(tid);
-      }
-      animfile.writeln(" \\\\");
-    }
-    animfile.write(frame_close);
-  }
-
-  void animate()
-  {
-    import std.algorithm.iteration;
-    import std.algorithm.sorting;
-    if (!do_animate) return;
-    auto cells = new long[matrix_dim * matrix_dim];
-    auto cache = new long[matrix_dim * matrix_dim];
-    auto started = false;
-    animfile.write("\\begin{animateinline}[controls]{2}\n");
-    foreach (ts; sort(mh.keys))
-    {
-      auto it = mh[ts];
-      auto boundary = false;
-      foreach (t, el; it.targets)
-      {
-        if (t == -1)
-        {
-          boundary = true;
-          break;
-        }
-        auto tid = 10 * el.front().thread_id;
-        cells[t] = tid < 0 ? tid - 1 : tid + 1;
-        cache[t] = 3;
-        foreach (e; el)
-          foreach (s; e.sources)
-            cells[s] = tid < 0 ? tid - 2 : tid + 2;
-      }
-      if (boundary)
-      {
-        foreach (ref c; cache) if (c == 3) c = 4;
-      }
-      else
-      {
-        if (started) animfile.writeln("  \\newframe");
-        else started = true;
-        output_frame(cells);
-      }
-      cells[] = cache[];
-    }
-    animfile.write("\\end{animateinline}\n");
-  }
-
-  void trace(long ts, long tx, long t, long[] s)
-  {
-    if (ts in mh)
-    {
-      if (t in mh[ts].targets)
-        mh[ts].targets[t].insert(History.Update(tx, s));
-      else
-        mh[ts].targets[t] = make_list(History.Update(tx, s));
-    }
-    else
-    {
-      mh[ts] = History([t : make_list(History.Update(tx, s))]);
-    }
-  }
-
   /**
    *  int Doolittle_LU_Decomposition(double *A, int n)
    *
@@ -538,7 +429,7 @@ class Application {
         foreach (p; 0 .. k)
         {
           m[k, j] -= m[k, p] * m[p, j];
-          if (do_animate) trace(ts, -1, I(k, j), [I(k, p), I(p, j)]);
+          if (do_animate) history.add_event(ts, -1, I(k, j), [I(k, p), I(p, j)]);
         }
         ++ts;
       }
@@ -548,10 +439,10 @@ class Application {
         foreach (p; 0 .. k)
         {
           m[i, k] -= m[i, p] * m[p, k];
-          if (do_animate) trace(ts, -1, I(i, k), [I(i, p), I(p, k)]);
+          if (do_animate) history.add_event(ts, -1, I(i, k), [I(i, p), I(p, k)]);
         }
         m[i, k] /= m[k, k];
-        if (do_animate) trace(ts++, -1, I(i, k), [I(k, k)]);
+        if (do_animate) history.add_event(ts++, -1, I(i, k), [I(k, k)]);
       }
     }
     return 0;
@@ -658,11 +549,6 @@ class Application {
   void sequential_lud()
   {
     auto ts = 0;
-    if (do_animate)
-    {
-      auto keys = mh.keys;
-      foreach (k; keys) mh.remove(k);
-    }
     create_matrix();
     for (auto k = 0; k < matrix_dim; k += BLOCK_SIZE)
     {
@@ -673,23 +559,23 @@ class Application {
           foreach (j; 0 .. i)
           {
             m[k + tx, k + i] -= m[k + tx, k + j] * m[k + j, k + i];
-            if (do_animate) trace(ts, tx, I(k + tx, k + i), [I(k + tx, k + j), I(k + j, k + i)]);
+            if (do_animate) history.add_event(ts, tx, I(k + tx, k + i), [I(k + tx, k + j), I(k + j, k + i)]);
           }
           m[k + tx, k + i] /= m[k + i, k + i];
-          if (do_animate) trace(ts++, tx, I(k + tx, k + i), [I(k + i, k + i), I(k + i, k + i)]);
+          if (do_animate) history.add_event(ts++, tx, I(k + tx, k + i), [I(k + i, k + i), I(k + i, k + i)]);
         }
         foreach (tx; i + 1 .. BLOCK_SIZE)
         {
           foreach (j; 0 .. i + 1)
           {
             m[k + i + 1, k + tx] -= m[k + i + 1, k + j] * m[k + j, k + tx];
-            if (do_animate) trace(ts, tx, I(k + i + 1, k + tx), [I(k + i + 1, k + j), I(k + j, k + tx)]);
+            if (do_animate) history.add_event(ts, tx, I(k + i + 1, k + tx), [I(k + i + 1, k + j), I(k + j, k + tx)]);
           }
           ++ts;
         }
       }
       if (k >= matrix_dim - BLOCK_SIZE) break;
-      if (do_animate) trace(ts++, 0, -1, []);
+      if (do_animate) history.add_event(ts++, 0, -1, []);
 
       foreach (bx; 0 .. ((matrix_dim - k) / BLOCK_SIZE - 1))
       {
@@ -701,7 +587,7 @@ class Application {
             foreach (j; 0 .. i)
             {
               m[k + i, k + (bx + 1) * BLOCK_SIZE + idx] -= m[k + i, k + j] * m[k + j, k + (bx + 1) * BLOCK_SIZE + idx];
-              if (do_animate) trace(ts, bx * 2 * BLOCK_SIZE + tx, I(k + i, k + (bx + 1) * BLOCK_SIZE + idx), [I(k + i, k + j), I(k + j, k + (bx + 1) * BLOCK_SIZE + idx)]);
+              if (do_animate) history.add_event(ts, bx * 2 * BLOCK_SIZE + tx, I(k + i, k + (bx + 1) * BLOCK_SIZE + idx), [I(k + i, k + j), I(k + j, k + (bx + 1) * BLOCK_SIZE + idx)]);
             }
             ++ts;
           }
@@ -714,14 +600,14 @@ class Application {
             foreach (j; 0 .. i)
             {
               m[k + (bx + 1) * BLOCK_SIZE + idx, k + i] -= m[k + (bx + 1) * BLOCK_SIZE + idx, k + j] * m[k + j, k + i];
-              if (do_animate) trace(ts, bx * 2 * BLOCK_SIZE + tx, I(k + (bx + 1) * BLOCK_SIZE + idx, k + i), [I(k + (bx + 1) * BLOCK_SIZE + idx, k + j), I(k + j, k + i)]);
+              if (do_animate) history.add_event(ts, bx * 2 * BLOCK_SIZE + tx, I(k + (bx + 1) * BLOCK_SIZE + idx, k + i), [I(k + (bx + 1) * BLOCK_SIZE + idx, k + j), I(k + j, k + i)]);
             }
             m[k + (bx + 1) * BLOCK_SIZE + idx, k + i] /= m[k + i, k + i];
-            if (do_animate) trace(ts++, bx * 2 * BLOCK_SIZE + tx, I(k + (bx + 1) * BLOCK_SIZE + idx, k + i), [I(k + i, k + i)]);
+            if (do_animate) history.add_event(ts++, bx * 2 * BLOCK_SIZE + tx, I(k + (bx + 1) * BLOCK_SIZE + idx, k + i), [I(k + i, k + i)]);
           }
         }
       }
-      if (do_animate) trace(ts++, 0, -1, []);
+      if (do_animate) history.add_event(ts++, 0, -1, []);
 
       foreach (bx; 0 .. (matrix_dim - k) / BLOCK_SIZE - 1)
       {
@@ -737,14 +623,14 @@ class Application {
               foreach (i; 0 .. BLOCK_SIZE)
               {
                 m[global_row_id + ty, global_col_id + tx] -= m[global_row_id + ty, k + i] * m[k + i, global_col_id + tx];
-                if (do_animate) trace(ts, (bx * ((matrix_dim - k) / BLOCK_SIZE - 1) + by) * BLOCK_SIZE * BLOCK_SIZE + tx * BLOCK_SIZE + ty, I(global_row_id + ty, global_col_id + tx), [I(global_row_id + ty, k + i), I(k + i, global_col_id + tx)]);
+                if (do_animate) history.add_event(ts, (bx * ((matrix_dim - k) / BLOCK_SIZE - 1) + by) * BLOCK_SIZE * BLOCK_SIZE + tx * BLOCK_SIZE + ty, I(global_row_id + ty, global_col_id + tx), [I(global_row_id + ty, k + i), I(k + i, global_col_id + tx)]);
               }
               ++ts;
             }
           }
         }
       }
-      if (do_animate) trace(ts++, 0, -1, []);
+      if (do_animate) history.add_event(ts++, 0, -1, []);
     }
   }
 
@@ -778,7 +664,7 @@ class Application {
       ticks = timer.peek();
       writefln( "SERIAL %5.3f [s]", ticks.usecs / 1E6 );
       validate();
-      animate();
+      if (do_animate) history.save_animation();
       run_once = false;
     }
 
@@ -786,7 +672,7 @@ class Application {
     {
       sequential_lud();
       validate();
-      animate();
+      if (do_animate) history.save_animation();
       run_once = false;
     }
 
