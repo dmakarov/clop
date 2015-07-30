@@ -111,9 +111,9 @@ class Application {
     }
     F = new NDArray!int(rows, cols); assert(F !is null, "Can't allocate array F");
     S = new NDArray!int(rows, cols); assert(S !is null, "Can't allocate array S");
-    G = new int[rows * cols]; assert(G !is null, "Can't allocate array G");
-    M = new int[rows];        assert(M !is null, "Can't allocate array M");
-    N = new int[cols];        assert(N !is null, "Can't allocate array N");
+    G = new int[rows * cols];        assert(G !is null, "Can't allocate array G");
+    M = new int[rows];               assert(M !is null, "Can't allocate array M");
+    N = new int[cols];               assert(N !is null, "Can't allocate array N");
 
     Mt19937 gen;
     gen.seed(SEED);
@@ -134,11 +134,12 @@ class Application {
     /**
      */
     char[] code = q{
-      #define I(r,c)     ((r) * cols + (c))
+      #define I(r,c) ((r) * cols + (c))
+      /* A forward declaration.
+         Some OpenCL compilers issue a warning if it's not present. */
+      int max3(int a, int b, int c);
 
-      int max3( int a, int b, int c );
-
-      int max3( int a, int b, int c )
+      int max3(int a, int b, int c)
       {
         int k = a > b ? a : b;
         return k > c ? k : c;
@@ -153,18 +154,12 @@ class Application {
                                  int  penalty,
                                  int  diagonal)
       {
-        int tx = get_global_id( 0 );
-        int c =            tx + 1;
-        int r = diagonal - tx - 1;
-        if ( diagonal >= cols )
-        {
-          c = diagonal - cols + tx + 1;
-          r =            cols - tx - 1;
-        }
-        int m = F[I(r - 1, c - 1)] + S[I(r, c)];
-        int d = F[I(r - 1, c    )] - penalty;
-        int i = F[I(r    , c - 1)] - penalty;
-        F[I(r, c)] = max3( m, d, i );
+        int tx = get_global_id(0);
+        int c = diagonal < cols ?            tx + 1 : diagonal - cols + tx + 1;
+        int r = diagonal < cols ? diagonal - tx - 1 :            cols - tx - 1;
+        F[I(r, c)] = max3(F[I(r - 1, c - 1)] + S[I(r, c)],
+                          F[I(r - 1, c    )] - penalty,
+                          F[I(r    , c - 1)] - penalty);
       } /* nw_noblocks */
 
       /**
@@ -178,18 +173,12 @@ class Application {
                                            int  penalty,
                                            int  diagonal)
       {
-        int tx = get_global_id( 0 );
-        int c =            tx + 1;
-        int r = diagonal - tx - 1;
-        if ( diagonal >= cols )
-        {
-          c = diagonal - cols + tx + 1;
-          r =            cols - tx - 1;
-        }
-        int m = F[I(r - 1, c - 1)] + S[M[r] * CHARS + N[c]];
-        int d = F[I(r - 1, c    )] - penalty;
-        int i = F[I(r    , c - 1)] - penalty;
-        F[I(r, c)] = max3( m, d, i );
+        int tx = get_global_id(0);
+        int c = diagonal < cols ?            tx + 1 : diagonal - cols + tx + 1;
+        int r = diagonal < cols ? diagonal - tx - 1 :            cols - tx - 1;
+        F[I(r, c)] = max3(F[I(r - 1, c - 1)] + S[M[r] * CHARS + N[c]],
+                          F[I(r - 1, c    )] - penalty,
+                          F[I(r    , c - 1)] - penalty);
       } /* nw_noblocks_indirectS */
 
       /**
@@ -200,57 +189,55 @@ class Application {
                                    int  cols,
                                    int  penalty,
                                    int  br,
-                                   int  bc,
-                    __local        int* s,
-                    __local        int* t)
+                                   int  bc)
       {
-        int bx = get_group_id( 0 );
-        int tx = get_local_id( 0 );
-        int rr = ( br - bx ) * BLOCK_SIZE + 1; // these are the indexes of
-        int cc = ( bc + bx ) * BLOCK_SIZE + 1; // the block's top-left element
+        __local int s[ BLOCK_SIZE      *  BLOCK_SIZE];
+        __local int t[(BLOCK_SIZE + 1) * (BLOCK_SIZE + 1)];
+        int bx = get_group_id(0);
+        int tx = get_local_id(0);
+        int rr = (br - bx) * BLOCK_SIZE + 1; // these are the indexes of
+        int cc = (bc + bx) * BLOCK_SIZE + 1; // the block's top-left element
         // 1.
-        int index   = cols * rr + cc + tx;
+        int index   = I(rr, cc + tx);
         int index_n = index - cols;
-        int index_w = cols * ( rr + tx ) + cc - 1;
+        int index_w = I(rr + tx, cc - 1);
 
-        for ( int k = 0; k < BLOCK_SIZE; ++k )
-          s[k * BLOCK_SIZE + tx] = S[k * cols + index];
+        for (int k = 0; k < BLOCK_SIZE; ++k)
+          s[k * BLOCK_SIZE + tx] = S[I(k, index)];
 
-        if ( tx == 0 ) t[0] = F[index_n - 1];        // copy the NW element into the TL corner of t
+        if (tx == 0) t[0] = F[index_n - 1];          // copy the NW element into the TL corner of t
         t[(tx + 1) * (BLOCK_SIZE + 1)] = F[index_w]; // copy the column of W elements into the left column of t
         t[(tx + 1)                   ] = F[index_n]; // copy the row of N elements into the top row of t
-        barrier( CLK_LOCAL_MEM_FENCE );
+        barrier(CLK_LOCAL_MEM_FENCE);
         // 2.
-        for ( int k = 0; k < BLOCK_SIZE; ++k )
+        for (int k = 0; k < BLOCK_SIZE; ++k)
         {
-          if ( tx <= k )
+          if (tx <= k)
           {
             int x =     tx + 1;
             int y = k - tx + 1;
-            int m = t[(y-1) * (BLOCK_SIZE + 1) + x-1] + s[(y - 1) * BLOCK_SIZE + x - 1];
-            int d = t[(y-1) * (BLOCK_SIZE + 1) + x  ] - penalty;
-            int i = t[(y  ) * (BLOCK_SIZE + 1) + x-1] - penalty;
-            t[y * (BLOCK_SIZE + 1) + x] = max3( m, d, i );
+            t[y * (BLOCK_SIZE + 1) + x] = max3(t[(y - 1) * (BLOCK_SIZE + 1) + x - 1] + s[(y - 1) * BLOCK_SIZE + x - 1],
+                                               t[(y - 1) * (BLOCK_SIZE + 1) + x    ] - penalty,
+                                               t[(y    ) * (BLOCK_SIZE + 1) + x - 1] - penalty);
           }
-          barrier( CLK_LOCAL_MEM_FENCE );
+          barrier(CLK_LOCAL_MEM_FENCE);
         }
         // 3.
-        for ( int k = BLOCK_SIZE - 2; k >= 0; --k )
+        for (int k = BLOCK_SIZE - 2; k >= 0; --k)
         {
-          if ( tx <= k )
+          if (tx <= k)
           {
             int x = BLOCK_SIZE + tx - k;
             int y = BLOCK_SIZE - tx;
-            int m = t[(y-1) * (BLOCK_SIZE + 1) + x-1] + s[(y - 1) * BLOCK_SIZE + x - 1];
-            int d = t[(y-1) * (BLOCK_SIZE + 1) + x  ] - penalty;
-            int i = t[(y  ) * (BLOCK_SIZE + 1) + x-1] - penalty;
-            t[y * (BLOCK_SIZE + 1) + x] = max3( m, d, i );
+            t[y * (BLOCK_SIZE + 1) + x] = max3(t[(y - 1) * (BLOCK_SIZE + 1) + x - 1] + s[(y - 1) * BLOCK_SIZE + x - 1],
+                                               t[(y - 1) * (BLOCK_SIZE + 1) + x    ] - penalty,
+                                               t[(y    ) * (BLOCK_SIZE + 1) + x - 1] - penalty);
           }
-          barrier( CLK_LOCAL_MEM_FENCE );
+          barrier(CLK_LOCAL_MEM_FENCE);
         }
         // 4.
-        for ( int ty = 0; ty < BLOCK_SIZE; ++ty )
-          F[index + ty * cols] = t[(ty + 1) * (BLOCK_SIZE + 1) + tx + 1];
+        for (int ty = 0; ty < BLOCK_SIZE; ++ty)
+          F[I(ty, index)] = t[(ty + 1) * (BLOCK_SIZE + 1) + tx + 1];
       } /* nw_rectangles */
 
       /**
@@ -263,64 +250,64 @@ class Application {
                                              int  cols,
                                              int  penalty,
                                              int  br,
-                                             int  bc,
-                              __local        int* s,
-                              __local        int* t)
+                                             int  bc)
       {
-        int bx = get_group_id( 0 );
-        int tx = get_local_id( 0 );
-        int rr = ( br - bx ) * BLOCK_SIZE + 1; // these are the indexes of
-        int cc = ( bc + bx ) * BLOCK_SIZE + 1; // the block's top-left element
+        __local int s[CHARS * CHARS];
+        __local int t[(BLOCK_SIZE + 1) * (BLOCK_SIZE + 1)];
+        int bx = get_group_id(0);
+        int tx = get_local_id(0);
+        int rr = (br - bx) * BLOCK_SIZE + 1; // these are the indexes of
+        int cc = (bc + bx) * BLOCK_SIZE + 1; // the block's top-left element
         // 1.
         int index   = cols * rr + cc + tx;
         int index_n = index - cols;
-        int index_w = cols * ( rr + tx ) + cc - 1;
+        int index_w = cols * (rr + tx) + cc - 1;
 
         // Copy BLOSUM array into shared memory.  Each thread copies
         // one or more columns.  The next columns are copied when the
         // number of threads in the group is smaller than the number
         // of columns in BLOSUM.
         int ii = 0;
-        while ( ii + tx < CHARS )
+        while (ii + tx < CHARS)
         {
-          for ( int ty = 0; ty < CHARS; ++ty )
+          for (int ty = 0; ty < CHARS; ++ty)
             s[ty * CHARS + ii + tx] = S[ty * CHARS + ii + tx];
           ii += BLOCK_SIZE;
         }
-        if ( tx == 0 ) t[0] = F[index_n - 1];        // copy the NW element into the TL corner of t
+        if (tx == 0) t[0] = F[index_n - 1];        // copy the NW element into the TL corner of t
         t[(tx + 1) * (BLOCK_SIZE + 1)] = F[index_w]; // copy the column of W elements into the left column of t
         t[(tx + 1)                   ] = F[index_n]; // copy the row of N elements into the top row of t
-        barrier( CLK_LOCAL_MEM_FENCE );
+        barrier(CLK_LOCAL_MEM_FENCE);
         // 2.
-        for ( int k = 0; k < BLOCK_SIZE; ++k )
+        for (int k = 0; k < BLOCK_SIZE; ++k)
         {
-          if ( tx <= k )
+          if (tx <= k)
           {
             int x =     tx + 1;
             int y = k - tx + 1;
-            int m = t[(y-1) * (BLOCK_SIZE + 1) + x-1] + s[M[rr + y - 1] * CHARS + N[cc + x - 1]];
-            int d = t[(y-1) * (BLOCK_SIZE + 1) + x  ] - penalty;
-            int i = t[(y  ) * (BLOCK_SIZE + 1) + x-1] - penalty;
-            t[y * (BLOCK_SIZE + 1) + x] = max3( m, d, i );
+            int m = t[(y - 1) * (BLOCK_SIZE + 1) + x - 1] + s[M[rr + y - 1] * CHARS + N[cc + x - 1]];
+            int d = t[(y - 1) * (BLOCK_SIZE + 1) + x    ] - penalty;
+            int i = t[(y    ) * (BLOCK_SIZE + 1) + x - 1] - penalty;
+            t[y * (BLOCK_SIZE + 1) + x] = max3(m, d, i);
           }
-          barrier( CLK_LOCAL_MEM_FENCE );
+          barrier(CLK_LOCAL_MEM_FENCE);
         }
         // 3.
-        for ( int k = BLOCK_SIZE - 2; k >= 0; --k )
+        for (int k = BLOCK_SIZE - 2; k >= 0; --k)
         {
-          if ( tx <= k )
+          if (tx <= k)
           {
             int x = BLOCK_SIZE + tx - k;
             int y = BLOCK_SIZE - tx;
             int m = t[(y-1) * (BLOCK_SIZE + 1) + x-1] + s[M[rr + y - 1] * CHARS + N[cc + x - 1]];
             int d = t[(y-1) * (BLOCK_SIZE + 1) + x  ] - penalty;
-            int i = t[(y  ) * (BLOCK_SIZE + 1) + x-1] - penalty;
-            t[y * (BLOCK_SIZE + 1) + x] = max3( m, d, i );
+            int i = t[(y ) * (BLOCK_SIZE + 1) + x-1] - penalty;
+            t[y * (BLOCK_SIZE + 1) + x] = max3(m, d, i);
           }
-          barrier( CLK_LOCAL_MEM_FENCE );
+          barrier(CLK_LOCAL_MEM_FENCE);
         }
         // 4.
-        for ( int ty = 0; ty < BLOCK_SIZE; ++ty )
+        for (int ty = 0; ty < BLOCK_SIZE; ++ty)
           F[index + ty * cols] = t[(ty + 1) * (BLOCK_SIZE + 1) + tx + 1];
       } /* nw_rectangles_indirectS */
 
@@ -332,117 +319,117 @@ class Application {
                                  int  cols,
                                  int  penalty,
                                  int  br,
-                                 int  bc,
-                  __local        int* s,
-                  __local        int* t)
+                                 int  bc)
       {
-        int bx = get_group_id( 0 );
-        int tx = get_local_id( 0 );
-        int rr = ( br -     bx ) * BLOCK_SIZE + 1;
-        int cc = ( bc + 2 * bx ) * BLOCK_SIZE + 1;
+        __local int s[ BLOCK_SIZE      *  BLOCK_SIZE];
+        __local int t[(BLOCK_SIZE + 1) * (BLOCK_SIZE + 2)];
+        int bx = get_group_id(0);
+        int tx = get_local_id(0);
+        int rr = (br -     bx) * BLOCK_SIZE + 1;
+        int cc = (bc + 2 * bx) * BLOCK_SIZE + 1;
 
-        int index   = cols * ( rr + tx ) + cc - tx;
-        int index_n = cols * ( rr - 1 ) + cc + tx;
+        int index   = I(rr + tx, cc - tx);
+        int index_n = I(rr -  1, cc + tx);
         int index_w = index - 1;
 
-        if ( bc == 1 && bx == 0 )
-          for ( int m = 0; m < BLOCK_SIZE; ++m )
+        if (bc == 1 && bx == 0)
+          for (int m = 0; m < BLOCK_SIZE; ++m)
           {
             int x = m - tx + 1;
-            if ( x > 0 )
-              F[(rr + tx) * cols + x] = max3( F[(rr + tx - 1) * cols + x - 1] + S[(rr + tx) * cols + x],
-                                              F[(rr + tx - 1) * cols + x    ] - penalty,
-                                              F[(rr + tx    ) * cols + x - 1] - penalty );
-            barrier( CLK_GLOBAL_MEM_FENCE );
+            if (x > 0)
+              F[I(rr + tx, x)] = max3(F[I(rr + tx - 1, x - 1)] + S[I(rr + tx, x)],
+                                      F[I(rr + tx - 1, x    )] - penalty,
+                                      F[I(rr + tx    , x - 1)] - penalty);
+            barrier(CLK_GLOBAL_MEM_FENCE);
           }
 
         // 1.
-        for ( int k = 0; k < BLOCK_SIZE; ++k )
+        for (int k = 0; k < BLOCK_SIZE; ++k)
           s[tx * BLOCK_SIZE + k] = S[index + k];
-        if ( tx == 0 ) t[0] = F[index_n - 1];
+        if (tx == 0) t[0] = F[index_n - 1];
         t[ tx + 1                        ] = F[index_n];
         t[(tx + 1) * (BLOCK_SIZE + 2)    ] = F[index_w - 1];
         t[(tx + 1) * (BLOCK_SIZE + 2) + 1] = F[index_w];
-        barrier( CLK_LOCAL_MEM_FENCE );
+        barrier(CLK_LOCAL_MEM_FENCE);
         // 2.
-        for ( int k = 0; k < BLOCK_SIZE; ++k )
+        for (int k = 0; k < BLOCK_SIZE; ++k)
         {
           int x =  k + 2;
           int y =  tx + 1;
-          int m = t[(y-1) * (BLOCK_SIZE + 2) + x-2] + s[tx * BLOCK_SIZE + k];
-          int d = t[(y-1) * (BLOCK_SIZE + 2) + x-1] - penalty;
-          int i = t[(y  ) * (BLOCK_SIZE + 2) + x-1] - penalty;
-          t[y * (BLOCK_SIZE + 2) + x] = max3( m, d, i );
-          barrier( CLK_LOCAL_MEM_FENCE );
+          int m = t[(y - 1) * (BLOCK_SIZE + 2) + x - 2] + s[tx * BLOCK_SIZE + k];
+          int d = t[(y - 1) * (BLOCK_SIZE + 2) + x - 1] - penalty;
+          int i = t[(y    ) * (BLOCK_SIZE + 2) + x - 1] - penalty;
+          t[y * (BLOCK_SIZE + 2) + x] = max3(m, d, i);
+          barrier(CLK_LOCAL_MEM_FENCE);
         }
         // 3.
-        for ( int k = 0; k < BLOCK_SIZE; ++k )
+        for (int k = 0; k < BLOCK_SIZE; ++k)
           F[index + k] = t[(tx + 1) * (BLOCK_SIZE + 2) + k + 2];
-        barrier( CLK_GLOBAL_MEM_FENCE );
+        barrier(CLK_GLOBAL_MEM_FENCE);
 
-        if ( cc + BLOCK_SIZE == cols )
-          for ( int m = 0; m < BLOCK_SIZE; ++m )
+        if (cc + BLOCK_SIZE == cols)
+          for (int m = 0; m < BLOCK_SIZE; ++m)
           {
             int x = cc + BLOCK_SIZE + m - tx;
-            if ( x < cols )
-              F[(rr + tx) * cols + x] = max3( F[(rr + tx - 1) * cols + x - 1] + S[(rr + tx) * cols + x],
-                                              F[(rr + tx - 1) * cols + x    ] - penalty,
-                                              F[(rr + tx    ) * cols + x - 1] - penalty );
-            barrier( CLK_GLOBAL_MEM_FENCE );
+            if (x < cols)
+              F[I(rr + tx, x)] = max3(F[I(rr + tx - 1, x - 1)] + S[I(rr + tx, x)],
+                                      F[I(rr + tx - 1, x    )] - penalty,
+                                      F[I(rr + tx    , x - 1)] - penalty);
+            barrier(CLK_GLOBAL_MEM_FENCE);
           }
       } /* nw_diamonds */
 
       /**
        */
       __kernel void
-      nw_diamonds_indirectS( __global const int* S      , //
-                             __global const int* M      , //
-                             __global const int* N      , //
-                             __global       int* F      , //
-                                            int  cols   , //
-                                            int  penalty, //
-                                            int  br     , //
-                                            int  bc     , //
-                             __local        int* s      , //
-                             __local        int* t      ) //
+      nw_diamonds_indirectS(__global const int* S      , //
+                            __global const int* M      , //
+                            __global const int* N      , //
+                            __global       int* F      , //
+                                           int  cols   , //
+                                           int  penalty, //
+                                           int  br     , //
+                                           int  bc     ) //
       {
-        int bx = get_group_id( 0 );
-        int tx = get_local_id( 0 );
-        int rr = ( br -     bx ) * BLOCK_SIZE + 1;
-        int cc = ( bc + 2 * bx ) * BLOCK_SIZE + 1;
+        __local int s[CHARS * CHARS];
+        __local int t[(BLOCK_SIZE + 1) * (BLOCK_SIZE + 2)];
+        int bx = get_group_id(0);
+        int tx = get_local_id(0);
+        int rr = (br -     bx) * BLOCK_SIZE + 1;
+        int cc = (bc + 2 * bx) * BLOCK_SIZE + 1;
 
-        int index   = cols * ( rr + tx ) + cc - tx;
-        int index_n = cols * ( rr - 1 ) + cc + tx;
+        int index   = cols * (rr + tx) + cc - tx;
+        int index_n = cols * (rr - 1) + cc + tx;
         int index_w = index - 1;
         int ii = 0;
 
-        while ( ii + tx < CHARS )
+        while (ii + tx < CHARS)
         {
-          for ( int ty = 0; ty < CHARS; ++ty )
+          for (int ty = 0; ty < CHARS; ++ty)
             s[ty * CHARS + ii + tx] = S[ty * CHARS + ii + tx];
           ii += BLOCK_SIZE;
         }
-        barrier( CLK_LOCAL_MEM_FENCE );
+        barrier(CLK_LOCAL_MEM_FENCE);
 
-        if ( bc == 1 && bx == 0 )
-          for ( int m = 0; m < BLOCK_SIZE; ++m )
+        if (bc == 1 && bx == 0)
+          for (int m = 0; m < BLOCK_SIZE; ++m)
           {
             int x = m - tx + 1;
-            if ( x > 0 )
-              F[(rr + tx) * cols + x] = max3( F[(rr + tx - 1) * cols + x - 1] + s[M[rr + tx] * CHARS + N[x]],
+            if (x > 0)
+              F[(rr + tx) * cols + x] = max3(F[(rr + tx - 1) * cols + x - 1] + s[M[rr + tx] * CHARS + N[x]],
                                               F[(rr + tx - 1) * cols + x    ] - penalty,
-                                              F[(rr + tx    ) * cols + x - 1] - penalty );
-            barrier( CLK_GLOBAL_MEM_FENCE );
+                                              F[(rr + tx   ) * cols + x - 1] - penalty);
+            barrier(CLK_GLOBAL_MEM_FENCE);
           }
 
-        if ( tx == 0 ) t[0] = F[index_n - 1];
+        if (tx == 0) t[0] = F[index_n - 1];
         t[ tx + 1                        ] = F[index_n];
         t[(tx + 1) * (BLOCK_SIZE + 2)    ] = F[index_w - 1];
         t[(tx + 1) * (BLOCK_SIZE + 2) + 1] = F[index_w];
-        barrier( CLK_LOCAL_MEM_FENCE );
+        barrier(CLK_LOCAL_MEM_FENCE);
 
         int nextN = N[cc - tx];
-        for ( int k = 0; k < BLOCK_SIZE; ++k )
+        for (int k = 0; k < BLOCK_SIZE; ++k)
         {
           int x =  k + 2;
           int y =  tx + 1;
@@ -450,24 +437,24 @@ class Application {
           nextN = N[cc - tx + k + 1];
           int m = t[(y-1) * (BLOCK_SIZE + 2) + x-2] + s[M[rr + tx] * CHARS + currN];
           int d = t[(y-1) * (BLOCK_SIZE + 2) + x-1] - penalty;
-          int i = t[(y  ) * (BLOCK_SIZE + 2) + x-1] - penalty;
-          t[y * (BLOCK_SIZE + 2) + x] = max3( m, d, i );
-          barrier( CLK_LOCAL_MEM_FENCE );
+          int i = t[(y ) * (BLOCK_SIZE + 2) + x-1] - penalty;
+          t[y * (BLOCK_SIZE + 2) + x] = max3(m, d, i);
+          barrier(CLK_LOCAL_MEM_FENCE);
         }
 
-        for ( int k = 0; k < BLOCK_SIZE; ++k )
+        for (int k = 0; k < BLOCK_SIZE; ++k)
           F[index + k] = t[(tx + 1) * (BLOCK_SIZE + 2) + k + 2];
-        barrier( CLK_GLOBAL_MEM_FENCE );
+        barrier(CLK_GLOBAL_MEM_FENCE);
 
-        if ( cc + BLOCK_SIZE == cols )
-          for ( int m = 0; m < BLOCK_SIZE; ++m )
+        if (cc + BLOCK_SIZE == cols)
+          for (int m = 0; m < BLOCK_SIZE; ++m)
           {
             int x = cc + BLOCK_SIZE + m - tx;
-            if ( x < cols )
-              F[(rr + tx) * cols + x] = max3( F[(rr + tx - 1) * cols + x - 1] + s[M[rr + tx] * CHARS + N[x]],
+            if (x < cols)
+              F[(rr + tx) * cols + x] = max3(F[(rr + tx - 1) * cols + x - 1] + s[M[rr + tx] * CHARS + N[x]],
                                               F[(rr + tx - 1) * cols + x    ] - penalty,
-                                              F[(rr + tx    ) * cols + x - 1] - penalty );
-            barrier( CLK_GLOBAL_MEM_FENCE );
+                                              F[(rr + tx   ) * cols + x - 1] - penalty);
+            barrier(CLK_GLOBAL_MEM_FENCE);
           }
       } /* nw_diamonds_indirectS */
     }.dup;
@@ -537,20 +524,6 @@ class Application {
   }
 
   /**
-   */
-  void print(const string msg, const int[] A) const
-  {
-    writeln(msg);
-    foreach (r; 0 .. rows)
-    {
-      writef("%4d", A[r * cols]);
-      foreach (c; 1 .. cols)
-        writef(" %4d", A[r * cols + c]);
-      writeln();
-    }
-  }
-
-  /**
    * Maximum of three numbers.
    */
   int max3(immutable int a, immutable int b, immutable int c) const
@@ -560,7 +533,7 @@ class Application {
   }
 
   /**
-   * baseline_sequential:
+   * baseline_nw:
    * implements sequential computation of the alignment scores matrix.
    *
    * The algorithm of filling in the matrix F
@@ -571,63 +544,80 @@ class Application {
    *    for i=1 to length(A)
    *    for j=1 to length(B)
    *    {
-   *      Match  ← F( i-1, j-1) + S(Ai, Bj)
-   *      Delete ← F( i-1, j  ) + d
-   *      Insert ← F( i  , j-1) + d
+   *      Match  ← F(i-1, j-1) + S(Ai, Bj)
+   *      Delete ← F(i-1, j ) + d
+   *      Insert ← F(i  , j-1) + d
    *      F(i,j) ← max(Match, Insert, Delete)
    *    }
    * </code>
    */
-  void baseline_sequential()
+  void baseline_nw()
   {
-    foreach ( r; 1 .. rows )
-      foreach ( c; 1 .. cols )
-        F[r * cols + c] = max3( F[(r - 1) * cols + c - 1] + BLOSUM62[M[r] * CHARS + N[c]],
-                                F[(r - 1) * cols + c    ] - penalty,
-                                F[ r      * cols + c - 1] - penalty );
-  }
-
-  /**
-   * rectangular_block:
-   * implements sequential computation of the alignment scores matrix
-   * for a single rectangular block of fixed size #BLOCK_SIZE.
-   * @br: block row, the vertical location of the block from the top of the
-   *      matrix, starting with 0 block.
-   * @bc: block column, the horizontal location of the block from the
-   *      left side of the matrix, starting with 0 block.
-   */
-  int rectangular_block(int br, int bc, int ts)
-  {
-    while (br >= 0 && bc < (cols - 1) / BLOCK_SIZE)
+    auto ts = 0;
+    foreach (r; 1 .. rows)
     {
-      auto rr = br * BLOCK_SIZE + 1;
-      auto cc = bc * BLOCK_SIZE + 1;
-      foreach (r; rr .. rr + BLOCK_SIZE)
-        foreach (c; cc .. cc + BLOCK_SIZE)
-        {
-          F[r * cols + c] = max3(F[(r - 1) * cols + c - 1] + BLOSUM62[M[r] * CHARS + N[c]],
-                                 F[(r - 1) * cols + c    ] - penalty,
-                                 F[ r      * cols + c - 1] - penalty);
-          if (do_animate) history.add_event(ts++, r * BLOCK_SIZE + c, I(r, c), [I(r - 1, c - 1), I(r - 1, c), I(r, c - 1)]);
-        }
-      br--;
-      bc++;
+      foreach (c; 1 .. cols)
+      {
+        F[r, c] = max3(F[r - 1, c - 1] + BLOSUM62[M[r] * CHARS + N[c]],
+                       F[r - 1, c    ] - penalty,
+                       F[r    , c - 1] - penalty);
+      }
     }
-    return ts;
   }
 
   /**
+   * rectangles: implements sequential computation of the alignment
+   * scores matrix for a single rectangular block of fixed size
+   * #BLOCK_SIZE.
    */
   void rectangles()
   {
     auto ts = 0;
     auto max_blocks = (cols - 1) / BLOCK_SIZE;
+    auto cur_blocks = 1;
+    auto inc_blocks = 1;
     foreach (i; 0 .. 2 * max_blocks - 1)
     {
       auto br = i < max_blocks ? i :     max_blocks - 1;
       auto bc = i < max_blocks ? 0 : i - max_blocks + 1;
-      ts = rectangular_block(br, bc, ts);
-      if (do_animate) history.add_event(ts++, 0, -1, []);
+      foreach (bx; 0 .. cur_blocks)
+      {
+        foreach (k; 0 .. BLOCK_SIZE)
+        {
+          foreach (tx; 0 .. BLOCK_SIZE)
+          {
+            if (tx <= k)
+            {
+              auto r = br * BLOCK_SIZE + k - tx + 1;
+              auto c = bc * BLOCK_SIZE     + tx + 1;
+              F[r, c] = max3(F[r - 1, c - 1] + BLOSUM62[M[r] * CHARS + N[c]],
+                             F[r - 1, c    ] - penalty,
+                             F[r    , c - 1] - penalty);
+              history.add_event(ts++, bx * BLOCK_SIZE + tx, I(r, c), [I(r - 1, c - 1), I(r - 1, c), I(r, c - 1)]);
+            }
+          }
+        }
+        for (int k = BLOCK_SIZE - 2; k != -1; --k)
+        {
+          foreach (tx; 0 .. BLOCK_SIZE)
+          {
+            if (tx <= k)
+            {
+              auto r = br * BLOCK_SIZE + BLOCK_SIZE     - tx;
+              auto c = bc * BLOCK_SIZE + BLOCK_SIZE - k + tx;
+              F[r, c] = max3(F[r - 1, c - 1] + BLOSUM62[M[r] * CHARS + N[c]],
+                             F[r - 1, c    ] - penalty,
+                             F[r    , c - 1] - penalty);
+              history.add_event(ts++, bx * BLOCK_SIZE + tx, I(r, c), [I(r - 1, c - 1), I(r - 1, c), I(r, c - 1)]);
+            }
+          }
+        }
+        --br;
+        ++bc;
+      }
+      history.add_event(ts++, -1, -1, []);
+      if (i == max_blocks - 1) inc_blocks = -1;
+      cur_blocks += inc_blocks;
     }
   }
 
@@ -635,12 +625,14 @@ class Application {
    */
   int diamond_blocks(int br, int bc, int ts)
   {
+    auto bx = 0;
     while (br >= 0 && bc < (cols - 1) / BLOCK_SIZE)
     {
       int rr = br * BLOCK_SIZE + 1;
       int cc = bc * BLOCK_SIZE + 1;
       if (bc == 1)
       {
+        auto tx = 0;
         foreach (r; 0 .. BLOCK_SIZE)
         {
           foreach (c; 1 .. BLOCK_SIZE + 1 - r)
@@ -648,11 +640,13 @@ class Application {
             F[rr + r, c] = max3(F[rr + r - 1, c - 1] + BLOSUM62[M[rr + r] * CHARS + N[c]],
                                 F[rr + r - 1, c    ] - penalty,
                                 F[rr + r    , c - 1] - penalty);
-            if (do_animate) history.add_event(ts++, r * BLOCK_SIZE + c, I(rr + r, c), [I(rr + r - 1, c - 1), I(rr + r - 1, c), I(rr + r, c - 1)]);
+            history.add_event(ts++, bx * BLOCK_SIZE + tx, I(rr + r, c), [I(rr + r - 1, c - 1), I(rr + r - 1, c), I(rr + r, c - 1)]);
           }
+          ++tx;
         }
       }
       int k = cc;
+      auto tx = 0;
       foreach (r; 0 .. BLOCK_SIZE)
       {
         foreach (c; 0 .. BLOCK_SIZE)
@@ -660,10 +654,12 @@ class Application {
           F[rr + r, k + c] = max3(F[rr + r - 1, k + c - 1] + BLOSUM62[M[rr + r] * CHARS + N[k + c]],
                                   F[rr + r - 1, k + c    ] - penalty,
                                   F[rr + r    , k + c - 1] - penalty);
-          if (do_animate) history.add_event(ts++, r * BLOCK_SIZE + c, I(rr + r, k + c), [I(rr + r - 1, k + c - 1), I(rr + r - 1, k + c), I(rr + r, k + c - 1)]);
+          history.add_event(ts++, bx * BLOCK_SIZE + tx, I(rr + r, k + c), [I(rr + r - 1, k + c - 1), I(rr + r - 1, k + c), I(rr + r, k + c - 1)]);
         }
-        k--;
+        ++tx;
+        --k;
       }
+      tx = 0;
       if (cc + BLOCK_SIZE == cols)
       {
         cc += BLOCK_SIZE - 2;
@@ -674,12 +670,14 @@ class Application {
             F[rr + r, cc + c] = max3(F[rr + r - 1, cc + c - 1] + BLOSUM62[M[rr + r] * CHARS + N[cc + c]],
                                      F[rr + r - 1, cc + c    ] - penalty,
                                      F[rr + r    , cc + c - 1] - penalty);
-            if (do_animate) history.add_event(ts++, r * BLOCK_SIZE + c, I(rr + r, cc + c), [I(rr + r - 1, cc + c - 1), I(rr + r - 1, cc + c), I(rr + r, cc + c - 1)]);
+            history.add_event(ts++, bx * BLOCK_SIZE + tx, I(rr + r, cc + c), [I(rr + r - 1, cc + c - 1), I(rr + r - 1, cc + c), I(rr + r, cc + c - 1)]);
           }
-          cc--;
+          ++tx;
+          --cc;
         }
       }
-      br--;
+      ++bx;
+      --br;
       bc += 2;
     }
     return ts;
@@ -693,14 +691,14 @@ class Application {
     foreach (i; 0 .. rows / BLOCK_SIZE - 1)
     {
       ts = diamond_blocks(i, 1, ts);
-      if (do_animate) history.add_event(ts++, 0, -1, []);
+      history.add_event(ts++, -1, -1, []);
       ts = diamond_blocks(i, 2, ts);
-      if (do_animate) history.add_event(ts++, 0, -1, []);
+      history.add_event(ts++, -1, -1, []);
     }
     foreach (i; 1 .. cols / BLOCK_SIZE)
     {
       ts = diamond_blocks(rows / BLOCK_SIZE - 1, i, ts);
-      if (do_animate) history.add_event(ts++, 0, -1, []);
+      history.add_event(ts++, -1, -1, []);
     }
   }
 
@@ -709,63 +707,47 @@ class Application {
   double opencl_noblocks()
   {
     double result = 0.0;
-
     try
     {
       cl_int status;
       cl_event event;
       cl_mem_flags flags = CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR;
-      cl_mem dS = clCreateBuffer( runtime.context, flags, cl_int.sizeof * S.length, S.ptr, &status );
-      assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
+      cl_mem dS = clCreateBuffer(runtime.context, flags, cl_int.sizeof * S.length, S.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
       flags = CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR;
-      cl_mem dF = clCreateBuffer( runtime.context, flags, cl_int.sizeof * F.length, F.ptr, &status );
-      assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_noblocks, 0, cl_mem.sizeof, &dS      );
-      assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_noblocks, 1, cl_mem.sizeof, &dF      );
-      assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_noblocks, 2, cl_int.sizeof, &cols    );
-      assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_noblocks, 3, cl_int.sizeof, &penalty );
-      assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
-      foreach ( i; 2 .. 2 * cols - 1 )
+      cl_mem dF = clCreateBuffer(runtime.context, flags, cl_int.sizeof * F.length, F.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_noblocks, 0, cl_mem.sizeof, &dS     );                                                    assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_noblocks, 1, cl_mem.sizeof, &dF     );                                                    assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_noblocks, 2, cl_int.sizeof, &cols   );                                                    assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_noblocks, 3, cl_int.sizeof, &penalty);                                                    assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
+      foreach (i; 2 .. 2 * cols - 1)
       {
         size_t global = (i < cols) ? i - 1 : 2 * cols - i - 1;
-        status = clSetKernelArg( kernel_noblocks, 4, cl_int.sizeof, &i );
-        assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
-        status = clEnqueueNDRangeKernel( runtime.queue, kernel_noblocks, 1, null, &global, null, 0, null, &event );
-        assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
-        status = clWaitForEvents( 1, &event );
-        assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
+        status = clSetKernelArg(kernel_noblocks, 4, cl_int.sizeof, &i);                                                        assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
+        status = clEnqueueNDRangeKernel(runtime.queue, kernel_noblocks, 1, null, &global, null, 0, null, &event);              assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
+        status = clWaitForEvents(1, &event);                                                                                   assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
 
         cl_ulong start_time;
-        status = clGetEventProfilingInfo ( event                     , // cl_event          event
-                                           CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
-                                           cl_ulong.sizeof           , // size_t            param_value_size
-                                           &start_time               , // void*             param_value
-                                           null                     ); // size_t*           param_value_size_ret
-        assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
+        status = clGetEventProfilingInfo (event                     , // cl_event          event
+                                          CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
+                                          cl_ulong.sizeof           , // size_t            param_value_size
+                                          &start_time               , // void*             param_value
+                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
         cl_ulong end_time;
-        status = clGetEventProfilingInfo ( event                     , // cl_event          event
-                                           CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
-                                           cl_ulong.sizeof           , // size_t            param_value_size
-                                           &end_time                 , // void*             param_value
-                                           null                     ); // size_t*           param_value_size_ret
-        assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
-        result += ( end_time - start_time ) / 1E9;
+        status = clGetEventProfilingInfo (event                     , // cl_event          event
+                                          CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
+                                          cl_ulong.sizeof           , // size_t            param_value_size
+                                          &end_time                 , // void*             param_value
+                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
+        result += (end_time - start_time) / 1E9;
       }
-      status = clEnqueueReadBuffer( runtime.queue, dF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr, 0, null, null );
-      assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
-      status = clReleaseMemObject( dS );
-      assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
-      status = clReleaseMemObject( dF );
-      assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
-      status = clReleaseKernel( kernel_noblocks );
-      assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
+      status = clEnqueueReadBuffer(runtime.queue, dF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr, 0, null, null);             assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
+      status = clReleaseMemObject(dS);                                                                                         assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
+      status = clReleaseMemObject(dF);                                                                                         assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
+      status = clReleaseKernel(kernel_noblocks);                                                                               assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
     }
     catch (Exception e)
     {
-      write( e );
+      write(e);
       writeln();
     }
     return result;
@@ -776,58 +758,53 @@ class Application {
   double opencl_noblocks_indirectS()
   {
     double result = 0.0;
-
     try
     {
       cl_int status;
       cl_event event;
       cl_mem_flags flags = CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR;
-      cl_mem dS = clCreateBuffer( runtime.context, flags, cl_int.sizeof * BLOSUM62.length, BLOSUM62.ptr, &status );              assert( status == CL_SUCCESS, "opencl_noblocks_indirectS " ~ cl_strerror( status ) );
-      cl_mem dM = clCreateBuffer( runtime.context, flags, cl_int.sizeof * M.length, M.ptr, &status );                            assert( status == CL_SUCCESS, "opencl_noblocks_indirectS " ~ cl_strerror( status ) );
-      cl_mem dN = clCreateBuffer( runtime.context, flags, cl_int.sizeof * N.length, N.ptr, &status );                            assert( status == CL_SUCCESS, "opencl_noblocks_indirectS " ~ cl_strerror( status ) );
+      cl_mem dS = clCreateBuffer(runtime.context, flags, cl_int.sizeof * BLOSUM62.length, BLOSUM62.ptr, &status);              assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
+      cl_mem dM = clCreateBuffer(runtime.context, flags, cl_int.sizeof * M.length, M.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
+      cl_mem dN = clCreateBuffer(runtime.context, flags, cl_int.sizeof * N.length, N.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
       flags = CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR;
-      cl_mem dF = clCreateBuffer( runtime.context, flags, cl_int.sizeof * F.length, F.ptr, &status );                            assert( status == CL_SUCCESS, "opencl_noblocks_indirectS " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_noblocks_indirectS, 0, cl_mem.sizeof, &dS      );                                          assert( status == CL_SUCCESS, "opencl_noblocks_indirectS " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_noblocks_indirectS, 1, cl_mem.sizeof, &dM      );                                          assert( status == CL_SUCCESS, "opencl_noblocks_indirectS " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_noblocks_indirectS, 2, cl_mem.sizeof, &dN      );                                          assert( status == CL_SUCCESS, "opencl_noblocks_indirectS " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_noblocks_indirectS, 3, cl_mem.sizeof, &dF      );                                          assert( status == CL_SUCCESS, "opencl_noblocks_indirectS " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_noblocks_indirectS, 4, cl_int.sizeof, &cols    );                                          assert( status == CL_SUCCESS, "opencl_noblocks_indirectS " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_noblocks_indirectS, 5, cl_int.sizeof, &penalty );                                          assert( status == CL_SUCCESS, "opencl_noblocks_indirectS " ~ cl_strerror( status ) );
-      foreach ( i; 2 .. 2 * cols - 1 )
+      cl_mem dF = clCreateBuffer(runtime.context, flags, cl_int.sizeof * F.length, F.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_noblocks_indirectS, 0, cl_mem.sizeof, &dS     );                                          assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_noblocks_indirectS, 1, cl_mem.sizeof, &dM     );                                          assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_noblocks_indirectS, 2, cl_mem.sizeof, &dN     );                                          assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_noblocks_indirectS, 3, cl_mem.sizeof, &dF     );                                          assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_noblocks_indirectS, 4, cl_int.sizeof, &cols   );                                          assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_noblocks_indirectS, 5, cl_int.sizeof, &penalty);                                          assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
+      foreach (i; 2 .. 2 * cols - 1)
       {
         size_t global = (i < cols) ? i - 1 : 2 * cols - i - 1;
-        status = clSetKernelArg( kernel_noblocks_indirectS, 6, cl_int.sizeof, &i );                                              assert( status == CL_SUCCESS, "opencl_noblocks_indirectS " ~ cl_strerror( status ) );
-        status = clEnqueueNDRangeKernel( runtime.queue, kernel_noblocks_indirectS, 1, null, &global, null, 0, null, &event );
-        assert( status == CL_SUCCESS, "opencl_noblocks_indirectS " ~ cl_strerror( status ) );
-        status = clWaitForEvents( 1, &event );
-        assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
+        status = clSetKernelArg(kernel_noblocks_indirectS, 6, cl_int.sizeof, &i);                                              assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
+        status = clEnqueueNDRangeKernel(runtime.queue, kernel_noblocks_indirectS, 1, null, &global, null, 0, null, &event);    assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
+        status = clWaitForEvents(1, &event);                                                                                   assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
 
         cl_ulong start_time;
-        status = clGetEventProfilingInfo ( event                     , // cl_event          event
-                                           CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
-                                           cl_ulong.sizeof           , // size_t            param_value_size
-                                           &start_time               , // void*             param_value
-                                           null                     ); // size_t*           param_value_size_ret
-        assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
+        status = clGetEventProfilingInfo (event                     , // cl_event          event
+                                          CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
+                                          cl_ulong.sizeof           , // size_t            param_value_size
+                                          &start_time               , // void*             param_value
+                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
         cl_ulong end_time;
-        status = clGetEventProfilingInfo ( event                     , // cl_event          event
-                                           CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
-                                           cl_ulong.sizeof           , // size_t            param_value_size
-                                           &end_time                 , // void*             param_value
-                                           null                     ); // size_t*           param_value_size_ret
-        assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
-        result += ( end_time - start_time ) / 1E9;
+        status = clGetEventProfilingInfo (event                     , // cl_event          event
+                                          CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
+                                          cl_ulong.sizeof           , // size_t            param_value_size
+                                          &end_time                 , // void*             param_value
+                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
+        result += (end_time - start_time) / 1E9;
       }
-      status = clEnqueueReadBuffer( runtime.queue, dF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr, 0, null, null );             assert( status == CL_SUCCESS, "opencl_noblocks_indirectS " ~ cl_strerror( status ) );
-      status = clReleaseMemObject( dF );                                                                                         assert( status == CL_SUCCESS, "opencl_noblocks_indirectS " ~ cl_strerror( status ) );
-      status = clReleaseMemObject( dN );                                                                                         assert( status == CL_SUCCESS, "opencl_noblocks_indirectS " ~ cl_strerror( status ) );
-      status = clReleaseMemObject( dM );                                                                                         assert( status == CL_SUCCESS, "opencl_noblocks_indirectS " ~ cl_strerror( status ) );
-      status = clReleaseMemObject( dS );                                                                                         assert( status == CL_SUCCESS, "opencl_noblocks_indirectS " ~ cl_strerror( status ) );
-      status = clReleaseKernel( kernel_noblocks_indirectS );                                                                     assert( status == CL_SUCCESS, "opencl_noblocks_indirectS " ~ cl_strerror( status ) );
+      status = clEnqueueReadBuffer(runtime.queue, dF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr, 0, null, null);             assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
+      status = clReleaseMemObject(dF);                                                                                         assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
+      status = clReleaseMemObject(dN);                                                                                         assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
+      status = clReleaseMemObject(dM);                                                                                         assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
+      status = clReleaseMemObject(dS);                                                                                         assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
+      status = clReleaseKernel(kernel_noblocks_indirectS);                                                                     assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
     }
-    catch( Exception e )
+    catch(Exception e)
     {
-      write( e );
+      write(e);
       writeln();
     }
     return result;
@@ -844,57 +821,51 @@ class Application {
       cl_int status;
       cl_event event;
       cl_mem_flags flags = CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR;
-      cl_mem dS = clCreateBuffer( runtime.context, flags, cl_int.sizeof * S.length, S.ptr, &status );                            assert( status == CL_SUCCESS, "opencl_rectangles " ~ cl_strerror( status ) );
+      cl_mem dS = clCreateBuffer(runtime.context, flags, cl_int.sizeof * S.length, S.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_rectangles" ~ cl_strerror(status));
       flags = CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR;
-      cl_mem dF = clCreateBuffer( runtime.context, flags, cl_int.sizeof * F.length, F.ptr, &status );                            assert( status == CL_SUCCESS, "opencl_rectangles " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_rectangles, 0, cl_mem.sizeof, &dS      );                                                  assert( status == CL_SUCCESS, "opencl_rectangles " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_rectangles, 1, cl_mem.sizeof, &dF      );                                                  assert( status == CL_SUCCESS, "opencl_rectangles " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_rectangles, 2, cl_int.sizeof, &cols    );                                                  assert( status == CL_SUCCESS, "opencl_rectangles " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_rectangles, 3, cl_int.sizeof, &penalty );                                                  assert( status == CL_SUCCESS, "opencl_rectangles " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_rectangles, 6,  BLOCK_SIZE      *  BLOCK_SIZE      * cl_int.sizeof, null );                assert( status == CL_SUCCESS, "opencl_rectangles " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_rectangles, 7, (BLOCK_SIZE + 1) * (BLOCK_SIZE + 1) * cl_int.sizeof, null );                assert( status == CL_SUCCESS, "opencl_rectangles " ~ cl_strerror( status ) );
+      cl_mem dF = clCreateBuffer(runtime.context, flags, cl_int.sizeof * F.length, F.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_rectangles" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rectangles, 0, cl_mem.sizeof, &dS     );                                                  assert(status == CL_SUCCESS, "opencl_rectangles" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rectangles, 1, cl_mem.sizeof, &dF     );                                                  assert(status == CL_SUCCESS, "opencl_rectangles" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rectangles, 2, cl_int.sizeof, &cols   );                                                  assert(status == CL_SUCCESS, "opencl_rectangles" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rectangles, 3, cl_int.sizeof, &penalty);                                                  assert(status == CL_SUCCESS, "opencl_rectangles" ~ cl_strerror(status));
       auto max_blocks = (cols - 1) / BLOCK_SIZE;
       auto cur_blocks = 1;
       auto inc_blocks = 1;
-      for ( int i = 0; i < 2 * max_blocks - 1; ++i )
+      for (int i = 0; i < 2 * max_blocks - 1; ++i)
       {
         size_t wgroup = BLOCK_SIZE;
         size_t global = BLOCK_SIZE * cur_blocks;
-        cl_int br = ( i < max_blocks ) ? i :     max_blocks - 1;
-        cl_int bc = ( i < max_blocks ) ? 0 : i - max_blocks + 1;
-        status = clSetKernelArg( kernel_rectangles, 4, cl_int.sizeof, &br );                                                     assert( status == CL_SUCCESS, "opencl_rectangles " ~ cl_strerror( status ) );
-        status = clSetKernelArg( kernel_rectangles, 5, cl_int.sizeof, &bc );                                                     assert( status == CL_SUCCESS, "opencl_rectangles " ~ cl_strerror( status ) );
-        status = clEnqueueNDRangeKernel( runtime.queue, kernel_rectangles, 1, null, &global, &wgroup, 0, null, &event );
-        assert( status == CL_SUCCESS, "opencl_rectangles " ~ cl_strerror( status ) );
-        status = clWaitForEvents( 1, &event );
-        assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
+        cl_int br = (i < max_blocks) ? i :     max_blocks - 1;
+        cl_int bc = (i < max_blocks) ? 0 : i - max_blocks + 1;
+        status = clSetKernelArg(kernel_rectangles, 4, cl_int.sizeof, &br);                                                     assert(status == CL_SUCCESS, "opencl_rectangles" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_rectangles, 5, cl_int.sizeof, &bc);                                                     assert(status == CL_SUCCESS, "opencl_rectangles" ~ cl_strerror(status));
+        status = clEnqueueNDRangeKernel(runtime.queue, kernel_rectangles, 1, null, &global, &wgroup, 0, null, &event);         assert(status == CL_SUCCESS, "opencl_rectangles" ~ cl_strerror(status));
+        status = clWaitForEvents(1, &event);                                                                                   assert(status == CL_SUCCESS, "opencl_rectangles" ~ cl_strerror(status));
 
         cl_ulong start_time;
-        status = clGetEventProfilingInfo ( event                     , // cl_event          event
-                                           CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
-                                           cl_ulong.sizeof           , // size_t            param_value_size
-                                           &start_time               , // void*             param_value
-                                           null                     ); // size_t*           param_value_size_ret
-        assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
+        status = clGetEventProfilingInfo (event                     , // cl_event          event
+                                          CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
+                                          cl_ulong.sizeof           , // size_t            param_value_size
+                                          &start_time               , // void*             param_value
+                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_rectangles" ~ cl_strerror(status));
         cl_ulong end_time;
-        status = clGetEventProfilingInfo ( event                     , // cl_event          event
-                                           CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
-                                           cl_ulong.sizeof           , // size_t            param_value_size
-                                           &end_time                 , // void*             param_value
-                                           null                     ); // size_t*           param_value_size_ret
-        assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
-        result += ( end_time - start_time ) / 1E9;
-        if ( i == max_blocks - 1 ) inc_blocks = -1;
+        status = clGetEventProfilingInfo (event                     , // cl_event          event
+                                          CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
+                                          cl_ulong.sizeof           , // size_t            param_value_size
+                                          &end_time                 , // void*             param_value
+                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_rectangles" ~ cl_strerror(status));
+        result += (end_time - start_time) / 1E9;
+        if (i == max_blocks - 1) inc_blocks = -1;
         cur_blocks += inc_blocks;
       }
-      status = clEnqueueReadBuffer( runtime.queue, dF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr, 0, null, null );             assert( status == CL_SUCCESS, "opencl_rectangles " ~ cl_strerror( status ) );
-      status = clReleaseMemObject( dS );                                                                                         assert( status == CL_SUCCESS, "opencl_rectangles " ~ cl_strerror( status ) );
-      status = clReleaseMemObject( dF );                                                                                         assert( status == CL_SUCCESS, "opencl_rectangles " ~ cl_strerror( status ) );
-      status = clReleaseKernel( kernel_rectangles );                                                                             assert( status == CL_SUCCESS, "opencl_rectangles " ~ cl_strerror( status ) );
+      status = clEnqueueReadBuffer(runtime.queue, dF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr, 0, null, null);             assert(status == CL_SUCCESS, "opencl_rectangles" ~ cl_strerror(status));
+      status = clReleaseMemObject(dS);                                                                                         assert(status == CL_SUCCESS, "opencl_rectangles" ~ cl_strerror(status));
+      status = clReleaseMemObject(dF);                                                                                         assert(status == CL_SUCCESS, "opencl_rectangles" ~ cl_strerror(status));
+      status = clReleaseKernel(kernel_rectangles);                                                                             assert(status == CL_SUCCESS, "opencl_rectangles" ~ cl_strerror(status));
     }
-    catch( Exception e )
+    catch(Exception e)
     {
-      write( e );
+      write(e);
       writeln();
     }
     return result;
@@ -911,71 +882,65 @@ class Application {
       cl_int status;
       cl_event event;
       cl_mem_flags flags = CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR;
-      cl_mem dS = clCreateBuffer( runtime.context, flags, cl_int.sizeof * BLOSUM62.length, BLOSUM62.ptr, &status );              assert( status == CL_SUCCESS, "opencl_rectangles_indirectS " ~ cl_strerror( status ) );
-      cl_mem dM = clCreateBuffer( runtime.context, flags, cl_int.sizeof * M.length, M.ptr, &status );                            assert( status == CL_SUCCESS, "opencl_rectangles_indirectS " ~ cl_strerror( status ) );
-      cl_mem dN = clCreateBuffer( runtime.context, flags, cl_int.sizeof * N.length, N.ptr, &status );                            assert( status == CL_SUCCESS, "opencl_rectangles_indirectS " ~ cl_strerror( status ) );
+      cl_mem dS = clCreateBuffer(runtime.context, flags, cl_int.sizeof * BLOSUM62.length, BLOSUM62.ptr, &status);              assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
+      cl_mem dM = clCreateBuffer(runtime.context, flags, cl_int.sizeof * M.length, M.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
+      cl_mem dN = clCreateBuffer(runtime.context, flags, cl_int.sizeof * N.length, N.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
       flags = CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR;
-      cl_mem dF = clCreateBuffer( runtime.context, flags, cl_int.sizeof * F.length, F.ptr, &status );                            assert( status == CL_SUCCESS, "opencl_rectangles_indirectS " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_rectangles_indirectS, 0, cl_mem.sizeof, &dS      );                                        assert( status == CL_SUCCESS, "opencl_rectangles_indirectS " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_rectangles_indirectS, 1, cl_mem.sizeof, &dM      );                                        assert( status == CL_SUCCESS, "opencl_rectangles_indirectS " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_rectangles_indirectS, 2, cl_mem.sizeof, &dN      );                                        assert( status == CL_SUCCESS, "opencl_rectangles_indirectS " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_rectangles_indirectS, 3, cl_mem.sizeof, &dF      );                                        assert( status == CL_SUCCESS, "opencl_rectangles_indirectS " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_rectangles_indirectS, 4, cl_int.sizeof, &cols    );                                        assert( status == CL_SUCCESS, "opencl_rectangles_indirectS " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_rectangles_indirectS, 5, cl_int.sizeof, &penalty );                                        assert( status == CL_SUCCESS, "opencl_rectangles_indirectS " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_rectangles_indirectS, 8, CHARS * CHARS * cl_int.sizeof, null );                            assert( status == CL_SUCCESS, "opencl_rectangles_indirectS " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_rectangles_indirectS, 9, (BLOCK_SIZE + 1) * (BLOCK_SIZE + 1) * cl_int.sizeof, null );      assert( status == CL_SUCCESS, "opencl_rectangles_indirectS " ~ cl_strerror( status ) );
+      cl_mem dF = clCreateBuffer(runtime.context, flags, cl_int.sizeof * F.length, F.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rectangles_indirectS, 0, cl_mem.sizeof, &dS     );                                        assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rectangles_indirectS, 1, cl_mem.sizeof, &dM     );                                        assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rectangles_indirectS, 2, cl_mem.sizeof, &dN     );                                        assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rectangles_indirectS, 3, cl_mem.sizeof, &dF     );                                        assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rectangles_indirectS, 4, cl_int.sizeof, &cols   );                                        assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rectangles_indirectS, 5, cl_int.sizeof, &penalty);                                        assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
       auto max_blocks = (cols - 1) / BLOCK_SIZE;
       auto cur_blocks = 1;
       auto inc_blocks = 1;
-      for ( int i = 0; i < 2 * max_blocks - 1; ++i )
+      for (int i = 0; i < 2 * max_blocks - 1; ++i)
       {
         size_t wgroup = BLOCK_SIZE;
         size_t global = BLOCK_SIZE * cur_blocks;
-        cl_int br = ( i < max_blocks ) ? i :     max_blocks - 1;
-        cl_int bc = ( i < max_blocks ) ? 0 : i - max_blocks + 1;
-        status = clSetKernelArg( kernel_rectangles_indirectS, 6, cl_int.sizeof, &br );                                           assert( status == CL_SUCCESS, "opencl_rectangles_indirectS " ~ cl_strerror( status ) );
-        status = clSetKernelArg( kernel_rectangles_indirectS, 7, cl_int.sizeof, &bc );                                           assert( status == CL_SUCCESS, "opencl_rectangles_indirectS " ~ cl_strerror( status ) );
-        status = clEnqueueNDRangeKernel( runtime.queue,
-                                         kernel_rectangles_indirectS,
-                                         1,
-                                         null,
-                                         &global,
-                                         &wgroup,
-                                         0,
-                                         null,
-                                         &event );
-        assert( status == CL_SUCCESS, "opencl_rectangles_indirectS " ~ cl_strerror( status ) );
-        status = clWaitForEvents( 1, &event );
-        assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
+        cl_int br = (i < max_blocks) ? i :     max_blocks - 1;
+        cl_int bc = (i < max_blocks) ? 0 : i - max_blocks + 1;
+        status = clSetKernelArg(kernel_rectangles_indirectS, 6, cl_int.sizeof, &br);                                           assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_rectangles_indirectS, 7, cl_int.sizeof, &bc);                                           assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
+        status = clEnqueueNDRangeKernel(runtime.queue,
+                                        kernel_rectangles_indirectS,
+                                        1,
+                                        null,
+                                        &global,
+                                        &wgroup,
+                                        0,
+                                        null,
+                                        &event);                                                                               assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
+        status = clWaitForEvents(1, &event);                                                                                   assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
 
         cl_ulong start_time;
-        status = clGetEventProfilingInfo ( event                     , // cl_event          event
-                                           CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
-                                           cl_ulong.sizeof           , // size_t            param_value_size
-                                           &start_time               , // void*             param_value
-                                           null                     ); // size_t*           param_value_size_ret
-        assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
+        status = clGetEventProfilingInfo (event                     , // cl_event          event
+                                          CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
+                                          cl_ulong.sizeof           , // size_t            param_value_size
+                                          &start_time               , // void*             param_value
+                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
         cl_ulong end_time;
-        status = clGetEventProfilingInfo ( event                     , // cl_event          event
-                                           CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
-                                           cl_ulong.sizeof           , // size_t            param_value_size
-                                           &end_time                 , // void*             param_value
-                                           null                     ); // size_t*           param_value_size_ret
-        assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
-        result += ( end_time - start_time ) / 1E9;
-        if ( i == max_blocks - 1 ) inc_blocks = -1;
+        status = clGetEventProfilingInfo (event                     , // cl_event          event
+                                          CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
+                                          cl_ulong.sizeof           , // size_t            param_value_size
+                                          &end_time                 , // void*             param_value
+                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
+        result += (end_time - start_time) / 1E9;
+        if (i == max_blocks - 1) inc_blocks = -1;
         cur_blocks += inc_blocks;
       }
-      status = clEnqueueReadBuffer( runtime.queue, dF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr, 0, null, null );             assert( status == CL_SUCCESS, "opencl_rectangles_indirectS " ~ cl_strerror( status ) );
-      status = clReleaseMemObject( dF );                                                                                         assert( status == CL_SUCCESS, "opencl_rectangles_indirectS " ~ cl_strerror( status ) );
-      status = clReleaseMemObject( dN );                                                                                         assert( status == CL_SUCCESS, "opencl_rectangles_indirectS " ~ cl_strerror( status ) );
-      status = clReleaseMemObject( dM );                                                                                         assert( status == CL_SUCCESS, "opencl_rectangles_indirectS " ~ cl_strerror( status ) );
-      status = clReleaseMemObject( dS );                                                                                         assert( status == CL_SUCCESS, "opencl_rectangles_indirectS " ~ cl_strerror( status ) );
-      status = clReleaseKernel( kernel_rectangles_indirectS );                                                                   assert( status == CL_SUCCESS, "opencl_rectangles_indirectS " ~ cl_strerror( status ) );
+      status = clEnqueueReadBuffer(runtime.queue, dF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr, 0, null, null);             assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
+      status = clReleaseMemObject(dF);                                                                                         assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
+      status = clReleaseMemObject(dN);                                                                                         assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
+      status = clReleaseMemObject(dM);                                                                                         assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
+      status = clReleaseMemObject(dS);                                                                                         assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
+      status = clReleaseKernel(kernel_rectangles_indirectS);                                                                   assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
     }
-    catch( Exception e )
+    catch(Exception e)
     {
-      write( e );
+      write(e);
       writeln();
     }
     return result;
@@ -992,103 +957,89 @@ class Application {
       cl_int status;
       cl_event event;
       cl_mem_flags flags = CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR;
-      cl_mem dS = clCreateBuffer( runtime.context, flags, cl_int.sizeof * S.length, S.ptr, &status );                            assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
+      cl_mem dS = clCreateBuffer(runtime.context, flags, cl_int.sizeof * S.length, S.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
       flags = CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR;
-      cl_mem dF = clCreateBuffer( runtime.context, flags, cl_int.sizeof * F.length, F.ptr, &status );                            assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_diamonds, 0, cl_mem.sizeof, &dS      );                                                    assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_diamonds, 1, cl_mem.sizeof, &dF      );                                                    assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_diamonds, 2, cl_int.sizeof, &cols    );                                                    assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_diamonds, 3, cl_int.sizeof, &penalty );                                                    assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_diamonds, 6,  BLOCK_SIZE      *  BLOCK_SIZE      * cl_int.sizeof, null );                  assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_diamonds, 7, (BLOCK_SIZE + 1) * (BLOCK_SIZE + 2) * cl_int.sizeof, null );                  assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
+      cl_mem dF = clCreateBuffer(runtime.context, flags, cl_int.sizeof * F.length, F.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_diamonds, 0, cl_mem.sizeof, &dS     );                                                    assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_diamonds, 1, cl_mem.sizeof, &dF     );                                                    assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_diamonds, 2, cl_int.sizeof, &cols   );                                                    assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_diamonds, 3, cl_int.sizeof, &penalty);                                                    assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
       size_t wgroup = BLOCK_SIZE;
-      auto groups = ( cols - 1 ) / BLOCK_SIZE;
-      for ( int i = 0; i < rows / BLOCK_SIZE; ++i )
+      auto groups = (cols - 1) / BLOCK_SIZE;
+      for (int i = 0; i < rows / BLOCK_SIZE; ++i)
       {
         cl_int br = i;
         cl_int bc = 1;
-        size_t global = ( ( 2 * i + bc ) * BLOCK_SIZE < cols - 1 ) ? BLOCK_SIZE * ( i + 1 ) : ( cols - 1 ) / 2;
-        status = clSetKernelArg( kernel_diamonds, 4, cl_int.sizeof, &br );                                                       assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
-        status = clSetKernelArg( kernel_diamonds, 5, cl_int.sizeof, &bc );                                                       assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
-        status = clEnqueueNDRangeKernel( runtime.queue, kernel_diamonds, 1, null, &global, &wgroup, 0, null, &event );
-        assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
-        status = clWaitForEvents( 1, &event );
-        assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
+        size_t global = ((2 * i + bc) * BLOCK_SIZE < cols - 1) ? BLOCK_SIZE * (i + 1) : (cols - 1) / 2;
+        status = clSetKernelArg(kernel_diamonds, 4, cl_int.sizeof, &br);                                                       assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_diamonds, 5, cl_int.sizeof, &bc);                                                       assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
+        status = clEnqueueNDRangeKernel(runtime.queue, kernel_diamonds, 1, null, &global, &wgroup, 0, null, &event);           assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
+        status = clWaitForEvents(1, &event);                                                                                   assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
 
         cl_ulong start_time;
-        status = clGetEventProfilingInfo ( event                     , // cl_event          event
-                                           CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
-                                           cl_ulong.sizeof           , // size_t            param_value_size
-                                           &start_time               , // void*             param_value
-                                           null                     ); // size_t*           param_value_size_ret
-        assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
+        status = clGetEventProfilingInfo (event                     , // cl_event          event
+                                          CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
+                                          cl_ulong.sizeof           , // size_t            param_value_size
+                                          &start_time               , // void*             param_value
+                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
         cl_ulong end_time;
-        status = clGetEventProfilingInfo ( event                     , // cl_event          event
-                                           CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
-                                           cl_ulong.sizeof           , // size_t            param_value_size
-                                           &end_time                 , // void*             param_value
-                                           null                     ); // size_t*           param_value_size_ret
-        assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
-        result += ( end_time - start_time ) / 1E9;
+        status = clGetEventProfilingInfo (event                     , // cl_event          event
+                                          CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
+                                          cl_ulong.sizeof           , // size_t            param_value_size
+                                          &end_time                 , // void*             param_value
+                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
+        result += (end_time - start_time) / 1E9;
         bc = 2;
-        global = ( ( 2 * i + bc ) * BLOCK_SIZE < cols - 1 ) ? BLOCK_SIZE * ( i + 1 ) : ( cols - 1 ) / 2 - BLOCK_SIZE;
-        if ( global == 0 ) continue;
-        status = clSetKernelArg( kernel_diamonds, 5, cl_int.sizeof, &bc );                                                       assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
-        status = clEnqueueNDRangeKernel( runtime.queue, kernel_diamonds, 1, null, &global, &wgroup, 0, null, &event );
-        assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
-        status = clWaitForEvents( 1, &event );
-        assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
+        global = ((2 * i + bc) * BLOCK_SIZE < cols - 1) ? BLOCK_SIZE * (i + 1) : (cols - 1) / 2 - BLOCK_SIZE;
+        if (global == 0) continue;
+        status = clSetKernelArg(kernel_diamonds, 5, cl_int.sizeof, &bc);                                                       assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
+        status = clEnqueueNDRangeKernel(runtime.queue, kernel_diamonds, 1, null, &global, &wgroup, 0, null, &event);           assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
+        status = clWaitForEvents(1, &event);                                                                                   assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
 
-        status = clGetEventProfilingInfo ( event                     , // cl_event          event
-                                           CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
-                                           cl_ulong.sizeof           , // size_t            param_value_size
-                                           &start_time               , // void*             param_value
-                                           null                     ); // size_t*           param_value_size_ret
-        assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
-        status = clGetEventProfilingInfo ( event                     , // cl_event          event
-                                           CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
-                                           cl_ulong.sizeof           , // size_t            param_value_size
-                                           &end_time                 , // void*             param_value
-                                           null                     ); // size_t*           param_value_size_ret
-        assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
-        result += ( end_time - start_time ) / 1E9;
+        status = clGetEventProfilingInfo (event                     , // cl_event          event
+                                          CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
+                                          cl_ulong.sizeof           , // size_t            param_value_size
+                                          &start_time               , // void*             param_value
+                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
+        status = clGetEventProfilingInfo (event                     , // cl_event          event
+                                          CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
+                                          cl_ulong.sizeof           , // size_t            param_value_size
+                                          &end_time                 , // void*             param_value
+                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
+        result += (end_time - start_time) / 1E9;
       }
-      for ( int i = 1; i < cols / BLOCK_SIZE; ++i )
+      for (int i = 1; i < cols / BLOCK_SIZE; ++i)
       {
         cl_int br = rows / BLOCK_SIZE - 1;
         cl_int bc = i;
-        size_t global = BLOCK_SIZE * ( ( groups - bc + 1 ) / 2 );
-        status = clSetKernelArg( kernel_diamonds, 4, cl_int.sizeof, &br );                                                       assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
-        status = clSetKernelArg( kernel_diamonds, 5, cl_int.sizeof, &bc );                                                       assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
-        status = clEnqueueNDRangeKernel( runtime.queue, kernel_diamonds, 1, null, &global, &wgroup, 0, null, &event );
-        assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
-        status = clWaitForEvents( 1, &event );
-        assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
+        size_t global = BLOCK_SIZE * ((groups - bc + 1) / 2);
+        status = clSetKernelArg(kernel_diamonds, 4, cl_int.sizeof, &br);                                                       assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_diamonds, 5, cl_int.sizeof, &bc);                                                       assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
+        status = clEnqueueNDRangeKernel(runtime.queue, kernel_diamonds, 1, null, &global, &wgroup, 0, null, &event);           assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
+        status = clWaitForEvents(1, &event);                                                                                   assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
 
         cl_ulong start_time;
-        status = clGetEventProfilingInfo ( event                     , // cl_event          event
-                                           CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
-                                           cl_ulong.sizeof           , // size_t            param_value_size
-                                           &start_time               , // void*             param_value
-                                           null                     ); // size_t*           param_value_size_ret
-        assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
+        status = clGetEventProfilingInfo (event                     , // cl_event          event
+                                          CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
+                                          cl_ulong.sizeof           , // size_t            param_value_size
+                                          &start_time               , // void*             param_value
+                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror(status));
         cl_ulong end_time;
-        status = clGetEventProfilingInfo ( event                     , // cl_event          event
-                                           CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
-                                           cl_ulong.sizeof           , // size_t            param_value_size
-                                           &end_time                 , // void*             param_value
-                                           null                     ); // size_t*           param_value_size_ret
-        assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
-        result += ( end_time - start_time ) / 1E9;
+        status = clGetEventProfilingInfo (event                     , // cl_event          event
+                                          CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
+                                          cl_ulong.sizeof           , // size_t            param_value_size
+                                          &end_time                 , // void*             param_value
+                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror(status));
+        result += (end_time - start_time) / 1E9;
       }
-      status = clEnqueueReadBuffer( runtime.queue, dF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr, 0, null, null );             assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
-      status = clReleaseMemObject( dS );                                                                                         assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
-      status = clReleaseMemObject( dF );                                                                                         assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
-      status = clReleaseKernel( kernel_diamonds );                                                                               assert( status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror( status ) );
+      status = clEnqueueReadBuffer(runtime.queue, dF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr, 0, null, null);             assert(status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror(status));
+      status = clReleaseMemObject(dS);                                                                                         assert(status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror(status));
+      status = clReleaseMemObject(dF);                                                                                         assert(status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror(status));
+      status = clReleaseKernel(kernel_diamonds);                                                                               assert(status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror(status));
     }
-    catch( Exception e )
+    catch(Exception e)
     {
-      write( e );
+      write(e);
       writeln();
     }
     return result;
@@ -1105,124 +1056,95 @@ class Application {
       cl_int status;
       cl_event event;
       cl_mem_flags flags = CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR;
-      cl_mem dS = clCreateBuffer( runtime.context, flags, cl_int.sizeof * BLOSUM62.length, BLOSUM62.ptr, &status );
-      assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
-      cl_mem dM = clCreateBuffer( runtime.context, flags, cl_int.sizeof * M.length, M.ptr, &status );
-      assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
-      cl_mem dN = clCreateBuffer( runtime.context, flags, cl_int.sizeof * N.length, N.ptr, &status );
-      assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
+      cl_mem dS = clCreateBuffer(runtime.context, flags, cl_int.sizeof * BLOSUM62.length, BLOSUM62.ptr, &status);              assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
+      cl_mem dM = clCreateBuffer(runtime.context, flags, cl_int.sizeof * M.length, M.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
+      cl_mem dN = clCreateBuffer(runtime.context, flags, cl_int.sizeof * N.length, N.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
       flags = CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR;
-      cl_mem dF = clCreateBuffer( runtime.context, flags, cl_int.sizeof * F.length, F.ptr, &status );
-      assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_diamonds_indirectS, 0, cl_mem.sizeof, &dS      );
-      assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_diamonds_indirectS, 1, cl_mem.sizeof, &dM      );
-      assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_diamonds_indirectS, 2, cl_mem.sizeof, &dN      );
-      assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_diamonds_indirectS, 3, cl_mem.sizeof, &dF      );
-      assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_diamonds_indirectS, 4, cl_int.sizeof, &cols    );
-      assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_diamonds_indirectS, 5, cl_int.sizeof, &penalty );
-      assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_diamonds_indirectS, 8, CHARS * CHARS * cl_int.sizeof, null );
-      assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_diamonds_indirectS, 9, (BLOCK_SIZE + 1) * (BLOCK_SIZE + 2) * cl_int.sizeof, null );
-      assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
+      cl_mem dF = clCreateBuffer(runtime.context, flags, cl_int.sizeof * F.length, F.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_diamonds_indirectS, 0, cl_mem.sizeof, &dS     );                                          assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_diamonds_indirectS, 1, cl_mem.sizeof, &dM     );                                          assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_diamonds_indirectS, 2, cl_mem.sizeof, &dN     );                                          assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_diamonds_indirectS, 3, cl_mem.sizeof, &dF     );                                          assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_diamonds_indirectS, 4, cl_int.sizeof, &cols   );                                          assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_diamonds_indirectS, 5, cl_int.sizeof, &penalty);                                          assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
       size_t wgroup = BLOCK_SIZE;
-      auto groups = ( cols - 1 ) / BLOCK_SIZE;
-      for ( int i = 0; i < rows / BLOCK_SIZE - 1; ++i )
+      auto groups = (cols - 1) / BLOCK_SIZE;
+      for (int i = 0; i < rows / BLOCK_SIZE - 1; ++i)
       {
         cl_int br = i;
         cl_int bc = 1;
-        size_t global = ( ( 2 * i + bc ) * BLOCK_SIZE < cols - 1 ) ? BLOCK_SIZE * ( i + 1 ) : ( cols - 1 ) / 2;
-        status = clSetKernelArg( kernel_diamonds_indirectS, 6, cl_int.sizeof, &br );
-        assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
-        status = clSetKernelArg( kernel_diamonds_indirectS, 7, cl_int.sizeof, &bc );
-        assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
-        status = clEnqueueNDRangeKernel( runtime.queue, kernel_diamonds_indirectS, 1, null, &global, &wgroup, 0, null, &event );
-        assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
-        status = clWaitForEvents( 1, &event );
-        assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
+        size_t global = ((2 * i + bc) * BLOCK_SIZE < cols - 1) ? BLOCK_SIZE * (i + 1) : (cols - 1) / 2;
+        status = clSetKernelArg(kernel_diamonds_indirectS, 6, cl_int.sizeof, &br);                                             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_diamonds_indirectS, 7, cl_int.sizeof, &bc);                                             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
+        status = clEnqueueNDRangeKernel(runtime.queue, kernel_diamonds_indirectS, 1, null, &global, &wgroup, 0, null, &event); assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
+        status = clWaitForEvents(1, &event);                                                                                   assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
 
         cl_ulong start_time;
-        status = clGetEventProfilingInfo ( event                     , // cl_event          event
-                                           CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
-                                           cl_ulong.sizeof           , // size_t            param_value_size
-                                           &start_time               , // void*             param_value
-                                           null                     ); // size_t*           param_value_size_ret
-        assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
+        status = clGetEventProfilingInfo (event                     , // cl_event          event
+                                          CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
+                                          cl_ulong.sizeof           , // size_t            param_value_size
+                                          &start_time               , // void*             param_value
+                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
         cl_ulong end_time;
-        status = clGetEventProfilingInfo ( event                     , // cl_event          event
-                                           CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
-                                           cl_ulong.sizeof           , // size_t            param_value_size
-                                           &end_time                 , // void*             param_value
-                                           null                     ); // size_t*           param_value_size_ret
-        assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
-        result += ( end_time - start_time ) / 1E9;
+        status = clGetEventProfilingInfo (event                     , // cl_event          event
+                                          CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
+                                          cl_ulong.sizeof           , // size_t            param_value_size
+                                          &end_time                 , // void*             param_value
+                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
+        result += (end_time - start_time) / 1E9;
         bc = 2;
-        global = ( ( 2 * i + bc ) * BLOCK_SIZE < cols - 1 ) ? BLOCK_SIZE * ( i + 1 ) : ( cols - 1 ) / 2 - BLOCK_SIZE;
-        if ( global == 0 ) continue;
-        status = clSetKernelArg( kernel_diamonds_indirectS, 7, cl_int.sizeof, &bc );
-        assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
-        status = clEnqueueNDRangeKernel( runtime.queue, kernel_diamonds_indirectS, 1, null, &global, &wgroup, 0, null, &event );
-        assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
-        status = clWaitForEvents( 1, &event );
-        assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
+        global = ((2 * i + bc) * BLOCK_SIZE < cols - 1) ? BLOCK_SIZE * (i + 1) : (cols - 1) / 2 - BLOCK_SIZE;
+        if (global == 0) continue;
+        status = clSetKernelArg(kernel_diamonds_indirectS, 7, cl_int.sizeof, &bc);                                             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
+        status = clEnqueueNDRangeKernel(runtime.queue, kernel_diamonds_indirectS, 1, null, &global, &wgroup, 0, null, &event); assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
+        status = clWaitForEvents(1, &event);                                                                                   assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
 
-        status = clGetEventProfilingInfo ( event                     , // cl_event          event
-                                           CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
-                                           cl_ulong.sizeof           , // size_t            param_value_size
-                                           &start_time               , // void*             param_value
-                                           null                     ); // size_t*           param_value_size_ret
-        assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
-        status = clGetEventProfilingInfo ( event                     , // cl_event          event
-                                           CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
-                                           cl_ulong.sizeof           , // size_t            param_value_size
-                                           &end_time                 , // void*             param_value
-                                           null                     ); // size_t*           param_value_size_ret
-        assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
-        result += ( end_time - start_time ) / 1E9;
+        status = clGetEventProfilingInfo (event                     , // cl_event          event
+                                          CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
+                                          cl_ulong.sizeof           , // size_t            param_value_size
+                                          &start_time               , // void*             param_value
+                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
+        status = clGetEventProfilingInfo (event                     , // cl_event          event
+                                          CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
+                                          cl_ulong.sizeof           , // size_t            param_value_size
+                                          &end_time                 , // void*             param_value
+                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
+        result += (end_time - start_time) / 1E9;
       }
-      for ( int i = 1; i < cols / BLOCK_SIZE; ++i )
+      for (int i = 1; i < cols / BLOCK_SIZE; ++i)
       {
         cl_int br = rows / BLOCK_SIZE - 1;
         cl_int bc = i;
-        size_t global = BLOCK_SIZE * ( ( groups - bc + 1 ) / 2 );
-        status = clSetKernelArg( kernel_diamonds_indirectS, 6, cl_int.sizeof, &br );                                             assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
-        status = clSetKernelArg( kernel_diamonds_indirectS, 7, cl_int.sizeof, &bc );                                             assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
-        status = clEnqueueNDRangeKernel( runtime.queue, kernel_diamonds_indirectS, 1, null, &global, &wgroup, 0, null, &event );
-        assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
-        status = clWaitForEvents( 1, &event );
-        assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
+        size_t global = BLOCK_SIZE * ((groups - bc + 1) / 2);
+        status = clSetKernelArg(kernel_diamonds_indirectS, 6, cl_int.sizeof, &br);                                             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_diamonds_indirectS, 7, cl_int.sizeof, &bc);                                             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
+        status = clEnqueueNDRangeKernel(runtime.queue, kernel_diamonds_indirectS, 1, null, &global, &wgroup, 0, null, &event); assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
+        status = clWaitForEvents(1, &event);                                                                                   assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
 
         cl_ulong start_time;
-        status = clGetEventProfilingInfo ( event                     , // cl_event          event
-                                           CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
-                                           cl_ulong.sizeof           , // size_t            param_value_size
-                                           &start_time               , // void*             param_value
-                                           null                     ); // size_t*           param_value_size_ret
-        assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
+        status = clGetEventProfilingInfo (event                     , // cl_event          event
+                                          CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
+                                          cl_ulong.sizeof           , // size_t            param_value_size
+                                          &start_time               , // void*             param_value
+                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
         cl_ulong end_time;
-        status = clGetEventProfilingInfo ( event                     , // cl_event          event
-                                           CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
-                                           cl_ulong.sizeof           , // size_t            param_value_size
-                                           &end_time                 , // void*             param_value
-                                           null                     ); // size_t*           param_value_size_ret
-        assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
-        result += ( end_time - start_time ) / 1E9;
+        status = clGetEventProfilingInfo (event                     , // cl_event          event
+                                          CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
+                                          cl_ulong.sizeof           , // size_t            param_value_size
+                                          &end_time                 , // void*             param_value
+                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
+        result += (end_time - start_time) / 1E9;
       }
-      status = clEnqueueReadBuffer( runtime.queue, dF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr, 0, null, null );             assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
-      status = clReleaseMemObject( dF );                                                                                         assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
-      status = clReleaseMemObject( dN );                                                                                         assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
-      status = clReleaseMemObject( dM );                                                                                         assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
-      status = clReleaseMemObject( dS );                                                                                         assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
-      status = clReleaseKernel( kernel_diamonds_indirectS );                                                                     assert( status == CL_SUCCESS, "opencl_diamonds_indirectS " ~ cl_strerror( status ) );
+      status = clEnqueueReadBuffer(runtime.queue, dF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr, 0, null, null);             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
+      status = clReleaseMemObject(dF);                                                                                         assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
+      status = clReleaseMemObject(dN);                                                                                         assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
+      status = clReleaseMemObject(dM);                                                                                         assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
+      status = clReleaseMemObject(dS);                                                                                         assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
+      status = clReleaseKernel(kernel_diamonds_indirectS);                                                                     assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
     }
-    catch( Exception e )
+    catch(Exception e)
     {
-      write( e );
+      write(e);
       writeln();
     }
     return result;
@@ -1230,37 +1152,35 @@ class Application {
 
   /**
    */
-  void clop_dsl()
+  void clop_nw()
   {
     // use CLOP DSL to generate OpenCL kernel and API calls.
-    mixin( compile(
-    q{
-      int max3( int a, int b, int c )
+    mixin(compile(q{
+      int max3(int a, int b, int c)
       {
         int k = a > b ? a : b;
         return k > c ? k : c;
       }
       Antidiagonal NDRange(r : 1 .. rows, c : 1 .. cols) {
-        F[r, c] = max3( F[r - 1, c - 1] + S[r, c], F[r, c - 1] - penalty, F[r - 1, c] - penalty );
-      } apply( rectangular_blocking( 8, 8 ) )
-    } ) );
+        F[r, c] = max3(F[r - 1, c - 1] + S[r, c], F[r, c - 1] - penalty, F[r - 1, c] - penalty);
+      } apply(rectangular_blocking(BLOCK_SIZE, BLOCK_SIZE))
+    }));
   }
 
   /**
    */
-  void clop_dsl_indirectS()
+  void clop_nw_indirectS()
   {
-    mixin( compile(
-    q{
-      int max3( int a, int b, int c )
+    mixin(compile(q{
+      int max3(int a, int b, int c)
       {
         int k = a > b ? a : b;
         return k > c ? k : c;
       }
       Antidiagonal NDRange(r : 1 .. rows, c : 1 .. cols) {
-        F[r, c] = max3( F[r - 1, c - 1] + BLOSUM62[M[r] * CHARS + N[c]], F[r, c - 1] - penalty, F[r - 1, c] - penalty );
-      } apply( rectangular_blocking( 8, 8 ), prefetching() )
-    } ) );
+        F[r, c] = max3(F[r - 1, c - 1] + BLOSUM62[M[r] * CHARS + N[c]], F[r, c - 1] - penalty, F[r - 1, c] - penalty);
+      } apply(rectangular_blocking(BLOCK_SIZE, BLOCK_SIZE), prefetching())
+    }));
   }
 
   /**
@@ -1270,16 +1190,16 @@ class Application {
     size_t size;
     StopWatch timer;
     TickDuration ticks;
-    double benchmark = runtime.benchmark( (rows - 1) * (cols - 1) );
+    double benchmark = runtime.benchmark((rows - 1) * (cols - 1));
     double time;
 
     timer.start();
-    baseline_sequential();
+    baseline_nw();
     timer.stop();
     ticks = timer.peek();
-    writefln( "%2.0f MI SEQUENTIAL %5.3f [s]",
+    writefln("%2.0f MI BASELINE   %5.3f [s]",
               (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
-              ticks.usecs / 1E6 );
+              ticks.usecs / 1E6);
     G[] = F[];
 
     if (do_animate)
@@ -1303,11 +1223,11 @@ class Application {
     time = opencl_noblocks();
     timer.stop();
     ticks = timer.peek();
-    writefln( "%2.0f MI CL NOBLOCK %5.3f (%5.3f) [s], %7.2f MI/s, estimated %7.2f MI/s",
+    writefln("%2.0f MI CL NOBLOCK %5.3f (%5.3f) [s], %7.2f MI/s, estimated %7.2f MI/s",
               (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
               ticks.usecs / 1E6, time,
               (rows - 1) * (cols - 1) / (1024 * 1024 * time),
-              2 * benchmark / 5 );
+              2 * benchmark / 5);
     verify();
 
     reset();
@@ -1316,76 +1236,67 @@ class Application {
     time = opencl_noblocks_indirectS();
     timer.stop();
     ticks = timer.peek();
-    writefln( "%2.0f MI CL NB INDI %5.3f (%5.3f) [s], %7.2f MI/s",
+    writefln("%2.0f MI CL INDIREC %5.3f (%5.3f) [s], %7.2f MI/s",
               (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
               ticks.usecs / 1E6, time,
-              (rows - 1) * (cols - 1) / (1024 * 1024 * time) );
+              (rows - 1) * (cols - 1) / (1024 * 1024 * time));
     verify();
 
-    clGetKernelWorkGroupInfo( kernel_rectangles,
-                              runtime.device,
-                              CL_KERNEL_WORK_GROUP_SIZE,
-                              size.sizeof,
-                              &size,
-                              null );
-    if ( size >= BLOCK_SIZE )
-    {
-      reset();
-      timer.reset();
-      timer.start();
-      time = opencl_rectangles();
-      timer.stop();
-      ticks = timer.peek();
-      writefln( "%2.0f MI CL BLOCKS  %5.3f (%5.3f) [s], %7.2f MI/s",
-                (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
-                ticks.usecs / 1E6, time,
-                (rows - 1) * (cols - 1) / (1024 * 1024 * time) );
-      verify();
+    reset();
+    timer.reset();
+    timer.start();
+    time = opencl_rectangles();
+    timer.stop();
+    ticks = timer.peek();
+    writefln("%2.0f MI CL BLOCKS  %5.3f (%5.3f) [s], %7.2f MI/s",
+              (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
+              ticks.usecs / 1E6, time,
+              (rows - 1) * (cols - 1) / (1024 * 1024 * time));
+    verify();
 
-      reset();
-      timer.reset();
-      timer.start();
-      time = opencl_rectangles_indirectS();
-      timer.stop();
-      ticks = timer.peek();
-      writefln( "%2.0f MI CL BL INDI %5.3f (%5.3f) [s], %7.2f MI/s",
-                (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
-                ticks.usecs / 1E6, time,
-                (rows - 1) * (cols - 1) / (1024 * 1024 * time) );
-      verify();
+    reset();
+    timer.reset();
+    timer.start();
+    time = opencl_rectangles_indirectS();
+    timer.stop();
+    ticks = timer.peek();
+    writefln("%2.0f MI CL BL INDI %5.3f (%5.3f) [s], %7.2f MI/s",
+              (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
+              ticks.usecs / 1E6, time,
+              (rows - 1) * (cols - 1) / (1024 * 1024 * time));
+    verify();
 
-      reset();
-      timer.reset();
-      timer.start();
-      time = opencl_diamonds();
-      timer.stop();
-      ticks = timer.peek();
-      writefln( "%2.0f MI CL DIAMOND %5.3f (%5.3f) [s], %7.2f MI/s",
-                (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
-                ticks.usecs / 1E6, time,
-                (rows - 1) * (cols - 1) / (1024 * 1024 * time) );
-      verify();
+    reset();
+    timer.reset();
+    timer.start();
+    time = opencl_diamonds();
+    timer.stop();
+    ticks = timer.peek();
+    writefln("%2.0f MI CL DIAMOND %5.3f (%5.3f) [s], %7.2f MI/s",
+              (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
+              ticks.usecs / 1E6, time,
+              (rows - 1) * (cols - 1) / (1024 * 1024 * time));
+    verify();
 
-      reset();
-      timer.reset();
-      timer.start();
-      time = opencl_diamonds_indirectS();
-      timer.stop();
-      ticks = timer.peek();
-      writefln( "%2.0f MI CL D INDIR %5.3f (%5.3f) [s], %7.2f MI/s",
-                (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
-                ticks.usecs / 1E6, time,
-                (rows - 1) * (cols - 1) / (1024 * 1024 * time) );
-      verify();
+    reset();
+    timer.reset();
+    timer.start();
+    time = opencl_diamonds_indirectS();
+    timer.stop();
+    ticks = timer.peek();
+    writefln("%2.0f MI CL D INDIR %5.3f (%5.3f) [s], %7.2f MI/s",
+              (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
+              ticks.usecs / 1E6, time,
+              (rows - 1) * (cols - 1) / (1024 * 1024 * time));
+    verify();
 
-      reset();
-      clop_dsl();
-      verify();
+    reset();
+    clop_nw();
+    verify();
 
-      reset();
-      clop_dsl_indirectS();
-      verify();
-    }
+    reset();
+    clop_nw_indirectS();
+    verify();
   }
 }
 
