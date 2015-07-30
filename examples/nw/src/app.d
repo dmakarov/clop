@@ -26,6 +26,7 @@ module clop.examples.nw;
 
 import std.conv;
 import std.datetime;
+import std.format;
 import std.getopt;
 import std.random;
 import std.stdio;
@@ -34,12 +35,11 @@ import derelict.opencl.cl;
 
 import clop.compiler;
 
-/++
- +/
+/**
+ */
 class Application {
   static immutable int SEED  =  1;
   static immutable int CHARS = 24;
-  static immutable int BLOCK_SIZE = 16;
   static int[CHARS * CHARS] BLOSUM62 = [
    4, -1, -2, -2,  0, -1, -1,  0, -2, -1, -1, -1, -1, -2, -1,  1,  0, -3, -2,  0, -2, -1,  0, -4,
   -1,  5,  0, -2, -3,  1,  0, -2,  0, -3, -2,  2, -1, -3, -2, -1, -1, -3, -2, -3, -1,  0, -1, -4,
@@ -66,20 +66,16 @@ class Application {
    0, -1, -1, -1, -2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -2,  0,  0, -2, -1, -1, -1, -1, -1, -4,
   -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4,  1];
 
-  int[] A; // reconstructed aligned sequence A
-  int[] B; // reconstructed aligned sequence B
+  const uint BLOCK_SIZE;
+
+  NDArray!int F; // matrix of computed scores
+  NDArray!int S; // matrix of matches
   int[] M; // characters of sequence A
   int[] N; // characters of sequence B
-  NDArray!int F; // matrix of computed scores
   int[] G; // copy of F for validation
-  NDArray!int S; // matrix of matches
-  int[] I; // map of reads
-  int[] O; // map of writes
-  int[] Z; // map of shared memory accesses
   int rows;
   int cols;
   int penalty;
-  string outfile;
 
   cl_kernel kernel_noblocks;
   cl_kernel kernel_noblocks_indirectS;
@@ -88,41 +84,36 @@ class Application {
   cl_kernel kernel_diamonds;
   cl_kernel kernel_diamonds_indirectS;
 
+  bool do_animate = false;
+  bool do_verify = false;
+  History history;
 
-  /++
-   +/
+  /**
+   */
   this(string[] args)
   {
-    getopt(args, "output|o", &outfile);
+    uint block_size = 16;
+    getopt(args, "animate|a", &do_animate, "block_size|b", &block_size, "verify|v", &do_verify);
     if (args.length != 3)
     {
-      throw new Exception("ERROR: invalid args # " ~ to!(string)(args.length - 1));
+      writefln("Usage: %s [-a -b <block size> -v] <sequence length> <penalty>", args[0]);
+      throw new Exception("invalid command line arguments");
     }
+    BLOCK_SIZE = block_size;
     rows    = to!(int)(args[1]) + 1;
     cols    = to!(int)(args[1]) + 1;
     penalty = to!(int)(args[2]);
-    if ((rows - 1) % 16 != 0)
+    if ((rows - 1) % BLOCK_SIZE != 0)
     {
       auto r = to!(string)(rows - 1);
       auto b = to!(string)(BLOCK_SIZE);
       throw new Exception("ERROR: rows # (" ~ r ~ ") must be a multiple of " ~ b);
     }
-    S = new NDArray!int(rows, cols); assert(S !is null, "Can't allocate array S");
     F = new NDArray!int(rows, cols); assert(F !is null, "Can't allocate array F");
-
+    S = new NDArray!int(rows, cols); assert(S !is null, "Can't allocate array S");
     G = new int[rows * cols]; assert(G !is null, "Can't allocate array G");
     M = new int[rows];        assert(M !is null, "Can't allocate array M");
     N = new int[cols];        assert(N !is null, "Can't allocate array N");
-    A = new int[rows];        assert(A !is null, "Can't allocate array A");
-    B = new int[cols];        assert(B !is null, "Can't allocate array B");
-
-
-    debug (DEBUG)
-    {
-      I = new int[rows * cols]; assert(I !is null, "Can't allocate array I");
-      O = new int[rows * cols]; assert(O !is null, "Can't allocate array O");
-      Z = new int[(BLOCK_SIZE + 1) * (BLOCK_SIZE + 2)]; assert(Z !is null, "Can't allocate array Z");
-    }
 
     Mt19937 gen;
     gen.seed(SEED);
@@ -140,11 +131,9 @@ class Application {
       foreach (c; 1 .. cols)
         S[r * cols + c] = BLOSUM62[M[r] * CHARS + N[c]];
 
-    /++
-     +/
+    /**
+     */
     char[] code = q{
-      #define BLOCK_SIZE 16
-      #define CHARS      24
       #define I(r,c)     ((r) * cols + (c))
 
       int max3( int a, int b, int c );
@@ -155,6 +144,8 @@ class Application {
         return k > c ? k : c;
       }
 
+      /**
+       */
       __kernel void
       nw_noblocks(__global const int* S,
                   __global       int* F,
@@ -484,14 +475,15 @@ class Application {
     size_t size = code.length;
     char*[] strs = [code.ptr];
     auto program = clCreateProgramWithSource(runtime.context, 1, strs.ptr, &size, &status);
-    assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
-    status = clBuildProgram(program, 1, &runtime.device, "", null, null);
-
+    assert(status == CL_SUCCESS, "this" ~ cl_strerror(status));
+    auto clopts = format("-DBLOCK_SIZE=%s -DCHARS=%s", BLOCK_SIZE, CHARS);
+    status = clBuildProgram(program, 1, &runtime.device, clopts.ptr, null, null);
     if (status != CL_SUCCESS)
     {
-      char[3072] log;
-      clGetProgramBuildInfo(program, runtime.device, CL_PROGRAM_BUILD_LOG, 3071, log.ptr, null);
-      writeln("CL_PROGRAM_BUILD_LOG:\n", log, "\nEOD");
+      char[4096] log;
+      size_t log_size;
+      clGetProgramBuildInfo(program, runtime.device, CL_PROGRAM_BUILD_LOG, log.length, log.ptr, &log_size);
+      writeln("CL_PROGRAM_BUILD_LOG:\n", log[0 .. log_size - 1], "\nEOL");
     }
 
     assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
@@ -509,124 +501,83 @@ class Application {
     assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
     status = clReleaseProgram(program);
     assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
-
-    static if (false)
-    { // an example of getting the correct maximum work group
-      // size. device info on OS X reports an incorrect value.
-      size_t max_group_size;
-      clGetKernelWorkGroupInfo(kernel_rectangles, runtime.device, CL_KERNEL_WORK_GROUP_SIZE, max_group_size.sizeof, &max_group_size, null);
+    if (do_animate)
+    {
+      history = new History("a.tex", rows);
     }
   } // this()
 
-  /++
-   +/
-  void save()
+  long I(long i, long j)
   {
-    if (outfile !is null)
+    return i * cols + j;
+  }
+
+  /**
+   */
+  void verify()
+  {
+    if (do_verify)
     {
-      auto fp = File( outfile, "w" );
-      for ( int ii = 1; ii < rows - 1; ++ii ) fp.writef( "%c", to!(char)(M[ii] + 'A') ); fp.writeln();
-      for ( int ii = 1; ii < cols - 1; ++ii ) fp.writef( "%c", to!(char)(N[ii] + 'A') ); fp.writeln( "\n" );
-      for ( int ii = 1; ii < rows - 1; ++ii ) fp.writef( "%c", to!(char)(A[ii] + 'A') ); fp.writeln();
-      for ( int ii = 1; ii < cols - 1; ++ii ) fp.writef( "%c", to!(char)(B[ii] + 'A') ); fp.writeln( "\n" );
-      fp.close();
+      auto diff = 0;
+      foreach (ii; 0 .. F.length)
+        if (F[ii] != G[ii])
+          ++diff;
+      if (diff > 0)
+        writeln("DIFFs ", diff);
     }
   }
 
-  /++
-   +/
-  void validate()
-  {
-    int diff = 0;
-    foreach ( ii; 0 .. F.length )
-      if ( F[ii] != G[ii] )
-        ++diff;
-    if ( diff > 0 )
-      writeln( "DIFFs ", diff );
-  }
-
-  /++
-   +/
+  /**
+   */
   void reset()
   {
     F[] = 0;
-    foreach ( c; 0 .. cols ) F[c       ] = -penalty * c;
-    foreach ( r; 1 .. rows ) F[r * cols] = -penalty * r;
+    foreach (c; 0 .. cols) F[c       ] = -penalty * c;
+    foreach (r; 1 .. rows) F[r * cols] = -penalty * r;
   }
 
-  /++
-   +/
-  void print( const string msg, const int[] A ) const
+  /**
+   */
+  void print(const string msg, const int[] A) const
   {
-    writeln( msg );
-    foreach ( r; 0 .. rows )
+    writeln(msg);
+    foreach (r; 0 .. rows)
     {
-      writef( "%4d", A[r * cols] );
-      foreach ( c; 1 .. cols )
-        writef( " %4d", A[r * cols + c] );
+      writef("%4d", A[r * cols]);
+      foreach (c; 1 .. cols)
+        writef(" %4d", A[r * cols + c]);
       writeln();
     }
   }
 
-  /++
-   +/
-  void visualize()
-  {
-    // dumps.
-    foreach ( int r; 0 .. rows )
-    {
-      foreach ( int c; 0 .. cols )
-        if ( I[r * cols + c] == 0 ) write( " ." );
-        else                        write( " ", I[r * cols + c] );
-      writeln();
-    }
-    foreach ( int j; 0 .. cols ) write( "~~" ); writeln();
-    foreach ( r; 0 .. BLOCK_SIZE + 1 )
-    {
-      foreach ( c; 0 .. BLOCK_SIZE + 2 )
-        if ( Z[r * (BLOCK_SIZE + 2) + c] == 0 ) write( " ." );
-        else                                    write( " ", Z[r * (BLOCK_SIZE + 2) + c] );
-      writeln();
-    }
-    foreach ( int j; 0 .. cols ) write( "~~" ); writeln();
-    foreach ( int r; 0 .. rows )
-    {
-      foreach ( int c; 0 .. cols )
-        if ( O[r * cols + c] == 0 ) write( " ." );
-        else                        write( " ", O[r * cols + c] );
-      writeln();
-    }
-    foreach ( int j; 0 .. cols ) write( "XX" ); writeln( "\n" );
-  }
-
-  /++
-   + Maximum of three numbers.
-   +/
-  int max3( immutable int a, immutable int b, immutable int c ) const
+  /**
+   * Maximum of three numbers.
+   */
+  int max3(immutable int a, immutable int b, immutable int c) const
   {
     auto k = a > b ? a : b;
     return k > c ? k : c;
   }
 
-  /++
-   + baseline_sequential:
-   + implements sequential computation of the alignment scores matrix.
-   +
-   + The algorithm of filling in the matrix F
-   + <p>
-   + <code>
-   +    for i=0 to length(A) F(i,0) ← d*i
-   +    for j=0 to length(B) F(0,j) ← d*j
-   +    for i=1 to length(A)
-   +    for j=1 to length(B)
-   +    {
-   +      Match  ← F( i-1, j-1) + S(Ai, Bj)
-   +      Delete ← F( i-1, j  ) + d
-   +      Insert ← F( i  , j-1) + d
-   +      F(i,j) ← max(Match, Insert, Delete)
-   +    }
-   + </code>
-   +/
+  /**
+   * baseline_sequential:
+   * implements sequential computation of the alignment scores matrix.
+   *
+   * The algorithm of filling in the matrix F
+   * <p>
+   * <code>
+   *    for i=0 to length(A) F(i,0) ← d*i
+   *    for j=0 to length(B) F(0,j) ← d*j
+   *    for i=1 to length(A)
+   *    for j=1 to length(B)
+   *    {
+   *      Match  ← F( i-1, j-1) + S(Ai, Bj)
+   *      Delete ← F( i-1, j  ) + d
+   *      Insert ← F( i  , j-1) + d
+   *      F(i,j) ← max(Match, Insert, Delete)
+   *    }
+   * </code>
+   */
   void baseline_sequential()
   {
     foreach ( r; 1 .. rows )
@@ -636,170 +587,125 @@ class Application {
                                 F[ r      * cols + c - 1] - penalty );
   }
 
-  /++
-   + rectangular_block:
-   + implements sequential computation of the alignment scores matrix
-   + for a single rectangular block of fixed size #BLOCK_SIZE.
-   + @br: block row, the vertical location of the block from the top of the
-   +      matrix, starting with 0 block.
-   + @bc: block column, the horizontal location of the block from the
-   +      left side of the matrix, starting with 0 block.
-   +/
-  void rectangular_block( int br, int bc )
+  /**
+   * rectangular_block:
+   * implements sequential computation of the alignment scores matrix
+   * for a single rectangular block of fixed size #BLOCK_SIZE.
+   * @br: block row, the vertical location of the block from the top of the
+   *      matrix, starting with 0 block.
+   * @bc: block column, the horizontal location of the block from the
+   *      left side of the matrix, starting with 0 block.
+   */
+  int rectangular_block(int br, int bc, int ts)
   {
-    while ( br >= 0 && bc < (cols - 1) / BLOCK_SIZE )
+    while (br >= 0 && bc < (cols - 1) / BLOCK_SIZE)
     {
       auto rr = br * BLOCK_SIZE + 1;
       auto cc = bc * BLOCK_SIZE + 1;
-      foreach ( r; rr .. rr + BLOCK_SIZE )
-        foreach ( c; cc .. cc + BLOCK_SIZE )
-          F[r * cols + c] = max3( F[(r - 1) * cols + c - 1] + BLOSUM62[M[r] * CHARS + N[c]],
-                                  F[(r - 1) * cols + c    ] - penalty,
-                                  F[ r      * cols + c - 1] - penalty );
+      foreach (r; rr .. rr + BLOCK_SIZE)
+        foreach (c; cc .. cc + BLOCK_SIZE)
+        {
+          F[r * cols + c] = max3(F[(r - 1) * cols + c - 1] + BLOSUM62[M[r] * CHARS + N[c]],
+                                 F[(r - 1) * cols + c    ] - penalty,
+                                 F[ r      * cols + c - 1] - penalty);
+          if (do_animate) history.add_event(ts++, r * BLOCK_SIZE + c, I(r, c), [I(r - 1, c - 1), I(r - 1, c), I(r, c - 1)]);
+        }
       br--;
       bc++;
     }
+    return ts;
   }
 
-  /++
-   +/
+  /**
+   */
   void rectangles()
   {
+    auto ts = 0;
     auto max_blocks = (cols - 1) / BLOCK_SIZE;
-    for ( int i = 0; i < 2 * max_blocks - 1; ++i )
+    foreach (i; 0 .. 2 * max_blocks - 1)
     {
-      int br = ( i < max_blocks ) ? i :     max_blocks - 1;
-      int bc = ( i < max_blocks ) ? 0 : i - max_blocks + 1;
-      rectangular_block( br, bc );
+      auto br = i < max_blocks ? i :     max_blocks - 1;
+      auto bc = i < max_blocks ? 0 : i - max_blocks + 1;
+      ts = rectangular_block(br, bc, ts);
+      if (do_animate) history.add_event(ts++, 0, -1, []);
     }
   }
 
-  /++
-   +/
-  void diamond_blocks( int br, int bc  )
+  /**
+   */
+  int diamond_blocks(int br, int bc, int ts)
   {
-    while ( br >= 0 && bc < (cols - 1) / BLOCK_SIZE )
+    while (br >= 0 && bc < (cols - 1) / BLOCK_SIZE)
     {
       int rr = br * BLOCK_SIZE + 1;
       int cc = bc * BLOCK_SIZE + 1;
-      if ( bc == 1 )
-        foreach ( r; 0 .. BLOCK_SIZE )
-          foreach ( c; 1 .. BLOCK_SIZE + 1 - r )
-            F[(rr + r) * cols + c] = max3( F[(rr + r - 1) * cols + c - 1] + BLOSUM62[M[rr + r] * CHARS + N[c]],
-                                           F[(rr + r - 1) * cols + c    ] - penalty,
-                                           F[(rr + r    ) * cols + c - 1] - penalty );
-      int k = cc;
-      foreach ( r; 0 .. BLOCK_SIZE )
+      if (bc == 1)
       {
-        foreach ( c; 0 .. BLOCK_SIZE )
+        foreach (r; 0 .. BLOCK_SIZE)
         {
-          F[(rr + r) * cols + k + c] = max3( F[(rr + r - 1) * cols + k + c - 1] + BLOSUM62[M[rr + r] * CHARS + N[k + c]],
-                                             F[(rr + r - 1) * cols + k + c    ] - penalty,
-                                             F[(rr + r    ) * cols + k + c - 1] - penalty );
+          foreach (c; 1 .. BLOCK_SIZE + 1 - r)
+          {
+            F[rr + r, c] = max3(F[rr + r - 1, c - 1] + BLOSUM62[M[rr + r] * CHARS + N[c]],
+                                F[rr + r - 1, c    ] - penalty,
+                                F[rr + r    , c - 1] - penalty);
+            if (do_animate) history.add_event(ts++, r * BLOCK_SIZE + c, I(rr + r, c), [I(rr + r - 1, c - 1), I(rr + r - 1, c), I(rr + r, c - 1)]);
+          }
+        }
+      }
+      int k = cc;
+      foreach (r; 0 .. BLOCK_SIZE)
+      {
+        foreach (c; 0 .. BLOCK_SIZE)
+        {
+          F[rr + r, k + c] = max3(F[rr + r - 1, k + c - 1] + BLOSUM62[M[rr + r] * CHARS + N[k + c]],
+                                  F[rr + r - 1, k + c    ] - penalty,
+                                  F[rr + r    , k + c - 1] - penalty);
+          if (do_animate) history.add_event(ts++, r * BLOCK_SIZE + c, I(rr + r, k + c), [I(rr + r - 1, k + c - 1), I(rr + r - 1, k + c), I(rr + r, k + c - 1)]);
         }
         k--;
       }
-      if ( cc + BLOCK_SIZE == cols )
+      if (cc + BLOCK_SIZE == cols)
       {
         cc += BLOCK_SIZE - 2;
-        foreach ( r; 1 .. BLOCK_SIZE )
+        foreach (r; 1 .. BLOCK_SIZE)
         {
-          foreach ( c; 1 .. r + 1 )
-            F[(rr + r) * cols + cc + c] = max3( F[(rr + r - 1) * cols + cc + c - 1] + BLOSUM62[M[rr + r] * CHARS + N[cc + c]],
-                                                F[(rr + r - 1) * cols + cc + c    ] - penalty,
-                                                F[(rr + r    ) * cols + cc + c - 1] - penalty );
+          foreach (c; 1 .. r + 1)
+          {
+            F[rr + r, cc + c] = max3(F[rr + r - 1, cc + c - 1] + BLOSUM62[M[rr + r] * CHARS + N[cc + c]],
+                                     F[rr + r - 1, cc + c    ] - penalty,
+                                     F[rr + r    , cc + c - 1] - penalty);
+            if (do_animate) history.add_event(ts++, r * BLOCK_SIZE + c, I(rr + r, cc + c), [I(rr + r - 1, cc + c - 1), I(rr + r - 1, cc + c), I(rr + r, cc + c - 1)]);
+          }
           cc--;
         }
       }
       br--;
       bc += 2;
     }
+    return ts;
   }
 
-  /++
-   +/
+  /**
+   */
   void diamonds()
   {
-    for ( int i = 0; i < rows / BLOCK_SIZE - 1; ++i )
+    auto ts = 0;
+    foreach (i; 0 .. rows / BLOCK_SIZE - 1)
     {
-      diamond_blocks( i, 1 );
-      debug ( DEBUG ) { foreach ( int j; 0 .. 2 * cols ) write( "--" ); writeln(); }
-      diamond_blocks( i, 2 );
-      debug ( DEBUG ) { foreach ( int j; 0 .. 2 * cols ) write( "==" ); writeln(); }
+      ts = diamond_blocks(i, 1, ts);
+      if (do_animate) history.add_event(ts++, 0, -1, []);
+      ts = diamond_blocks(i, 2, ts);
+      if (do_animate) history.add_event(ts++, 0, -1, []);
     }
-    for ( int i = 1; i < cols / BLOCK_SIZE; ++i )
+    foreach (i; 1 .. cols / BLOCK_SIZE)
     {
-      diamond_blocks( rows / BLOCK_SIZE - 1, i );
-      debug ( DEBUG ) { foreach ( int j; 0 .. 2 * cols ) write( "==" ); writeln(); }
-    }
-  }
-
-  /++
-   + <code>
-   +    AlignmentA ← ""
-   +    AlignmentB ← ""
-   +    i ← length(A)
-   +    j ← length(B)
-   +    while (i > 0 or j > 0)
-   +    {
-   +      if (i > 0 and j > 0 and F(i,j) == F(i-1,j-1) + S(Ai, Bj))
-   +      {
-   +        AlignmentA ← Ai + AlignmentA
-   +        AlignmentB ← Bj + AlignmentB
-   +        i ← i - 1
-   +        j ← j - 1
-   +      }
-   +      else if (i > 0 and F(i,j) == F(i-1,j) + d)
-   +      {
-   +        AlignmentA ← Ai + AlignmentA
-   +        AlignmentB ← "-" + AlignmentB
-   +        i ← i - 1
-   +      }
-   +      else (j > 0 and F(i,j) == F(i,j-1) + d)
-   +      {
-   +        AlignmentA ← "-" + AlignmentA
-   +        AlignmentB ← Bj + AlignmentB
-   +        j ← j - 1
-   +      }
-   +    }
-   + </code>
-   +/
-  void compute_alignments()
-  {
-    int i = rows - 2;
-    int j = cols - 2;
-    int m = i;
-    int n = j;
-    for ( ; i != 0 && j != 0 && m > -1 && n > -1; --m, --n )
-    {
-      if ( i > 0 && j > 0 && F[i * cols + j] == F[(i - 1) * cols + j - 1] + S[i * cols + j] )
-      {
-        A[m] = M[i];
-        B[n] = N[j];
-        --i;
-        --j;
-      }
-      else if ( i > 0 && F[i * cols + j] == F[(i - 1) * cols + j] - penalty )
-      {
-        A[m] = M[i];
-        B[n] = 30;
-        --i;
-      }
-      else if ( j > 0 && F[i * cols + j] == F[i * cols + j - 1] - penalty )
-      {
-        A[m] = 30;
-        B[n] = N[j];
-        --j;
-      }
-      else
-      {
-        writefln( "i %d, j %d\n", i, j );
-      }
+      ts = diamond_blocks(rows / BLOCK_SIZE - 1, i, ts);
+      if (do_animate) history.add_event(ts++, 0, -1, []);
     }
   }
 
-  /++
-   +/
+  /**
+   */
   double opencl_noblocks()
   {
     double result = 0.0;
@@ -865,8 +771,8 @@ class Application {
     return result;
   }
 
-  /++
-   +/
+  /**
+   */
   double opencl_noblocks_indirectS()
   {
     double result = 0.0;
@@ -927,8 +833,8 @@ class Application {
     return result;
   }
 
-  /++
-   +/
+  /**
+   */
   double opencl_rectangles()
   {
     double result = 0.0;
@@ -994,8 +900,8 @@ class Application {
     return result;
   }
 
-  /++
-   +/
+  /**
+   */
   double opencl_rectangles_indirectS()
   {
     double result = 0.0;
@@ -1075,8 +981,8 @@ class Application {
     return result;
   }
 
-  /++
-   +/
+  /**
+   */
   double opencl_diamonds()
   {
     double result = 0.0;
@@ -1188,8 +1094,8 @@ class Application {
     return result;
   }
 
-  /++
-   +/
+  /**
+   */
   double opencl_diamonds_indirectS()
   {
     double result = 0.0;
@@ -1322,8 +1228,8 @@ class Application {
     return result;
   }
 
-  /++
-   +/
+  /**
+   */
   void clop_dsl()
   {
     // use CLOP DSL to generate OpenCL kernel and API calls.
@@ -1340,8 +1246,8 @@ class Application {
     } ) );
   }
 
-  /++
-   +/
+  /**
+   */
   void clop_dsl_indirectS()
   {
     mixin( compile(
@@ -1357,8 +1263,8 @@ class Application {
     } ) );
   }
 
-  /++
-   +/
+  /**
+   */
   void run()
   {
     size_t size;
@@ -1376,27 +1282,20 @@ class Application {
               ticks.usecs / 1E6 );
     G[] = F[];
 
-    reset();
-    timer.reset();
-    timer.start();
-    rectangles();
-    timer.stop();
-    ticks = timer.peek();
-    writefln( "%2.0f MI RECTANGLES %5.3f [s]",
-              (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
-              ticks.usecs / 1E6 );
-    validate();
+    if (do_animate)
+    {
+      reset();
+      rectangles();
+      writefln("%2.0f MI RECTANGLES", (rows - 1) * (cols - 1) / (1024.0 * 1024.0));
+      history.save_animation();
+      verify();
 
-    reset();
-    timer.reset();
-    timer.start();
-    diamonds();
-    timer.stop();
-    ticks = timer.peek();
-    writefln( "%2.0f MI DIAMONDS   %5.3f [s]",
-              (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
-              ticks.usecs / 1E6 );
-    validate();
+      reset();
+      diamonds();
+      writefln("%2.0f MI DIAMONDS", (rows - 1) * (cols - 1) / (1024.0 * 1024.0));
+      history.save_animation();
+      verify();
+    }
 
     reset();
     timer.reset();
@@ -1409,7 +1308,7 @@ class Application {
               ticks.usecs / 1E6, time,
               (rows - 1) * (cols - 1) / (1024 * 1024 * time),
               2 * benchmark / 5 );
-    validate();
+    verify();
 
     reset();
     timer.reset();
@@ -1421,7 +1320,7 @@ class Application {
               (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
               ticks.usecs / 1E6, time,
               (rows - 1) * (cols - 1) / (1024 * 1024 * time) );
-    validate();
+    verify();
 
     clGetKernelWorkGroupInfo( kernel_rectangles,
                               runtime.device,
@@ -1441,7 +1340,7 @@ class Application {
                 (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
                 ticks.usecs / 1E6, time,
                 (rows - 1) * (cols - 1) / (1024 * 1024 * time) );
-      validate();
+      verify();
 
       reset();
       timer.reset();
@@ -1453,7 +1352,7 @@ class Application {
                 (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
                 ticks.usecs / 1E6, time,
                 (rows - 1) * (cols - 1) / (1024 * 1024 * time) );
-      validate();
+      verify();
 
       reset();
       timer.reset();
@@ -1465,7 +1364,7 @@ class Application {
                 (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
                 ticks.usecs / 1E6, time,
                 (rows - 1) * (cols - 1) / (1024 * 1024 * time) );
-      validate();
+      verify();
 
       reset();
       timer.reset();
@@ -1477,26 +1376,24 @@ class Application {
                 (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
                 ticks.usecs / 1E6, time,
                 (rows - 1) * (cols - 1) / (1024 * 1024 * time) );
-      validate();
+      verify();
 
       reset();
       clop_dsl();
-      validate();
+      verify();
 
       reset();
       clop_dsl_indirectS();
-      validate();
+      verify();
     }
-    save();
   }
 }
 
-int
-main(string[] args)
+int main(string[] args)
 {
   auto platforms = runtime.get_platforms();
   foreach (p; 0 .. platforms.length)
-    foreach (d; 0 .. platforms[p])
+    foreach (d; 1 .. platforms[p])
     {
       try
       {
