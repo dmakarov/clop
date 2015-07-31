@@ -85,6 +85,7 @@ class Application {
   cl_kernel kernel_rectangles_indirectS;
   cl_kernel kernel_diamonds;
   cl_kernel kernel_diamonds_indirectS;
+  cl_kernel kernel_diamonds_indirectS_prefetch;
 
   bool do_animate = false;
   bool do_verify = false;
@@ -322,7 +323,7 @@ class Application {
                                  int  br,
                                  int  bc)
       {
-        __local int s[ BLOCK_SIZE      *  BLOCK_SIZE];
+        __local int s[(BLOCK_SIZE    ) * (BLOCK_SIZE    )];
         __local int t[(BLOCK_SIZE + 1) * (BLOCK_SIZE + 2)];
         int bx = get_group_id(0);
         int tx = get_local_id(0);
@@ -346,25 +347,26 @@ class Application {
 
         // 1.
         for (int k = 0; k < BLOCK_SIZE; ++k)
-          s[tx * BLOCK_SIZE + k] = S[index + k];
+          s[k * BLOCK_SIZE + tx] = S[I(rr + k, cc - k + tx)];
         if (tx == 0) t[0] = F[index_n - 1];
-        t[(tx + 1)                       ] = F[index_n];
-        t[(tx + 1) * (BLOCK_SIZE + 2)    ] = F[index_w - 1];
-        t[(tx + 1) * (BLOCK_SIZE + 2) + 1] = F[index_w];
+        int y0 = (tx + 1) * (BLOCK_SIZE + 2);
+        int y1 = (tx    ) * (BLOCK_SIZE + 2);
+        t[tx + 1] = F[index_n];
+        t[y0    ] = F[index_w - 1];
+        t[y0 + 1] = F[index_w];
         barrier(CLK_LOCAL_MEM_FENCE);
         // 2.
+
         for (int k = 0; k < BLOCK_SIZE; ++k)
         {
-          int x =  k + 2;
-          int y = tx + 1;
-          t[y * (BLOCK_SIZE + 2) + x] = max3(t[(y - 1) * (BLOCK_SIZE + 2) + x - 2] + s[tx * BLOCK_SIZE + k],
-                                             t[(y - 1) * (BLOCK_SIZE + 2) + x - 1] - penalty,
-                                             t[(y    ) * (BLOCK_SIZE + 2) + x - 1] - penalty);
+          t[y0 + k + 2] = max3(t[y1 + k] + s[tx * BLOCK_SIZE + k],
+                               t[y1 + k + 1] - penalty, t[y0 + k + 1] - penalty);
           barrier(CLK_LOCAL_MEM_FENCE);
         }
+
         // 3.
         for (int k = 0; k < BLOCK_SIZE; ++k)
-          F[index + k] = t[(tx + 1) * (BLOCK_SIZE + 2) + k + 2];
+          F[I(rr + k, cc - k + tx)] = t[(k + 1) * (BLOCK_SIZE + 2) + tx + 2];
         barrier(CLK_GLOBAL_MEM_FENCE);
 
         if (cc + BLOCK_SIZE == cols)
@@ -376,7 +378,8 @@ class Application {
                                       F[I(rr + tx - 1, x    )] - penalty,
                                       F[I(rr + tx    , x - 1)] - penalty);
             barrier(CLK_GLOBAL_MEM_FENCE);
-          }
+            }
+
       } /* nw_diamonds */
 
       /**
@@ -423,23 +426,22 @@ class Application {
           }
 
         if (tx == 0) t[0] = F[index_n - 1];
-        t[ tx + 1                        ] = F[index_n];
-        t[(tx + 1) * (BLOCK_SIZE + 2)    ] = F[index_w - 1];
-        t[(tx + 1) * (BLOCK_SIZE + 2) + 1] = F[index_w];
+        int y0 = (tx + 1) * (BLOCK_SIZE + 2);
+        int y1 = (tx    ) * (BLOCK_SIZE + 2);
+        t[tx + 1] = F[index_n];
+        t[y0    ] = F[index_w - 1];
+        t[y0 + 1] = F[index_w];
         barrier(CLK_LOCAL_MEM_FENCE);
 
         for (int k = 0; k < BLOCK_SIZE; ++k)
         {
-          int x =  k + 2;
-          int y =  tx + 1;
-          t[y * (BLOCK_SIZE + 2) + x] = max3(t[(y - 1) * (BLOCK_SIZE + 2) + x - 2] + s[M[rr + tx] * CHARS + N[cc - tx + k]],
-                                             t[(y - 1) * (BLOCK_SIZE + 2) + x - 1] - penalty,
-                                             t[(y    ) * (BLOCK_SIZE + 2) + x - 1] - penalty);
+          t[y0 + k + 2] = max3(t[y1 + k] + s[M[rr + tx] * CHARS + N[cc - tx + k]],
+                               t[y1 + k + 1] - penalty, t[y0 + k + 1] - penalty);
           barrier(CLK_LOCAL_MEM_FENCE);
         }
 
         for (int k = 0; k < BLOCK_SIZE; ++k)
-          F[index + k] = t[(tx + 1) * (BLOCK_SIZE + 2) + k + 2];
+          F[I(rr + k, cc - k + tx)] = t[(k + 1) * (BLOCK_SIZE + 2) + tx + 2];
         barrier(CLK_GLOBAL_MEM_FENCE);
 
         if (cc + BLOCK_SIZE == cols)
@@ -453,6 +455,84 @@ class Application {
             barrier(CLK_GLOBAL_MEM_FENCE);
           }
       } /* nw_diamonds_indirectS */
+
+      /**
+       */
+      __kernel void
+      nw_diamonds_indirectS_prefetch(__global const int* S      , //
+                                     __global const int* M      , //
+                                     __global const int* N      , //
+                                     __global       int* F      , //
+                                                    int  cols   , //
+                                                    int  penalty, //
+                                                    int  br     , //
+                                                    int  bc     ) //
+      {
+        __local int s[CHARS * CHARS];
+        __local int t[(BLOCK_SIZE + 1) * (BLOCK_SIZE + 2)];
+        int bx = get_group_id(0);
+        int tx = get_local_id(0);
+        int rr = (br -     bx) * BLOCK_SIZE + 1;
+        int cc = (bc + 2 * bx) * BLOCK_SIZE + 1;
+
+        int index   = I(rr + tx, cc - tx);
+        int index_n = I(rr -  1, cc + tx);
+        int index_w = index - 1;
+        int ii = 0;
+
+        while (ii + tx < CHARS)
+        {
+          for (int ty = 0; ty < CHARS; ++ty)
+            s[ty * CHARS + ii + tx] = S[ty * CHARS + ii + tx];
+          ii += BLOCK_SIZE;
+        }
+        barrier(CLK_LOCAL_MEM_FENCE);
+
+        if (bc == 1 && bx == 0)
+          for (int m = 0; m < BLOCK_SIZE; ++m)
+          {
+            int x = m - tx + 1;
+            if (x > 0)
+              F[I(rr + tx, x)] = max3(F[I(rr + tx - 1, x - 1)] + s[M[rr + tx] * CHARS + N[x]],
+                                      F[I(rr + tx - 1, x    )] - penalty,
+                                      F[I(rr + tx    , x - 1)] - penalty);
+            barrier(CLK_GLOBAL_MEM_FENCE);
+          }
+
+        if (tx == 0) t[0] = F[index_n - 1];
+        int y0 = (tx + 1) * (BLOCK_SIZE + 2);
+        int y1 = (tx    ) * (BLOCK_SIZE + 2);
+        t[tx + 1] = F[index_n];
+        t[y0    ] = F[index_w - 1];
+        t[y0 + 1] = F[index_w];
+        barrier(CLK_LOCAL_MEM_FENCE);
+
+        int y = M[rr + tx];
+        int x = N[cc - tx];
+        for (int k = 0; k < BLOCK_SIZE; ++k)
+        {
+          int nextX = N[cc - tx + k + 1];
+          t[y0 + k + 2] = max3(t[y1 + k] + s[y * CHARS + x],
+                               t[y1 + k + 1] - penalty, t[y0 + k + 1] - penalty);
+          x = nextX;
+          barrier(CLK_LOCAL_MEM_FENCE);
+        }
+
+        for (int k = 0; k < BLOCK_SIZE; ++k)
+          F[I(rr + k, cc - k + tx)] = t[(k + 1) * (BLOCK_SIZE + 2) + tx + 2];
+        barrier(CLK_GLOBAL_MEM_FENCE);
+
+        if (cc + BLOCK_SIZE == cols)
+          for (int m = 0; m < BLOCK_SIZE; ++m)
+          {
+            int x = cc + BLOCK_SIZE + m - tx;
+            if (x < cols)
+              F[I(rr + tx, x)] = max3(F[I(rr + tx - 1, x - 1)] + s[M[rr + tx] * CHARS + N[x]],
+                                      F[I(rr + tx - 1, x    )] - penalty,
+                                      F[I(rr + tx    , x - 1)] - penalty);
+            barrier(CLK_GLOBAL_MEM_FENCE);
+          }
+      } /* nw_diamonds_indirectS_prefetch */
     }.dup;
     cl_int status;
     size_t size = code.length;
@@ -473,6 +553,7 @@ class Application {
     kernel_noblocks_indirectS   = clCreateKernel(program, "nw_noblocks_indirectS"   , &status);                                assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
     kernel_rectangles_indirectS = clCreateKernel(program, "nw_rectangles_indirectS" , &status);                                assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
     kernel_diamonds_indirectS   = clCreateKernel(program, "nw_diamonds_indirectS"   , &status);                                assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
+    kernel_diamonds_indirectS_prefetch = clCreateKernel(program, "nw_diamonds_indirectS_prefetch", &status);                   assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
     status = clReleaseProgram(program);                                                                                        assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
     if (do_animate)
     {
@@ -1124,6 +1205,109 @@ class Application {
 
   /**
    */
+  double opencl_diamonds_indirectS_prefetch()
+  {
+    double result = 0.0;
+    try
+    {
+      cl_int status;
+      cl_event event;
+      cl_mem_flags flags = CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR;
+      cl_mem dS = clCreateBuffer(runtime.context, flags, cl_int.sizeof * BLOSUM62.length, BLOSUM62.ptr, &status);              assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+      cl_mem dM = clCreateBuffer(runtime.context, flags, cl_int.sizeof * M.length, M.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+      cl_mem dN = clCreateBuffer(runtime.context, flags, cl_int.sizeof * N.length, N.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+      flags = CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR;
+      cl_mem dF = clCreateBuffer(runtime.context, flags, cl_int.sizeof * F.length, F.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_diamonds_indirectS_prefetch, 0, cl_mem.sizeof, &dS     );                                          assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_diamonds_indirectS_prefetch, 1, cl_mem.sizeof, &dM     );                                          assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_diamonds_indirectS_prefetch, 2, cl_mem.sizeof, &dN     );                                          assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_diamonds_indirectS_prefetch, 3, cl_mem.sizeof, &dF     );                                          assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_diamonds_indirectS_prefetch, 4, cl_int.sizeof, &cols   );                                          assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_diamonds_indirectS_prefetch, 5, cl_int.sizeof, &penalty);                                          assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+      size_t wgroup = BLOCK_SIZE;
+      foreach (i; 0 .. rows / BLOCK_SIZE - 1)
+      {
+        cl_int br = i;
+        cl_int bc = 1;
+        size_t global = ((2 * i + bc) * BLOCK_SIZE < cols - 1) ? BLOCK_SIZE * (i + 1) : (cols - 1) / 2;
+        status = clSetKernelArg(kernel_diamonds_indirectS_prefetch, 6, cl_int.sizeof, &br);                                             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_diamonds_indirectS_prefetch, 7, cl_int.sizeof, &bc);                                             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+        status = clEnqueueNDRangeKernel(runtime.queue, kernel_diamonds_indirectS_prefetch, 1, null, &global, &wgroup, 0, null, &event); assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+        status = clWaitForEvents(1, &event);                                                                                   assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+
+        cl_ulong start_time;
+        status = clGetEventProfilingInfo (event                     , // cl_event          event
+                                          CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
+                                          cl_ulong.sizeof           , // size_t            param_value_size
+                                          &start_time               , // void*             param_value
+                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+        cl_ulong end_time;
+        status = clGetEventProfilingInfo (event                     , // cl_event          event
+                                          CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
+                                          cl_ulong.sizeof           , // size_t            param_value_size
+                                          &end_time                 , // void*             param_value
+                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+        result += (end_time - start_time) / 1E9;
+        bc = 2;
+        global = ((2 * i + bc) * BLOCK_SIZE < cols - 1) ? BLOCK_SIZE * (i + 1) : (cols - 1) / 2 - BLOCK_SIZE;
+        if (global == 0) continue;
+        status = clSetKernelArg(kernel_diamonds_indirectS_prefetch, 7, cl_int.sizeof, &bc);                                             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+        status = clEnqueueNDRangeKernel(runtime.queue, kernel_diamonds_indirectS_prefetch, 1, null, &global, &wgroup, 0, null, &event); assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+        status = clWaitForEvents(1, &event);                                                                                   assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+
+        status = clGetEventProfilingInfo (event                     , // cl_event          event
+                                          CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
+                                          cl_ulong.sizeof           , // size_t            param_value_size
+                                          &start_time               , // void*             param_value
+                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+        status = clGetEventProfilingInfo (event                     , // cl_event          event
+                                          CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
+                                          cl_ulong.sizeof           , // size_t            param_value_size
+                                          &end_time                 , // void*             param_value
+                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+        result += (end_time - start_time) / 1E9;
+      }
+      foreach (i; 1 .. cols / BLOCK_SIZE)
+      {
+        cl_int br = rows / BLOCK_SIZE - 1;
+        cl_int bc = i;
+        size_t global = BLOCK_SIZE * (((cols - 1) / BLOCK_SIZE - bc + 1) / 2);
+        status = clSetKernelArg(kernel_diamonds_indirectS_prefetch, 6, cl_int.sizeof, &br);                                             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_diamonds_indirectS_prefetch, 7, cl_int.sizeof, &bc);                                             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+        status = clEnqueueNDRangeKernel(runtime.queue, kernel_diamonds_indirectS_prefetch, 1, null, &global, &wgroup, 0, null, &event); assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+        status = clWaitForEvents(1, &event);                                                                                   assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+
+        cl_ulong start_time;
+        status = clGetEventProfilingInfo (event                     , // cl_event          event
+                                          CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
+                                          cl_ulong.sizeof           , // size_t            param_value_size
+                                          &start_time               , // void*             param_value
+                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+        cl_ulong end_time;
+        status = clGetEventProfilingInfo (event                     , // cl_event          event
+                                          CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
+                                          cl_ulong.sizeof           , // size_t            param_value_size
+                                          &end_time                 , // void*             param_value
+                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+        result += (end_time - start_time) / 1E9;
+      }
+      status = clEnqueueReadBuffer(runtime.queue, dF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr, 0, null, null);             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+      status = clReleaseMemObject(dF);                                                                                         assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+      status = clReleaseMemObject(dN);                                                                                         assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+      status = clReleaseMemObject(dM);                                                                                         assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+      status = clReleaseMemObject(dS);                                                                                         assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+      status = clReleaseKernel(kernel_diamonds_indirectS_prefetch);                                                                     assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+    }
+    catch(Exception e)
+    {
+      write(e);
+      writeln();
+    }
+    return result;
+  }
+
+  /**
+   */
   void clop_nw()
   {
     // use CLOP DSL to generate OpenCL kernel and API calls.
@@ -1261,6 +1445,18 @@ class Application {
     timer.stop();
     ticks = timer.peek();
     writefln("%2.0f MI CL DS INDI  %5.3f (%5.3f) [s], %7.2f MI/s",
+              (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
+              ticks.usecs / 1E6, time,
+              (rows - 1) * (cols - 1) / (1024 * 1024 * time));
+    verify();
+
+    reset();
+    timer.reset();
+    timer.start();
+    time = opencl_diamonds_indirectS_prefetch();
+    timer.stop();
+    ticks = timer.peek();
+    writefln("%2.0f MI CL DS IN P  %5.3f (%5.3f) [s], %7.2f MI/s",
               (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
               ticks.usecs / 1E6, time,
               (rows - 1) * (cols - 1) / (1024 * 1024 * time));
