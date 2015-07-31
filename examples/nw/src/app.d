@@ -32,10 +32,12 @@ import std.random;
 import std.stdio;
 
 import derelict.opencl.cl;
-
 import clop.compiler;
 
+static auto run_once = true;
+
 /**
+ * Needleman-Wunsch algorithm implementation.
  */
 class Application {
   static immutable int SEED  =  1;
@@ -99,6 +101,7 @@ class Application {
       writefln("Usage: %s [-a -b <block size> -v] <sequence length> <penalty>", args[0]);
       throw new Exception("invalid command line arguments");
     }
+    do_animate = do_animate && run_once;
     BLOCK_SIZE = block_size;
     rows    = to!(int)(args[1]) + 1;
     cols    = to!(int)(args[1]) + 1;
@@ -1181,14 +1184,17 @@ class Application {
     double benchmark = runtime.benchmark((rows - 1) * (cols - 1));
     double time;
 
-    timer.start();
-    baseline_nw();
-    timer.stop();
-    ticks = timer.peek();
-    writefln("%2.0f MI BASELINE   %5.3f [s]",
-              (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
-              ticks.usecs / 1E6);
-    G[] = F[];
+    if (do_verify)
+    {
+      timer.start();
+      baseline_nw();
+      timer.stop();
+      ticks = timer.peek();
+      writefln("%2.0f MI BASELINE   %5.3f [s]",
+               (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
+               ticks.usecs / 1E6);
+      G[] = F[];
+    }
 
     if (do_animate)
     {
@@ -1203,6 +1209,7 @@ class Application {
       writefln("%2.0f MI DIAMONDS", (rows - 1) * (cols - 1) / (1024.0 * 1024.0));
       history.save_animation();
       verify();
+      run_once = false;
     }
 
     reset();
