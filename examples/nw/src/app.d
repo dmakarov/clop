@@ -347,7 +347,7 @@ class Application {
         for (int k = 0; k < BLOCK_SIZE; ++k)
           s[tx * BLOCK_SIZE + k] = S[index + k];
         if (tx == 0) t[0] = F[index_n - 1];
-        t[ tx + 1                        ] = F[index_n];
+        t[(tx + 1)                       ] = F[index_n];
         t[(tx + 1) * (BLOCK_SIZE + 2)    ] = F[index_w - 1];
         t[(tx + 1) * (BLOCK_SIZE + 2) + 1] = F[index_w];
         barrier(CLK_LOCAL_MEM_FENCE);
@@ -355,11 +355,10 @@ class Application {
         for (int k = 0; k < BLOCK_SIZE; ++k)
         {
           int x =  k + 2;
-          int y =  tx + 1;
-          int m = t[(y - 1) * (BLOCK_SIZE + 2) + x - 2] + s[tx * BLOCK_SIZE + k];
-          int d = t[(y - 1) * (BLOCK_SIZE + 2) + x - 1] - penalty;
-          int i = t[(y    ) * (BLOCK_SIZE + 2) + x - 1] - penalty;
-          t[y * (BLOCK_SIZE + 2) + x] = max3(m, d, i);
+          int y = tx + 1;
+          t[y * (BLOCK_SIZE + 2) + x] = max3(t[(y - 1) * (BLOCK_SIZE + 2) + x - 2] + s[tx * BLOCK_SIZE + k],
+                                             t[(y - 1) * (BLOCK_SIZE + 2) + x - 1] - penalty,
+                                             t[(y    ) * (BLOCK_SIZE + 2) + x - 1] - penalty);
           barrier(CLK_LOCAL_MEM_FENCE);
         }
         // 3.
@@ -553,16 +552,11 @@ class Application {
    */
   void baseline_nw()
   {
-    auto ts = 0;
     foreach (r; 1 .. rows)
-    {
       foreach (c; 1 .. cols)
-      {
         F[r, c] = max3(F[r - 1, c - 1] + BLOSUM62[M[r] * CHARS + N[c]],
                        F[r - 1, c    ] - penalty,
                        F[r    , c - 1] - penalty);
-      }
-    }
   }
 
   /**
@@ -583,9 +577,7 @@ class Application {
       foreach (bx; 0 .. cur_blocks)
       {
         foreach (k; 0 .. BLOCK_SIZE)
-        {
           foreach (tx; 0 .. BLOCK_SIZE)
-          {
             if (tx <= k)
             {
               auto r = br * BLOCK_SIZE + k - tx + 1;
@@ -593,14 +585,11 @@ class Application {
               F[r, c] = max3(F[r - 1, c - 1] + BLOSUM62[M[r] * CHARS + N[c]],
                              F[r - 1, c    ] - penalty,
                              F[r    , c - 1] - penalty);
-              history.add_event(ts++, bx * BLOCK_SIZE + tx, I(r, c), [I(r - 1, c - 1), I(r - 1, c), I(r, c - 1)]);
+              history.add_event(ts++, bx * BLOCK_SIZE + tx, I(r, c),
+                                [I(r - 1, c - 1), I(r - 1, c), I(r, c - 1)]);
             }
-          }
-        }
         for (int k = BLOCK_SIZE - 2; k != -1; --k)
-        {
           foreach (tx; 0 .. BLOCK_SIZE)
-          {
             if (tx <= k)
             {
               auto r = br * BLOCK_SIZE + BLOCK_SIZE     - tx;
@@ -608,10 +597,9 @@ class Application {
               F[r, c] = max3(F[r - 1, c - 1] + BLOSUM62[M[r] * CHARS + N[c]],
                              F[r - 1, c    ] - penalty,
                              F[r    , c - 1] - penalty);
-              history.add_event(ts++, bx * BLOCK_SIZE + tx, I(r, c), [I(r - 1, c - 1), I(r - 1, c), I(r, c - 1)]);
+              history.add_event(ts++, bx * BLOCK_SIZE + tx, I(r, c),
+                                [I(r - 1, c - 1), I(r - 1, c), I(r, c - 1)]);
             }
-          }
-        }
         --br;
         ++bc;
       }
@@ -623,60 +611,58 @@ class Application {
 
   /**
    */
-  int diamond_blocks(int br, int bc, int ts)
+  int diamond_blocks(int groups, int br, int bc, int ts)
   {
-    auto bx = 0;
-    while (br >= 0 && bc < (cols - 1) / BLOCK_SIZE)
+    foreach (bx ; 0 .. groups)
     {
       int rr = br * BLOCK_SIZE + 1;
       int cc = bc * BLOCK_SIZE + 1;
-      if (bc == 1)
+      if (bc == 1 && bx == 0)
       {
-        auto tx = 0;
-        foreach (r; 0 .. BLOCK_SIZE)
+        foreach (m; 0 .. BLOCK_SIZE)
         {
-          foreach (c; 1 .. BLOCK_SIZE + 1 - r)
+          foreach (tx; 0 .. BLOCK_SIZE)
           {
-            F[rr + r, c] = max3(F[rr + r - 1, c - 1] + BLOSUM62[M[rr + r] * CHARS + N[c]],
-                                F[rr + r - 1, c    ] - penalty,
-                                F[rr + r    , c - 1] - penalty);
-            history.add_event(ts++, bx * BLOCK_SIZE + tx, I(rr + r, c), [I(rr + r - 1, c - 1), I(rr + r - 1, c), I(rr + r, c - 1)]);
+            int c = m - tx + 1;
+            if (c > 0)
+            {
+              F[rr + tx, c] = max3(F[rr + tx - 1, c - 1] + BLOSUM62[M[rr + tx] * CHARS + N[c]],
+                                   F[rr + tx - 1, c    ] - penalty,
+                                   F[rr + tx    , c - 1] - penalty);
+              history.add_event(ts++, bx * BLOCK_SIZE + tx, I(rr + tx, c), [I(rr + tx - 1, c - 1), I(rr + tx - 1, c), I(rr + tx, c - 1)]);
+            }
           }
-          ++tx;
         }
       }
-      int k = cc;
-      auto tx = 0;
-      foreach (r; 0 .. BLOCK_SIZE)
+      foreach (c; 0 .. BLOCK_SIZE)
       {
-        foreach (c; 0 .. BLOCK_SIZE)
+        int k = cc;
+        foreach (tx; 0 .. BLOCK_SIZE)
         {
-          F[rr + r, k + c] = max3(F[rr + r - 1, k + c - 1] + BLOSUM62[M[rr + r] * CHARS + N[k + c]],
-                                  F[rr + r - 1, k + c    ] - penalty,
-                                  F[rr + r    , k + c - 1] - penalty);
-          history.add_event(ts++, bx * BLOCK_SIZE + tx, I(rr + r, k + c), [I(rr + r - 1, k + c - 1), I(rr + r - 1, k + c), I(rr + r, k + c - 1)]);
+          F[rr + tx, k + c] = max3(F[rr + tx - 1, k + c - 1] + BLOSUM62[M[rr + tx] * CHARS + N[k + c]],
+                                   F[rr + tx - 1, k + c    ] - penalty,
+                                   F[rr + tx    , k + c - 1] - penalty);
+          history.add_event(ts++, bx * BLOCK_SIZE + tx, I(rr + tx, k + c), [I(rr + tx - 1, k + c - 1), I(rr + tx - 1, k + c), I(rr + tx, k + c - 1)]);
+          --k;
         }
-        ++tx;
-        --k;
       }
-      tx = 0;
       if (cc + BLOCK_SIZE == cols)
       {
-        cc += BLOCK_SIZE - 2;
-        foreach (r; 1 .. BLOCK_SIZE)
+        foreach (m; 0 .. BLOCK_SIZE)
         {
-          foreach (c; 1 .. r + 1)
+          foreach (tx; 0 .. BLOCK_SIZE)
           {
-            F[rr + r, cc + c] = max3(F[rr + r - 1, cc + c - 1] + BLOSUM62[M[rr + r] * CHARS + N[cc + c]],
-                                     F[rr + r - 1, cc + c    ] - penalty,
-                                     F[rr + r    , cc + c - 1] - penalty);
-            history.add_event(ts++, bx * BLOCK_SIZE + tx, I(rr + r, cc + c), [I(rr + r - 1, cc + c - 1), I(rr + r - 1, cc + c), I(rr + r, cc + c - 1)]);
+            int c = cc + BLOCK_SIZE + m - tx;
+            if (c < cols)
+            {
+              F[rr + tx, c] = max3(F[rr + tx - 1, c - 1] + BLOSUM62[M[rr + tx] * CHARS + N[c]],
+                                   F[rr + tx - 1, c    ] - penalty,
+                                   F[rr + tx    , c - 1] - penalty);
+              history.add_event(ts++, bx * BLOCK_SIZE + tx, I(rr + tx, c), [I(rr + tx - 1, c - 1), I(rr + tx - 1, c), I(rr + tx, c - 1)]);
+            }
           }
-          ++tx;
-          --cc;
         }
       }
-      ++bx;
       --br;
       bc += 2;
     }
@@ -688,16 +674,20 @@ class Application {
   void diamonds()
   {
     auto ts = 0;
+    auto max_groups = (cols - 1) / BLOCK_SIZE;
     foreach (i; 0 .. rows / BLOCK_SIZE - 1)
     {
-      ts = diamond_blocks(i, 1, ts);
+      auto groups = 2 * i + 1 < max_groups ? i + 1 : max_groups / 2;
+      ts = diamond_blocks(groups, i, 1, ts);
       history.add_event(ts++, -1, -1, []);
-      ts = diamond_blocks(i, 2, ts);
+      groups = 2 * i + 2 < max_groups ? i + 1 : max_groups / 2 - 1;
+      ts = diamond_blocks(groups, i, 2, ts);
       history.add_event(ts++, -1, -1, []);
     }
     foreach (i; 1 .. cols / BLOCK_SIZE)
     {
-      ts = diamond_blocks(rows / BLOCK_SIZE - 1, i, ts);
+      auto groups = (max_groups - i + 1) / 2;
+      ts = diamond_blocks(groups, rows / BLOCK_SIZE - 1, i, ts);
       history.add_event(ts++, -1, -1, []);
     }
   }
@@ -965,8 +955,7 @@ class Application {
       status = clSetKernelArg(kernel_diamonds, 2, cl_int.sizeof, &cols   );                                                    assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
       status = clSetKernelArg(kernel_diamonds, 3, cl_int.sizeof, &penalty);                                                    assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
       size_t wgroup = BLOCK_SIZE;
-      auto groups = (cols - 1) / BLOCK_SIZE;
-      for (int i = 0; i < rows / BLOCK_SIZE; ++i)
+      foreach (i; 0 .. rows / BLOCK_SIZE - 1)
       {
         cl_int br = i;
         cl_int bc = 1;
@@ -1008,11 +997,11 @@ class Application {
                                           null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
         result += (end_time - start_time) / 1E9;
       }
-      for (int i = 1; i < cols / BLOCK_SIZE; ++i)
+      foreach (i; 1 .. cols / BLOCK_SIZE)
       {
         cl_int br = rows / BLOCK_SIZE - 1;
         cl_int bc = i;
-        size_t global = BLOCK_SIZE * ((groups - bc + 1) / 2);
+        size_t global = BLOCK_SIZE * (((cols - 1) / BLOCK_SIZE - bc + 1) / 2);
         status = clSetKernelArg(kernel_diamonds, 4, cl_int.sizeof, &br);                                                       assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
         status = clSetKernelArg(kernel_diamonds, 5, cl_int.sizeof, &bc);                                                       assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
         status = clEnqueueNDRangeKernel(runtime.queue, kernel_diamonds, 1, null, &global, &wgroup, 0, null, &event);           assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
@@ -1068,8 +1057,7 @@ class Application {
       status = clSetKernelArg(kernel_diamonds_indirectS, 4, cl_int.sizeof, &cols   );                                          assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
       status = clSetKernelArg(kernel_diamonds_indirectS, 5, cl_int.sizeof, &penalty);                                          assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
       size_t wgroup = BLOCK_SIZE;
-      auto groups = (cols - 1) / BLOCK_SIZE;
-      for (int i = 0; i < rows / BLOCK_SIZE - 1; ++i)
+      foreach (i; 0 .. rows / BLOCK_SIZE - 1)
       {
         cl_int br = i;
         cl_int bc = 1;
@@ -1111,11 +1099,11 @@ class Application {
                                           null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
         result += (end_time - start_time) / 1E9;
       }
-      for (int i = 1; i < cols / BLOCK_SIZE; ++i)
+      foreach (i; 1 .. cols / BLOCK_SIZE)
       {
         cl_int br = rows / BLOCK_SIZE - 1;
         cl_int bc = i;
-        size_t global = BLOCK_SIZE * ((groups - bc + 1) / 2);
+        size_t global = BLOCK_SIZE * (((cols - 1) / BLOCK_SIZE - bc + 1) / 2);
         status = clSetKernelArg(kernel_diamonds_indirectS, 6, cl_int.sizeof, &br);                                             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
         status = clSetKernelArg(kernel_diamonds_indirectS, 7, cl_int.sizeof, &bc);                                             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
         status = clEnqueueNDRangeKernel(runtime.queue, kernel_diamonds_indirectS, 1, null, &global, &wgroup, 0, null, &event); assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
