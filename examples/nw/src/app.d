@@ -103,9 +103,9 @@ class Application {
     }
     do_animate = do_animate && run_once;
     BLOCK_SIZE = block_size;
-    rows    = to!(int)(args[1]) + 1;
-    cols    = to!(int)(args[1]) + 1;
-    penalty = to!(int)(args[2]);
+    rows       = to!(int)(args[1]) + 1;
+    cols       = to!(int)(args[1]) + 1;
+    penalty    = to!(int)(args[2]);
     if ((rows - 1) % BLOCK_SIZE != 0)
     {
       auto r = to!(string)(rows - 1);
@@ -122,17 +122,17 @@ class Application {
     gen.seed(SEED);
     foreach (r; 1 .. rows)
     {
-      F[r * cols] = -penalty * r;
+      F[r, 0] = -penalty * r;
       M[r] = uniform(1, CHARS, gen);
     }
     foreach (c; 1 .. cols)
     {
-      F[c] = -penalty * c;
+      F[0, c] = -penalty * c;
       N[c] = uniform(1, CHARS, gen);
     }
     foreach (r; 1 .. rows)
       foreach (c; 1 .. cols)
-        S[r * cols + c] = BLOSUM62[M[r] * CHARS + N[c]];
+        S[r, c] = BLOSUM62[M[r] * CHARS + N[c]];
 
     /**
      */
@@ -428,14 +428,11 @@ class Application {
         t[(tx + 1) * (BLOCK_SIZE + 2) + 1] = F[index_w];
         barrier(CLK_LOCAL_MEM_FENCE);
 
-        int nextN = N[cc - tx];
         for (int k = 0; k < BLOCK_SIZE; ++k)
         {
           int x =  k + 2;
           int y =  tx + 1;
-          int currN = nextN;
-          nextN = N[cc - tx + k + 1];
-          t[y * (BLOCK_SIZE + 2) + x] = max3(t[(y - 1) * (BLOCK_SIZE + 2) + x - 2] + s[M[rr + tx] * CHARS + currN],
+          t[y * (BLOCK_SIZE + 2) + x] = max3(t[(y - 1) * (BLOCK_SIZE + 2) + x - 2] + s[M[rr + tx] * CHARS + N[cc - tx + k]],
                                              t[(y - 1) * (BLOCK_SIZE + 2) + x - 1] - penalty,
                                              t[(y    ) * (BLOCK_SIZE + 2) + x - 1] - penalty);
           barrier(CLK_LOCAL_MEM_FENCE);
@@ -460,8 +457,7 @@ class Application {
     cl_int status;
     size_t size = code.length;
     char*[] strs = [code.ptr];
-    auto program = clCreateProgramWithSource(runtime.context, 1, strs.ptr, &size, &status);
-    assert(status == CL_SUCCESS, "this" ~ cl_strerror(status));
+    auto program = clCreateProgramWithSource(runtime.context, 1, strs.ptr, &size, &status);                                    assert(status == CL_SUCCESS, "this" ~ cl_strerror(status));
     auto clopts = format("-DBLOCK_SIZE=%s -DCHARS=%s", BLOCK_SIZE, CHARS);
     status = clBuildProgram(program, 1, &runtime.device, clopts.ptr, null, null);
     if (status != CL_SUCCESS)
@@ -470,29 +466,22 @@ class Application {
       size_t log_size;
       clGetProgramBuildInfo(program, runtime.device, CL_PROGRAM_BUILD_LOG, log.length, log.ptr, &log_size);
       writeln("CL_PROGRAM_BUILD_LOG:\n", log[0 .. log_size - 1], "\nEOL");
-    }
-
-    assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
-    kernel_noblocks             = clCreateKernel(program, "nw_noblocks"             , &status);
-    assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
-    kernel_rectangles           = clCreateKernel(program, "nw_rectangles"           , &status);
-    assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
-    kernel_diamonds             = clCreateKernel(program, "nw_diamonds"             , &status);
-    assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
-    kernel_noblocks_indirectS   = clCreateKernel(program, "nw_noblocks_indirectS"   , &status);
-    assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
-    kernel_rectangles_indirectS = clCreateKernel(program, "nw_rectangles_indirectS" , &status);
-    assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
-    kernel_diamonds_indirectS   = clCreateKernel(program, "nw_diamonds_indirectS"   , &status);
-    assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
-    status = clReleaseProgram(program);
-    assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
+    }                                                                                                                          assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
+    kernel_noblocks             = clCreateKernel(program, "nw_noblocks"             , &status);                                assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
+    kernel_rectangles           = clCreateKernel(program, "nw_rectangles"           , &status);                                assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
+    kernel_diamonds             = clCreateKernel(program, "nw_diamonds"             , &status);                                assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
+    kernel_noblocks_indirectS   = clCreateKernel(program, "nw_noblocks_indirectS"   , &status);                                assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
+    kernel_rectangles_indirectS = clCreateKernel(program, "nw_rectangles_indirectS" , &status);                                assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
+    kernel_diamonds_indirectS   = clCreateKernel(program, "nw_diamonds_indirectS"   , &status);                                assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
+    status = clReleaseProgram(program);                                                                                        assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
     if (do_animate)
     {
       history = new History("a.tex", rows);
     }
   } // this()
 
+  /**
+   */
   long I(long i, long j)
   {
     return i * cols + j;
@@ -506,8 +495,7 @@ class Application {
     {
       auto diff = 0;
       foreach (ii; 0 .. F.length)
-        if (F[ii] != G[ii])
-          ++diff;
+        if (F[ii] != G[ii]) ++diff;
       if (diff > 0)
         writeln("DIFFs ", diff);
     }
@@ -518,8 +506,8 @@ class Application {
   void reset()
   {
     F[] = 0;
-    foreach (c; 0 .. cols) F[c       ] = -penalty * c;
-    foreach (r; 1 .. rows) F[r * cols] = -penalty * r;
+    foreach (c; 0 .. cols) F[0, c] = -penalty * c;
+    foreach (r; 1 .. rows) F[r, 0] = -penalty * r;
   }
 
   /**
@@ -805,7 +793,6 @@ class Application {
   double opencl_rectangles()
   {
     double result = 0.0;
-
     try
     {
       cl_int status;
@@ -821,7 +808,7 @@ class Application {
       auto max_blocks = (cols - 1) / BLOCK_SIZE;
       auto cur_blocks = 1;
       auto inc_blocks = 1;
-      for (int i = 0; i < 2 * max_blocks - 1; ++i)
+      foreach (i; 0 .. 2 * max_blocks - 1)
       {
         size_t wgroup = BLOCK_SIZE;
         size_t global = BLOCK_SIZE * cur_blocks;
@@ -866,7 +853,6 @@ class Application {
   double opencl_rectangles_indirectS()
   {
     double result = 0.0;
-
     try
     {
       cl_int status;
@@ -886,7 +872,7 @@ class Application {
       auto max_blocks = (cols - 1) / BLOCK_SIZE;
       auto cur_blocks = 1;
       auto inc_blocks = 1;
-      for (int i = 0; i < 2 * max_blocks - 1; ++i)
+      foreach (i; 0 .. 2 * max_blocks - 1)
       {
         size_t wgroup = BLOCK_SIZE;
         size_t global = BLOCK_SIZE * cur_blocks;
@@ -941,7 +927,6 @@ class Application {
   double opencl_diamonds()
   {
     double result = 0.0;
-
     try
     {
       cl_int status;
@@ -1039,7 +1024,6 @@ class Application {
   double opencl_diamonds_indirectS()
   {
     double result = 0.0;
-
     try
     {
       cl_int status;
@@ -1187,7 +1171,7 @@ class Application {
       baseline_nw();
       timer.stop();
       ticks = timer.peek();
-      writefln("%2.0f MI BASELINE   %5.3f [s]",
+      writefln("%2.0f MI BASELINE    %5.3f [s]",
                (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
                ticks.usecs / 1E6);
       G[] = F[];
@@ -1215,7 +1199,7 @@ class Application {
     time = opencl_noblocks();
     timer.stop();
     ticks = timer.peek();
-    writefln("%2.0f MI CL NOBLOCK %5.3f (%5.3f) [s], %7.2f MI/s, estimated %7.2f MI/s",
+    writefln("%2.0f MI CL BASELINE %5.3f (%5.3f) [s], %7.2f MI/s, estimated %7.2f MI/s",
               (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
               ticks.usecs / 1E6, time,
               (rows - 1) * (cols - 1) / (1024 * 1024 * time),
@@ -1228,7 +1212,7 @@ class Application {
     time = opencl_noblocks_indirectS();
     timer.stop();
     ticks = timer.peek();
-    writefln("%2.0f MI CL INDIREC %5.3f (%5.3f) [s], %7.2f MI/s",
+    writefln("%2.0f MI CL INDIRECT %5.3f (%5.3f) [s], %7.2f MI/s",
               (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
               ticks.usecs / 1E6, time,
               (rows - 1) * (cols - 1) / (1024 * 1024 * time));
@@ -1240,7 +1224,7 @@ class Application {
     time = opencl_rectangles();
     timer.stop();
     ticks = timer.peek();
-    writefln("%2.0f MI CL BLOCKS  %5.3f (%5.3f) [s], %7.2f MI/s",
+    writefln("%2.0f MI CL SQUARES  %5.3f (%5.3f) [s], %7.2f MI/s",
               (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
               ticks.usecs / 1E6, time,
               (rows - 1) * (cols - 1) / (1024 * 1024 * time));
@@ -1252,7 +1236,7 @@ class Application {
     time = opencl_rectangles_indirectS();
     timer.stop();
     ticks = timer.peek();
-    writefln("%2.0f MI CL BL INDI %5.3f (%5.3f) [s], %7.2f MI/s",
+    writefln("%2.0f MI CL SQ INDI  %5.3f (%5.3f) [s], %7.2f MI/s",
               (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
               ticks.usecs / 1E6, time,
               (rows - 1) * (cols - 1) / (1024 * 1024 * time));
@@ -1264,7 +1248,7 @@ class Application {
     time = opencl_diamonds();
     timer.stop();
     ticks = timer.peek();
-    writefln("%2.0f MI CL DIAMOND %5.3f (%5.3f) [s], %7.2f MI/s",
+    writefln("%2.0f MI CL DIAMONDS %5.3f (%5.3f) [s], %7.2f MI/s",
               (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
               ticks.usecs / 1E6, time,
               (rows - 1) * (cols - 1) / (1024 * 1024 * time));
@@ -1276,7 +1260,7 @@ class Application {
     time = opencl_diamonds_indirectS();
     timer.stop();
     ticks = timer.peek();
-    writefln("%2.0f MI CL D INDIR %5.3f (%5.3f) [s], %7.2f MI/s",
+    writefln("%2.0f MI CL DS INDI  %5.3f (%5.3f) [s], %7.2f MI/s",
               (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
               ticks.usecs / 1E6, time,
               (rows - 1) * (cols - 1) / (1024 * 1024 * time));
