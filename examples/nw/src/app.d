@@ -262,9 +262,9 @@ class Application {
         int rr = (br - bx) * BLOCK_SIZE + 1; // these are the indexes of
         int cc = (bc + bx) * BLOCK_SIZE + 1; // the block's top-left element
         // 1.
-        int index   = cols * rr + cc + tx;
+        int index   = I(rr, cc + tx);
         int index_n = index - cols;
-        int index_w = cols * (rr + tx) + cc - 1;
+        int index_w = I(rr + tx, cc - 1);
 
         // Copy BLOSUM array into shared memory.  Each thread copies
         // one or more columns.  The next columns are copied when the
@@ -288,10 +288,9 @@ class Application {
           {
             int x =     tx + 1;
             int y = k - tx + 1;
-            int m = t[(y - 1) * (BLOCK_SIZE + 1) + x - 1] + s[M[rr + y - 1] * CHARS + N[cc + x - 1]];
-            int d = t[(y - 1) * (BLOCK_SIZE + 1) + x    ] - penalty;
-            int i = t[(y    ) * (BLOCK_SIZE + 1) + x - 1] - penalty;
-            t[y * (BLOCK_SIZE + 1) + x] = max3(m, d, i);
+            t[y * (BLOCK_SIZE + 1) + x] = max3(t[(y - 1) * (BLOCK_SIZE + 1) + x - 1] + s[M[rr + y - 1] * CHARS + N[cc + x - 1]],
+                                               t[(y - 1) * (BLOCK_SIZE + 1) + x    ] - penalty,
+                                               t[(y    ) * (BLOCK_SIZE + 1) + x - 1] - penalty);
           }
           barrier(CLK_LOCAL_MEM_FENCE);
         }
@@ -302,16 +301,15 @@ class Application {
           {
             int x = BLOCK_SIZE + tx - k;
             int y = BLOCK_SIZE - tx;
-            int m = t[(y-1) * (BLOCK_SIZE + 1) + x-1] + s[M[rr + y - 1] * CHARS + N[cc + x - 1]];
-            int d = t[(y-1) * (BLOCK_SIZE + 1) + x  ] - penalty;
-            int i = t[(y ) * (BLOCK_SIZE + 1) + x-1] - penalty;
-            t[y * (BLOCK_SIZE + 1) + x] = max3(m, d, i);
+            t[y * (BLOCK_SIZE + 1) + x] = max3(t[(y - 1) * (BLOCK_SIZE + 1) + x - 1] + s[M[rr + y - 1] * CHARS + N[cc + x - 1]],
+                                               t[(y - 1) * (BLOCK_SIZE + 1) + x    ] - penalty,
+                                               t[(y    ) * (BLOCK_SIZE + 1) + x - 1] - penalty);
           }
           barrier(CLK_LOCAL_MEM_FENCE);
         }
         // 4.
         for (int ty = 0; ty < BLOCK_SIZE; ++ty)
-          F[index + ty * cols] = t[(ty + 1) * (BLOCK_SIZE + 1) + tx + 1];
+          F[I(ty, index)] = t[(ty + 1) * (BLOCK_SIZE + 1) + tx + 1];
       } /* nw_rectangles_indirectS */
 
       /**
@@ -400,8 +398,8 @@ class Application {
         int rr = (br -     bx) * BLOCK_SIZE + 1;
         int cc = (bc + 2 * bx) * BLOCK_SIZE + 1;
 
-        int index   = cols * (rr + tx) + cc - tx;
-        int index_n = cols * (rr - 1) + cc + tx;
+        int index   = I(rr + tx, cc - tx);
+        int index_n = I(rr -  1, cc + tx);
         int index_w = index - 1;
         int ii = 0;
 
@@ -418,9 +416,9 @@ class Application {
           {
             int x = m - tx + 1;
             if (x > 0)
-              F[(rr + tx) * cols + x] = max3(F[(rr + tx - 1) * cols + x - 1] + s[M[rr + tx] * CHARS + N[x]],
-                                              F[(rr + tx - 1) * cols + x    ] - penalty,
-                                              F[(rr + tx   ) * cols + x - 1] - penalty);
+              F[I(rr + tx, x)] = max3(F[I(rr + tx - 1, x - 1)] + s[M[rr + tx] * CHARS + N[x]],
+                                      F[I(rr + tx - 1, x    )] - penalty,
+                                      F[I(rr + tx    , x - 1)] - penalty);
             barrier(CLK_GLOBAL_MEM_FENCE);
           }
 
@@ -437,10 +435,9 @@ class Application {
           int y =  tx + 1;
           int currN = nextN;
           nextN = N[cc - tx + k + 1];
-          int m = t[(y-1) * (BLOCK_SIZE + 2) + x-2] + s[M[rr + tx] * CHARS + currN];
-          int d = t[(y-1) * (BLOCK_SIZE + 2) + x-1] - penalty;
-          int i = t[(y ) * (BLOCK_SIZE + 2) + x-1] - penalty;
-          t[y * (BLOCK_SIZE + 2) + x] = max3(m, d, i);
+          t[y * (BLOCK_SIZE + 2) + x] = max3(t[(y - 1) * (BLOCK_SIZE + 2) + x - 2] + s[M[rr + tx] * CHARS + currN],
+                                             t[(y - 1) * (BLOCK_SIZE + 2) + x - 1] - penalty,
+                                             t[(y    ) * (BLOCK_SIZE + 2) + x - 1] - penalty);
           barrier(CLK_LOCAL_MEM_FENCE);
         }
 
@@ -453,9 +450,9 @@ class Application {
           {
             int x = cc + BLOCK_SIZE + m - tx;
             if (x < cols)
-              F[(rr + tx) * cols + x] = max3(F[(rr + tx - 1) * cols + x - 1] + s[M[rr + tx] * CHARS + N[x]],
-                                              F[(rr + tx - 1) * cols + x    ] - penalty,
-                                              F[(rr + tx   ) * cols + x - 1] - penalty);
+              F[I(rr + tx, x)] = max3(F[I(rr + tx - 1, x - 1)] + s[M[rr + tx] * CHARS + N[x]],
+                                      F[I(rr + tx - 1, x    )] - penalty,
+                                      F[I(rr + tx    , x - 1)] - penalty);
             barrier(CLK_GLOBAL_MEM_FENCE);
           }
       } /* nw_diamonds_indirectS */
