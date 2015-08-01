@@ -62,7 +62,7 @@ class Application {
     getopt(args, "animate|a", &do_animate, "block_size|b", &block_size, "doolittle|d", &doolittle, "verify|v", &do_verify, "size|s", &matrix_dim);
     if (args.length > 1 || 0 == matrix_dim)
     {
-      writefln("Usage: %s [-a -b block_size -d -v] -s matrix_size", args[0]);
+      writefln("Usage: %s [-a -b <block size> -d -v] -s matrix_size", args[0]);
       throw new Exception("invalid command line arguments");
     }
     m = new NDArray!float(matrix_dim, matrix_dim);
@@ -241,6 +241,52 @@ class Application {
         m[G(i, k)] -= sum;
         m[G(i, k)] /= m[G(k, k)];
       }
+      /*
+      __kernel void lud_diagonal_instrumented(__global float* m, int matrix_dim, int offset, __global long* events)
+      {
+        __local float shadow[BLOCK_SIZE * BLOCK_SIZE];
+        int tx = get_local_id(0);
+
+        for (int i = 0; i < BLOCK_SIZE; ++i)
+        {
+          shadow[L(i, tx)] = m[G(offset + i, offset + tx)];
+        }
+
+        barrier(CLK_LOCAL_MEM_FENCE);
+
+        for (int k = 0; k < BLOCK_SIZE - 1; ++k)
+        {
+          if (tx > k)
+          {
+            for (int p = 0; p < k; ++p)
+            {
+              shadow[L(tx, k)] -= shadow[L(tx, p)] * shadow[L(p, k)];
+              events[ix++] = G(offset + tx, offset + k);
+              events[ix++] = G(offset + tx, offset + p);
+              events[ix++] = G(offset + p, offset + k);
+            }
+            shadow[L(tx, k)] /= shadow[L(k, k)];
+          }
+
+          barrier(CLK_LOCAL_MEM_FENCE);
+
+          if (tx > k)
+          {
+            for (int p = 0; p < k + 1; ++p)
+            {
+              shadow[L(k + 1, tx)] -= shadow[L(k + 1, p)] * shadow[L(p, tx)];
+            }
+          }
+
+          barrier(CLK_LOCAL_MEM_FENCE);
+        }
+
+        for (int i = 1; i < BLOCK_SIZE; ++i)
+        {
+          m[G(offset + i, offset + tx)] = shadow[L(i, tx)];
+        }
+      }
+      */
     }.dup;
     cl_int status;
     size_t size = code.length;
@@ -251,9 +297,10 @@ class Application {
     status = clBuildProgram(program, 1, &runtime.device, clopts.ptr, null, null);
     if (status != CL_SUCCESS)
     {
-      char[3072] log;
-      clGetProgramBuildInfo(program, runtime.device, CL_PROGRAM_BUILD_LOG, 3071, log.ptr, null);
-      writeln("CL_PROGRAM_BUILD_LOG:\n", log, "\nEOD");
+      char[4096] log;
+      size_t log_size;
+      clGetProgramBuildInfo(program, runtime.device, CL_PROGRAM_BUILD_LOG, log.length, log.ptr, &log_size);
+      writeln("CL_PROGRAM_BUILD_LOG:\n", log[0 .. log_size - 1], "\nEOL");
     }
     assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
     diagonal  = clCreateKernel(program, "lud_diagonal" , &status);
@@ -303,19 +350,6 @@ class Application {
     if (do_verify)
     {
       mm[] = m;
-    }
-  }
-
-  void print_matrix()
-  {
-    foreach (i; 0 .. matrix_dim)
-    {
-      writef("%5.2f", m[i, 0]);
-      foreach (j; 1 .. matrix_dim)
-      {
-        writef(" %5.2f", m[i, j]);
-      }
-      writeln();
     }
   }
 
@@ -636,18 +670,75 @@ class Application {
 
   /**
    */
+/+
   void clop_lud()
   {
-    // use CLOP DSL to generate OpenCL kernel and API calls.
-/+
-    mixin( compile(
-    q{
-      Antidiagonal NDRange(r : 1 .. rows, c : 1 .. cols) {
-        F[r, c] = max3( F[r - 1, c - 1] + S[r, c], F[r, c - 1] - penalty, F[r - 1, c] - penalty );
-      } apply( rectangular_blocking( 8, 8 ) )
-    } ) );
-+/
+    create_matrix();
+    for (auto k = 0; k < matrix_dim; k += BLOCK_SIZE)
+    {
+      mixin(compile(q{
+            NDRange(tx : 0 .. size) {
+              for (int k = 0; k < size; ++k)
+              {
+                if (tx > k)
+                {
+                  for (int p = 0; p < k; ++p)
+                  {
+                    m[] -= m[] * m[];
+                  }
+                  m[] /= m[];
+                }
+                // barrier
+                if (tx > k)
+                {
+                  for (int p = 0; p < k; ++p)
+                  {
+                    m[] -= m[] * m[];
+                  }
+                }
+              }
+            }
+          }));
+
+      mixin(compile(q{
+            NDRange(tx : 0 .. x) {
+              if (tx)
+              {
+                for (int i = 1; i < BLOCK_SIZE; ++i)
+                {
+                  for (int j = 0; j < i; ++j)
+                  {
+                    m[] -= m[] * m[];
+                  }
+                }
+              }
+              else
+              {
+                for (int i = 0; i < BLOCK_SIZE; ++i)
+                {
+                  for (int j = 0; j < i; ++j)
+                  {
+                    m[] -= m[] * m[];
+                  }
+                  m[] /= m[];
+                }
+              }
+            }
+          }));
+
+      mixin(compile(q{
+            NDRange(tx : 0 .. x, ty : 0 .. ty) {
+              float sum = 0;
+              for (int i = 0; i < size; ++i)
+              {
+                sum += m[] * m[];
+              }
+              m[] -= sum;
+            }
+          }));
+    }
   }
++/
 
   /**
    */
@@ -672,7 +763,7 @@ class Application {
     {
       sequential_lud();
       validate();
-      if (do_animate) history.save_animation();
+      history.save_animation();
       run_once = false;
     }
 
