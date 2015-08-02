@@ -73,12 +73,13 @@ class Application {
     do_animate = do_animate && run_once;
     doolittle = doolittle && run_once;
     BLOCK_SIZE = block_size;
-    /**
-     */
+
     char[] code = q{
       #define G(i,j) ((i) * matrix_dim + (j))
       #define L(i,j) ((i) * BLOCK_SIZE + (j))
 
+      /**
+       */
       __kernel void lud_diagonal(__global float* m, int matrix_dim, int offset)
       {
         __local float shadow[BLOCK_SIZE * BLOCK_SIZE];
@@ -219,6 +220,10 @@ class Application {
         m[G(global_row_id + ty, global_col_id + tx)] -= sum;
       }
 
+      /**
+       * The first of two kernels that do not use blocking.  Compute
+       * the elements on the row for the current diagonal element.
+       */
       __kernel void lud_baseline_horizontal(__global float* m, int matrix_dim, int k)
       {
         int j = k + get_global_id(0);
@@ -230,6 +235,10 @@ class Application {
         m[G(k, j)] -= sum;
       }
 
+      /**
+       * The matching kernel for the previous one.  Compute the
+       * elements on the the column for the current diagonal element.
+       */
       __kernel void lud_baseline_vertical(__global float* m, int matrix_dim, int k)
       {
         int i = k + get_global_id(0) + 1;
