@@ -15,12 +15,12 @@ for i in $(ls ${srcdir}/*.d) ; do
     obj=${obj##*/}
     if [ ${i} == ../${srcpth}.d ]; then
         echo "Compile ${i}..."
-        dmd -w -I.. -I~/.dub/packages/{derelict-util-1.9.1/source,derelict-cl-1.2.2/source,pegged-0.2.1} -unittest -debug=UNITTEST_DEBUG -c ${i}
+        dmd -w -I.. -I~/.dub/packages/{derelict-util-1.9.1/source,derelict-cl-1.2.3/source,pegged-0.2.1} -unittest -debug=UNITTEST_DEBUG -c ${i}
         let excode=$?
         let status=$((status||excode))
     elif [ ${i} -nt ${obj} ]; then
         echo "Compile ${i}..."
-        dmd -w -I.. -I~/.dub/packages/{derelict-util-1.9.1/source,derelict-cl-1.2.2/source,pegged-0.2.1}           -debug=UNITTEST_DEBUG -c ${i}
+        dmd -w -I.. -I~/.dub/packages/{derelict-util-1.9.1/source,derelict-cl-1.2.3/source,pegged-0.2.1}           -debug=UNITTEST_DEBUG -c ${i}
         let excode=$?
         let status=$((status||excode))
     fi
@@ -42,9 +42,9 @@ fi
 
 if [ $((status)) = 0 ]; then
     echo "Compile ${testnm}.d ${inputs}..."
-    dmd -w -I.. -I~/.dub/packages/{derelict-util-1.9.1/source,derelict-cl-1.2.2/source,pegged-0.2.1} \
+    dmd -w -I.. -I~/.dub/packages/{derelict-util-1.9.1/source,derelict-cl-1.2.3/source,pegged-0.2.1} \
         -unittest -of${testnm} ${testnm}.d ${inputs} \
-        ~/.dub/packages/{pegged-0.2.1/libpegged.a,derelict-cl-1.2.2/lib/libDerelictCL.a,derelict-util-1.9.1/lib/libDerelictUtil.a} \
+        ~/.dub/packages/{pegged-0.2.1/libpegged.a,derelict-cl-1.2.3/lib/libDerelictCL.a,derelict-util-1.9.1/lib/libDerelictUtil.a} \
         ../lib/libclop_runtime.a -L-ldl
     let excode=$?
     let status=$((status||excode))
