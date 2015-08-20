@@ -1307,10 +1307,11 @@ class Application {
   }
 
   /**
+   *  Needleman-Wunsch algorithm implementation that uses CLOP to
+   *  generate the appropriate OpenCL kernel and API calls.
    */
   void clop_nw()
   {
-    // use CLOP DSL to generate OpenCL kernel and API calls.
     mixin(compile(q{
       int max3(int a, int b, int c)
       {
@@ -1318,7 +1319,9 @@ class Application {
         return k > c ? k : c;
       }
       Antidiagonal NDRange(r : 1 .. rows, c : 1 .. cols) {
-        F[r, c] = max3(F[r - 1, c - 1] + S[r, c], F[r, c - 1] - penalty, F[r - 1, c] - penalty);
+        F[r, c] = max3(F[r - 1, c - 1] + S[r, c],
+                       F[r, c - 1] - penalty,
+                       F[r - 1, c] - penalty);
       } apply(rectangular_blocking(BLOCK_SIZE, BLOCK_SIZE))
     }));
   }
@@ -1334,8 +1337,10 @@ class Application {
         return k > c ? k : c;
       }
       Antidiagonal NDRange(r : 1 .. rows, c : 1 .. cols) {
-        F[r, c] = max3(F[r - 1, c - 1] + BLOSUM62[M[r] * CHARS + N[c]], F[r, c - 1] - penalty, F[r - 1, c] - penalty);
-      } apply(rectangular_blocking(BLOCK_SIZE, BLOCK_SIZE), prefetching())
+        F[r, c] = max3(F[r - 1, c - 1] + BLOSUM62[M[r] * CHARS + N[c]],
+                       F[r, c - 1] - penalty,
+                       F[r - 1, c] - penalty);
+      } apply(rhomboid_blocking(BLOCK_SIZE, BLOCK_SIZE), prefetching())
     }));
   }
 
@@ -1481,10 +1486,9 @@ int main(string[] args)
       try
       {
         runtime.init(p, d);
-        writeln("==================================================");
+        writeln("--------------------------------------------------");
         auto app = new Application(args);
         app.run();
-        writeln("==================================================");
       }
       catch (Exception msg)
       {
@@ -1495,6 +1499,7 @@ int main(string[] args)
       {
         runtime.shutdown();
       }
+      writeln("==================================================");
     }
   return 0;
 }

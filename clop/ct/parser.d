@@ -70,7 +70,7 @@ CLOP:
  IfStatement            <  "if" '(' Expression ')' Statement ("else" Statement)?
  IterationStatement     <  WhileStatement / ForStatement
  WhileStatement         <  "while" '(' Expression ')' Statement
- ForStatement           <  "for" '(' Expression? ';' Expression? ';' Expression? ')' Statement
+ ForStatement           <  "for" '(' BuiltinType? ExpressionStatement ExpressionStatement Expression? ')' Statement
  ReturnStatement        <  "return" Expression? ';'
 
 # CLOP_Expr:
@@ -120,6 +120,8 @@ CLOP:
                          / "register" / "restrict" / "return" / "short" / "signed"
                          / "sizeof" / "static" / "struct" / "switch" / "typedef"
                          / "union" / "unsigned" / "void" / "volatile" / "while"
+ BuiltinType            <~ ("u"? ("bool" / "char" / "short" / "int" / "long" / "half" / "float" / "double" / "quad") ("2" / "3" / "4" / "8" / "16")?)
+                         / "image3d_t" / "image2d_t" / "sampler_t" / "event_t" / "void" / "ptrdiff_t" / "intptr_t" / "size_t"
  Spacing                <~ (space / endOfLine / Comment)*
  Comment                <~ "//" (!endOfLine .)* endOfLine
  IntegerLiteral         <~ Sign? Integer IntegerSuffix?
@@ -229,6 +231,7 @@ struct GenericCLOP(TParseTree)
         rules["IdentifierList"] = toDelegate(&IdentifierList);
         rules["Identifier"] = toDelegate(&Identifier);
         rules["Keyword"] = toDelegate(&Keyword);
+        rules["BuiltinType"] = toDelegate(&BuiltinType);
         rules["Spacing"] = toDelegate(&Spacing);
    }
 
@@ -1624,7 +1627,7 @@ struct GenericCLOP(TParseTree)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("for"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, Expression, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(";"), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, Expression, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(";"), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, Expression, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing), pegged.peg.wrapAround!(Spacing, Statement, Spacing)), "CLOP.ForStatement")(p);
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("for"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, BuiltinType, Spacing)), pegged.peg.wrapAround!(Spacing, ExpressionStatement, Spacing), pegged.peg.wrapAround!(Spacing, ExpressionStatement, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, Expression, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing), pegged.peg.wrapAround!(Spacing, Statement, Spacing)), "CLOP.ForStatement")(p);
         }
         else
         {
@@ -1632,7 +1635,7 @@ struct GenericCLOP(TParseTree)
                 return *m;
             else
             {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("for"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, Expression, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(";"), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, Expression, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(";"), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, Expression, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing), pegged.peg.wrapAround!(Spacing, Statement, Spacing)), "CLOP.ForStatement"), "ForStatement")(p);
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("for"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, BuiltinType, Spacing)), pegged.peg.wrapAround!(Spacing, ExpressionStatement, Spacing), pegged.peg.wrapAround!(Spacing, ExpressionStatement, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, Expression, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing), pegged.peg.wrapAround!(Spacing, Statement, Spacing)), "CLOP.ForStatement"), "ForStatement")(p);
                 memo[tuple(`ForStatement`,p.end)] = result;
                 return result;
             }
@@ -1643,12 +1646,12 @@ struct GenericCLOP(TParseTree)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("for"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, Expression, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(";"), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, Expression, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(";"), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, Expression, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing), pegged.peg.wrapAround!(Spacing, Statement, Spacing)), "CLOP.ForStatement")(TParseTree("", false,[], s));
+            return         pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("for"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, BuiltinType, Spacing)), pegged.peg.wrapAround!(Spacing, ExpressionStatement, Spacing), pegged.peg.wrapAround!(Spacing, ExpressionStatement, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, Expression, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing), pegged.peg.wrapAround!(Spacing, Statement, Spacing)), "CLOP.ForStatement")(TParseTree("", false,[], s));
         }
         else
         {
             memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("for"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, Expression, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(";"), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, Expression, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(";"), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, Expression, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing), pegged.peg.wrapAround!(Spacing, Statement, Spacing)), "CLOP.ForStatement"), "ForStatement")(TParseTree("", false,[], s));
+            return hooked!(pegged.peg.defined!(pegged.peg.and!(pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("for"), Spacing), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!("("), Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, BuiltinType, Spacing)), pegged.peg.wrapAround!(Spacing, ExpressionStatement, Spacing), pegged.peg.wrapAround!(Spacing, ExpressionStatement, Spacing), pegged.peg.option!(pegged.peg.wrapAround!(Spacing, Expression, Spacing)), pegged.peg.wrapAround!(Spacing, pegged.peg.literal!(")"), Spacing), pegged.peg.wrapAround!(Spacing, Statement, Spacing)), "CLOP.ForStatement"), "ForStatement")(TParseTree("", false,[], s));
         }
     }
     static string ForStatement(GetName g)
@@ -2770,6 +2773,42 @@ struct GenericCLOP(TParseTree)
     static string Keyword(GetName g)
     {
         return "CLOP.Keyword";
+    }
+
+    static TParseTree BuiltinType(TParseTree p)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.fuse!(pegged.peg.or!(pegged.peg.and!(pegged.peg.option!(pegged.peg.literal!("u")), pegged.peg.keywords!("bool", "char", "short", "int", "long", "half", "float", "double", "quad"), pegged.peg.option!(pegged.peg.keywords!("2", "3", "4", "8", "16"))), pegged.peg.literal!("image3d_t"), pegged.peg.literal!("image2d_t"), pegged.peg.literal!("sampler_t"), pegged.peg.literal!("event_t"), pegged.peg.literal!("void"), pegged.peg.literal!("ptrdiff_t"), pegged.peg.literal!("intptr_t"), pegged.peg.literal!("size_t"))), "CLOP.BuiltinType")(p);
+        }
+        else
+        {
+            if(auto m = tuple(`BuiltinType`,p.end) in memo)
+                return *m;
+            else
+            {
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.fuse!(pegged.peg.or!(pegged.peg.and!(pegged.peg.option!(pegged.peg.literal!("u")), pegged.peg.keywords!("bool", "char", "short", "int", "long", "half", "float", "double", "quad"), pegged.peg.option!(pegged.peg.keywords!("2", "3", "4", "8", "16"))), pegged.peg.literal!("image3d_t"), pegged.peg.literal!("image2d_t"), pegged.peg.literal!("sampler_t"), pegged.peg.literal!("event_t"), pegged.peg.literal!("void"), pegged.peg.literal!("ptrdiff_t"), pegged.peg.literal!("intptr_t"), pegged.peg.literal!("size_t"))), "CLOP.BuiltinType"), "BuiltinType")(p);
+                memo[tuple(`BuiltinType`,p.end)] = result;
+                return result;
+            }
+        }
+    }
+
+    static TParseTree BuiltinType(string s)
+    {
+        if(__ctfe)
+        {
+            return         pegged.peg.defined!(pegged.peg.fuse!(pegged.peg.or!(pegged.peg.and!(pegged.peg.option!(pegged.peg.literal!("u")), pegged.peg.keywords!("bool", "char", "short", "int", "long", "half", "float", "double", "quad"), pegged.peg.option!(pegged.peg.keywords!("2", "3", "4", "8", "16"))), pegged.peg.literal!("image3d_t"), pegged.peg.literal!("image2d_t"), pegged.peg.literal!("sampler_t"), pegged.peg.literal!("event_t"), pegged.peg.literal!("void"), pegged.peg.literal!("ptrdiff_t"), pegged.peg.literal!("intptr_t"), pegged.peg.literal!("size_t"))), "CLOP.BuiltinType")(TParseTree("", false,[], s));
+        }
+        else
+        {
+            memo = null;
+            return hooked!(pegged.peg.defined!(pegged.peg.fuse!(pegged.peg.or!(pegged.peg.and!(pegged.peg.option!(pegged.peg.literal!("u")), pegged.peg.keywords!("bool", "char", "short", "int", "long", "half", "float", "double", "quad"), pegged.peg.option!(pegged.peg.keywords!("2", "3", "4", "8", "16"))), pegged.peg.literal!("image3d_t"), pegged.peg.literal!("image2d_t"), pegged.peg.literal!("sampler_t"), pegged.peg.literal!("event_t"), pegged.peg.literal!("void"), pegged.peg.literal!("ptrdiff_t"), pegged.peg.literal!("intptr_t"), pegged.peg.literal!("size_t"))), "CLOP.BuiltinType"), "BuiltinType")(TParseTree("", false,[], s));
+        }
+    }
+    static string BuiltinType(GetName g)
+    {
+        return "CLOP.BuiltinType";
     }
 
     static TParseTree Spacing(TParseTree p)

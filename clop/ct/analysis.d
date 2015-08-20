@@ -29,7 +29,7 @@ import std.string;
 import pegged.grammar;
 
 /++
- +  Interval arithmetic operations crate ParseTree objects.
+ +  Interval arithmetic operations create ParseTree objects.
  +  ParseTree has the following fields
  +
  +  string      name;       /// The node name

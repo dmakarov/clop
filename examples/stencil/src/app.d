@@ -35,12 +35,14 @@ import derelict.opencl.cl;
 import clop.compiler;
 
 /**
+ * Sample stencil applications.
  */
 class Application {
   alias float FLOAT_PRECISION;
   static immutable int SEED = 1;
-  static immutable uint BLOCK_SIZE = 8;
   static immutable uint NUM_DOMAINS = 13;
+
+  const uint BLOCK_SIZE;
 
   struct stencil_CTX {
     int bs_y;
@@ -64,36 +66,35 @@ class Application {
 
   /**
    */
-  this( string[] args )
+  this(string[] args)
   {
-    if ( args.length != 4 )
+    uint block_size = 8;
+    if (args.length != 4)
     {
       throw new Exception( "ERROR: invalid args # " ~ to!(string)(args.length - 1) );
     }
-    xdim = to!(uint)( args[1] );
-    ydim = to!(uint)( args[2] );
-    zdim = to!(uint)( args[3] );
-    coef = new FLOAT_PRECISION[xdim * ydim * zdim * NUM_DOMAINS];
-    assert( null != coef, "Can't allocate array coef" );
-    v    = new FLOAT_PRECISION[xdim * ydim * zdim]; assert( null != v, "Can't allocate array v" );
-    u    = new FLOAT_PRECISION[xdim * ydim * zdim]; assert( null != u, "Can't allocate array u" );
-    U    = new FLOAT_PRECISION[xdim * ydim * zdim]; assert( null != U, "Can't allocate array U" );
-
-    debug ( DEBUG )
+    xdim = to!(uint)(args[1]);
+    ydim = to!(uint)(args[2]);
+    zdim = to!(uint)(args[3]);
+    BLOCK_SIZE = block_size;
+    coef = new FLOAT_PRECISION[xdim * ydim * zdim * NUM_DOMAINS]; assert(null != coef, "Can't allocate array coef");
+    v    = new FLOAT_PRECISION[xdim * ydim * zdim];               assert(null != v,    "Can't allocate array v");
+    u    = new FLOAT_PRECISION[xdim * ydim * zdim];               assert(null != u,    "Can't allocate array u");
+    U    = new FLOAT_PRECISION[xdim * ydim * zdim];               assert(null != U,    "Can't allocate array U");
+    debug (DEBUG)
     {
-      writefln( "Stencil dimensions x:%d, y:%d, z:%d, total memory size allocated %d bytes",
-                xdim, ydim, zdim, (NUM_DOMAINS + 3) * xdim * ydim * zdim * FLOAT_PRECISION.sizeof );
+      writefln("Stencil dimensions x:%d, y:%d, z:%d, total memory size allocated %d bytes",
+               xdim, ydim, zdim, (NUM_DOMAINS + 3) * xdim * ydim * zdim * FLOAT_PRECISION.sizeof);
     }
-
     Mt19937 gen;
-    gen.seed( SEED );
-    foreach ( i; 0 .. xdim * ydim * zdim * NUM_DOMAINS )
+    gen.seed(SEED);
+    foreach (i; 0 .. xdim * ydim * zdim * NUM_DOMAINS)
     {
-      coef[i] = uniform( 0.0, 1.0, gen );
+      coef[i] = uniform(0.0, 1.0, gen);
     }
-    foreach ( i; 0 .. xdim * ydim * zdim )
+    foreach (i; 0 .. xdim * ydim * zdim)
     {
-      v[i]    = uniform( 0.0, 1.0, gen );
+      v[i]    = uniform(0.0, 1.0, gen);
     }
 
     /**
@@ -102,20 +103,20 @@ class Application {
      **/
     char[] code = q{
       #define FLOAT_PRECISION float
-      #define C( d, k, j, i ) ((d) * zdim * ydim * xdim + (k) * ydim * xdim + (j) * xdim + (i))
-      #define V( k, j, i    ) (                           (k) * ydim * xdim + (j) * xdim + (i))
+      #define C(d, k, j, i) ((d) * zdim * ydim * xdim + (k) * ydim * xdim + (j) * xdim + (i))
+      #define V(k, j, i   ) (                           (k) * ydim * xdim + (j) * xdim + (i))
 
-      #define LC( d, k, j, i ) ((d) * gz * gy * gx + (k) * gy * gx + (j) * gx + (i))
-      #define LV( k, j, i    ) (                     (k) * gy * gx + (j) * gx + (i))
+      #define LC(d, k, j, i) ((d) * gz * gy * gx + (k) * gy * gx + (j) * gx + (i))
+      #define LV(k, j, i   ) (                     (k) * gy * gx + (j) * gx + (i))
 
-      __kernel void stencil_5pt_noblocks( __global       FLOAT_PRECISION * u,
-                                          __global const FLOAT_PRECISION * v,
-                                          __global const FLOAT_PRECISION * coef )
+      __kernel void stencil_5pt_noblocks(__global       FLOAT_PRECISION * u,
+                                         __global const FLOAT_PRECISION * v,
+                                         __global const FLOAT_PRECISION * coef)
       {
-        size_t tx = get_global_id( 0 ) + 1;
-        size_t ty = get_global_id( 1 ) + 1;
-        size_t xdim = get_global_size( 0 ) + 2;
-        size_t ydim = get_global_size( 1 ) + 2;
+        size_t tx = get_global_id(0) + 1;
+        size_t ty = get_global_id(1) + 1;
+        size_t xdim = get_global_size(0) + 2;
+        size_t ydim = get_global_size(1) + 2;
 
         u[ty * xdim + tx] = coef[                  ty * xdim + tx] * v[(ty    ) * xdim + tx    ]
                           + coef[    xdim * ydim + ty * xdim + tx] * v[(ty    ) * xdim + tx - 1]
@@ -124,16 +125,16 @@ class Application {
                           + coef[4 * xdim * ydim + ty * xdim + tx] * v[(ty + 1) * xdim + tx    ];
       } /* stencil_5pt_noblocks */
 
-      __kernel void stencil_7pt_noblocks( __global       FLOAT_PRECISION * u,
-                                          __global const FLOAT_PRECISION * v,
-                                          __global const FLOAT_PRECISION * coef )
+      __kernel void stencil_7pt_noblocks(__global       FLOAT_PRECISION * u,
+                                         __global const FLOAT_PRECISION * v,
+                                         __global const FLOAT_PRECISION * coef)
       {
-        size_t tx = get_global_id( 0 ) + 1;
-        size_t ty = get_global_id( 1 ) + 1;
-        size_t tz = get_global_id( 2 ) + 1;
-        size_t xdim = get_global_size( 0 ) + 2;
-        size_t ydim = get_global_size( 1 ) + 2;
-        size_t zdim = get_global_size( 2 ) + 2;
+        size_t tx = get_global_id(0) + 1;
+        size_t ty = get_global_id(1) + 1;
+        size_t tz = get_global_id(2) + 1;
+        size_t xdim = get_global_size(0) + 2;
+        size_t ydim = get_global_size(1) + 2;
+        size_t zdim = get_global_size(2) + 2;
 
         u[V(tz,ty,tx)] = coef[C(0,tz,ty,tx)] * v[V(tz    ,ty    ,tx    )]
                        + coef[C(1,tz,ty,tx)] * v[V(tz    ,ty    ,tx - 1)]
@@ -144,9 +145,9 @@ class Application {
                        + coef[C(6,tz,ty,tx)] * v[V(tz + 1,ty    ,tx    )];
       } /* stencil_7pt_noblocks */
 
-      __kernel void stencil_7pt_blocks( __global       FLOAT_PRECISION * u,
-                                        __global const FLOAT_PRECISION * v,
-                                        __global const FLOAT_PRECISION * coef )
+      __kernel void stencil_7pt_blocks(__global       FLOAT_PRECISION * u,
+                                       __global const FLOAT_PRECISION * v,
+                                       __global const FLOAT_PRECISION * coef)
       {
         size_t tx = get_global_id( 0 );
         size_t ty = get_global_id( 1 );
@@ -156,8 +157,8 @@ class Application {
         size_t ydim = bs * get_global_size( 1 );
         size_t zdim = get_global_size( 2 );
 
-        for ( int y = 0; y < bs; ++y )
-          if ( 0 < tz && tz < zdim - 1 && 0 < bs * ty + y && bs * ty + y < ydim - 1 && 0 < tx && tx < xdim - 1 )
+        for (int y = 0; y < bs; ++y)
+          if (0 < tz && tz < zdim - 1 && 0 < bs * ty + y && bs * ty + y < ydim - 1 && 0 < tx && tx < xdim - 1)
             u[V(tz,bs * ty + y,tx)]
                            = coef[C(0,tz,bs * ty + y,tx)] * v[V(tz    ,bs * ty + y    ,tx    )]
                            + coef[C(1,tz,bs * ty + y,tx)] * v[V(tz    ,bs * ty + y    ,tx - 1)]
@@ -168,10 +169,10 @@ class Application {
                            + coef[C(6,tz,bs * ty + y,tx)] * v[V(tz + 1,bs * ty + y    ,tx    )];
       } /* stencil_7pt_blocked */
 
-      __kernel void stencil_7pt_shared( __global       FLOAT_PRECISION * u,
-                                        __global const FLOAT_PRECISION * v,
-                                        __global const FLOAT_PRECISION * coef,
-                                        __local        FLOAT_PRECISION * lv/*, __local        FLOAT_PRECISION * lc*/ )
+      __kernel void stencil_7pt_shared(__global       FLOAT_PRECISION * u,
+                                       __global const FLOAT_PRECISION * v,
+                                       __global const FLOAT_PRECISION * coef,
+                                       __local        FLOAT_PRECISION * lv/*, __local        FLOAT_PRECISION * lc*/ )
       {
         size_t ix = get_local_id( 0 ) + 1;
         size_t iy = get_local_id( 1 ) + 1;
@@ -1140,177 +1141,138 @@ class Application {
     size_t size;
     StopWatch timer;
     TickDuration ticks;
-    double benchmark = runtime.benchmark( (xdim - 2) * (ydim - 2) * (zdim - 2) );
+    double benchmark = runtime.benchmark((xdim - 2) * (ydim - 2) * (zdim - 2));
     double rate;
 
     timer.start();
     rate = opencl_stencil_5pt_noblocks();
     timer.stop();
     ticks = timer.peek();
-    writefln( "%2d MI  5pt NO BLOCKS  %5.3f (%5.3f) [s], %7.2f MI/s, estimated %7.2f MI/s",
-              xdim * ydim * 128 / ( 1024 * 1024 ),
-              ticks.usecs / 1E6, rate,
-              (8 * xdim - 2) * (16 * ydim - 2) / (1024 * 1024 * rate),
-              2 * benchmark / 11 );
-
-    writeln( "-----------------------------------------------------" );
+    writefln("%2d MI  5pt NO BLOCKS  %5.3f (%5.3f) [s], %7.2f MI/s, estimated %7.2f MI/s",
+             xdim * ydim * 128 / (1024 * 1024),
+             ticks.usecs / 1E6, rate,
+             (8 * xdim - 2) * (16 * ydim - 2) / (1024 * 1024 * rate),
+             2 * benchmark / 11);
 
     timer.reset();
     timer.start();
     sequential_stencil_7pt();
     timer.stop();
     ticks = timer.peek();
-    writefln( "%2d MI  7pt SEQUENTIAL %5.3f         [s], %7.2f MI/s",
-              xdim * ydim * zdim / ( 1024 * 1024 ),
-              ticks.usecs / 1E6,
-              xdim * ydim * zdim * 1E6 / ( 1024 * 1024 * ticks.usecs ) );
+    writefln("%2d MI  7pt SEQUENTIAL %5.3f         [s], %7.2f MI/s",
+             xdim * ydim * zdim / (1024 * 1024),
+             ticks.usecs / 1E6,
+             xdim * ydim * zdim * 1E6 / (1024 * 1024 * ticks.usecs));
 
     timer.reset();
     timer.start();
     rate = opencl_stencil_7pt_noblocks();
     timer.stop();
     ticks = timer.peek();
-    writefln( "%2d MI  7pt NO BLOCKS  %5.3f (%5.3f) [s], %7.2f MI/s, estimated %7.2f MI/s",
-              xdim * ydim * zdim / ( 1024 * 1024 ),
-              ticks.usecs / 1E6, rate,
-              (xdim - 2) * (ydim - 2) * (zdim - 2) / (1024 * 1024 * rate),
-              2 * benchmark / 15 );
+    writefln("%2d MI  7pt NO BLOCKS  %5.3f (%5.3f) [s], %7.2f MI/s, estimated %7.2f MI/s",
+             xdim * ydim * zdim / (1024 * 1024),
+             ticks.usecs / 1E6, rate,
+             (xdim - 2) * (ydim - 2) * (zdim - 2) / (1024 * 1024 * rate),
+             2 * benchmark / 15);
     validate();
 
-    clGetKernelWorkGroupInfo( kernel_stencil_7pt_blocks,
-                              runtime.device,
-                              CL_KERNEL_WORK_GROUP_SIZE,
-                              size.sizeof,
-                              &size,
-                              null );
-    if ( size >= BLOCK_SIZE * BLOCK_SIZE )
+    timer.reset();
+    timer.start();
+    rate = opencl_stencil_7pt_blocks();
+    timer.stop();
+    ticks = timer.peek();
+    if (0 != rate)
     {
-      timer.reset();
-      timer.start();
-      rate = opencl_stencil_7pt_blocks();
-      timer.stop();
-      ticks = timer.peek();
-      if ( 0 != rate )
-      {
-      writefln( "%2d MI  7pt BLOCKS     %5.3f (%5.3f) [s], %7.2f MI/s",
-                xdim * ydim * zdim / ( 1024 * 1024 ),
-                ticks.usecs / 1E6, rate,
-                (xdim - 2) * (ydim - 2) * (zdim - 2) / (1024 * 1024 * rate) );
-      validate();
-      }
-    }
-
-    clGetKernelWorkGroupInfo( kernel_stencil_7pt_shared,
-                              runtime.device,
-                              CL_KERNEL_WORK_GROUP_SIZE,
-                              size.sizeof,
-                              &size,
-                              null );
-    if ( size >= BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE )
-    {
-      timer.reset();
-      timer.start();
-      rate = opencl_stencil_7pt_shared();
-      timer.stop();
-      ticks = timer.peek();
-      writefln( "%2d MI  7pt SHARED     %5.3f (%5.3f) [s], %7.2f MI/s",
-                xdim * ydim * zdim / ( 1024 * 1024 ),
-                ticks.usecs / 1E6, rate,
-                (xdim - 2) * (ydim - 2) * (zdim - 2) / (1024 * 1024 * rate) );
+      writefln("%2d MI  7pt BLOCKS     %5.3f (%5.3f) [s], %7.2f MI/s",
+               xdim * ydim * zdim / (1024 * 1024),
+               ticks.usecs / 1E6, rate,
+               (xdim - 2) * (ydim - 2) * (zdim - 2) / (1024 * 1024 * rate));
       validate();
     }
 
-    writeln( "-----------------------------------------------------" );
+    timer.reset();
+    timer.start();
+    rate = opencl_stencil_7pt_shared();
+    timer.stop();
+    ticks = timer.peek();
+    writefln("%2d MI  7pt SHARED     %5.3f (%5.3f) [s], %7.2f MI/s",
+             xdim * ydim * zdim / (1024 * 1024),
+             ticks.usecs / 1E6, rate,
+             (xdim - 2) * (ydim - 2) * (zdim - 2) / (1024 * 1024 * rate));
+    validate();
 
     cleanup();
     timer.start();
     sequential_stencil_25pt();
     timer.stop();
     ticks = timer.peek();
-    writefln( "%2d MI 25pt SEQUENTIAL %5.3f         [s], %7.2f MI/s",
-              xdim * ydim * zdim / ( 1024 * 1024 ),
-              ticks.usecs / 1E6,
-              xdim * ydim * zdim * 1E6 / ( 1024 * 1024 * ticks.usecs ) );
+    writefln("%2d MI 25pt SEQUENTIAL %5.3f         [s], %7.2f MI/s",
+             xdim * ydim * zdim / (1024 * 1024),
+             ticks.usecs / 1E6,
+             xdim * ydim * zdim * 1E6 / (1024 * 1024 * ticks.usecs));
 
     timer.reset();
     timer.start();
     rate = opencl_stencil_25pt_noblocks();
     timer.stop();
     ticks = timer.peek();
-    writefln( "%2d MI 25pt NO BLOCKS  %5.3f (%5.3f) [s], %7.2f MI/s, estimated %7.2f MI/s",
-              xdim * ydim * zdim / ( 1024 * 1024 ),
-              ticks.usecs / 1E6, rate,
-              (xdim - 8) * (ydim - 8) * (zdim - 8) / (1024 * 1024 * rate),
-              2 * benchmark / 39 );
+    writefln("%2d MI 25pt NO BLOCKS  %5.3f (%5.3f) [s], %7.2f MI/s, estimated %7.2f MI/s",
+             xdim * ydim * zdim / ( 1024 * 1024 ),
+             ticks.usecs / 1E6, rate,
+             (xdim - 8) * (ydim - 8) * (zdim - 8) / (1024 * 1024 * rate),
+             2 * benchmark / 39);
     validate();
 
-    clGetKernelWorkGroupInfo( kernel_stencil_25pt_blocks,
-                              runtime.device,
-                              CL_KERNEL_WORK_GROUP_SIZE,
-                              size.sizeof,
-                              &size,
-                              null );
-    if ( size >= BLOCK_SIZE * BLOCK_SIZE )
+    timer.reset();
+    timer.start();
+    rate = opencl_stencil_25pt_blocks();
+    timer.stop();
+    ticks = timer.peek();
+    if (0 != rate)
     {
-      timer.reset();
-      timer.start();
-      rate = opencl_stencil_25pt_blocks();
-      timer.stop();
-      ticks = timer.peek();
-      if ( 0 != rate )
-      {
-      writefln( "%2d MI 25pt BLOCKS     %5.3f (%5.3f) [s], %7.2f MI/s",
-                xdim * ydim * zdim / ( 1024 * 1024 ),
-                ticks.usecs / 1E6, rate,
-                xdim * ydim * zdim / (1024 * 1024 * rate) );
+      writefln("%2d MI 25pt BLOCKS     %5.3f (%5.3f) [s], %7.2f MI/s",
+               xdim * ydim * zdim / (1024 * 1024),
+               ticks.usecs / 1E6, rate,
+               xdim * ydim * zdim / (1024 * 1024 * rate));
       validate();
-      }
     }
 
-    clGetKernelWorkGroupInfo( kernel_stencil_25pt_shared,
-                              runtime.device,
-                              CL_KERNEL_WORK_GROUP_SIZE,
-                              size.sizeof,
-                              &size,
-                              null );
-    if ( size >= BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE )
-    {
-      timer.reset();
-      timer.start();
-      rate = opencl_stencil_25pt_shared();
-      timer.stop();
-      ticks = timer.peek();
-      writefln( "%2d MI 25pt SHARED     %5.3f (%5.3f) [s], %7.2f MI/s",
-                xdim * ydim * zdim / ( 1024 * 1024 ),
-                ticks.usecs / 1E6, rate,
-                (xdim - 8) * (ydim - 8) * (zdim - 8) / (1024 * 1024 * rate) );
-      validate();
-    }
+    timer.reset();
+    timer.start();
+    rate = opencl_stencil_25pt_shared();
+    timer.stop();
+    ticks = timer.peek();
+    writefln("%2d MI 25pt SHARED     %5.3f (%5.3f) [s], %7.2f MI/s",
+             xdim * ydim * zdim / (1024 * 1024),
+             ticks.usecs / 1E6, rate,
+             (xdim - 8) * (ydim - 8) * (zdim - 8) / (1024 * 1024 * rate));
+    validate();
   }
 }
 
-int
-main( string[] args )
+int main(string[] args)
 {
   uint[] platforms = runtime.get_platforms();
-  for ( uint p = 0; p < platforms.length; ++p )
-    foreach ( d; 0 .. platforms[p] )
+  foreach (p; 0 .. platforms.length)
+    foreach (d; 2 .. platforms[p])
     {
       try
       {
-        runtime.init( p, d );
-        writeln( "=====================================================" );
-        auto app = new Application( args );
+        runtime.init(p, d);
+        writeln("-----------------------------------------------------");
+        auto app = new Application(args);
         app.run();
-        writeln( "=====================================================" );
-        runtime.shutdown();
       }
-      catch ( Exception msg )
+      catch (Exception msg)
       {
-        writeln( "STENCIL: ", msg );
-        runtime.shutdown();
+        writeln("STENCIL: ", msg);
         return -1;
       }
+      finally
+      {
+        runtime.shutdown();
+      }
+      writeln("=====================================================");
     }
   return 0;
 }

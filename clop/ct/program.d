@@ -34,6 +34,7 @@ debug (UNITTEST_DEBUG) import std.stdio;
 import pegged.grammar;
 
 import clop.ct.analysis;
+import clop.ct.parser;
 import clop.ct.structs;
 import clop.ct.symbol;
 static import clop.ct.templates;
@@ -119,11 +120,17 @@ struct Program
 
   ParseTree apply_trans(Transformation f, ParseTree t)
   {
+    debug (UNITTEST_DEBUG) writefln("Program.apply_trans(%s)", f.name);
     switch (f.name)
     {
     case "rectangular_blocking":
       return apply_rectangular_blocking(t);
+    case "rhomboid_blocking":
+      return apply_rhomboid_blocking(t);
+    case "prefetching":
+      return apply_prefetching(t);
     default:
+      errors ~= "CLOP error " ~ suffix ~ ": unknown transformation '" ~ f.name ~ "'\n";
       return t.dup;
     }
   }
@@ -140,121 +147,27 @@ struct Program
 
   auto apply_rectangular_blocking(ParseTree t)
   {
-    ParseTree stmts;
+    debug (UNITTEST_DEBUG) writefln("APPLY_RECTANGULAR_BLOCKING started");
     if (t.name != "CLOP.CompoundStatement")
     {
+      debug (UNITTEST_DEBUG) writefln("Node is not a CompoundStatement");
       return t;
     }
-    if (t.children.length == 1 && t.children[0].name == "CLOP.StatementList")
-    {
-      stmts = t.children[0];
-    }
-    else if (t.children.length == 2 && t.children[1].name == "CLOP.StatementList")
-    {
-      stmts = t.children[1];
-    }
-    else
-    {
-      return t;
-    }
-    ParseTree n;
-    {
-      ulong i = 0;
-      do
-      {
-        n = stmts.children[i++];
-      } while (n.name != "CLOP.InternalNode" && i < stmts.children.length);
-      n = i < stmts.children.length ? stmts.children[i] : stmts.children[0];
-    }
+    auto s = CLOP.decimateTree(CLOP.Statement(format("for (int i = 0; i < %s; ++i) {}", block_size)));
+    s.children[0].children[0].children[4].children[0] = t;
+    debug (UNITTEST_DEBUG) writefln("APPLY_RECTANGULAR_BLOCKING is done");
+    return s;
+  }
 
+  auto apply_rhomboid_blocking(ParseTree t)
+  {
+    debug (UNITTEST_DEBUG) writefln("APPLY_RHOMBOID_BLOCKING");
+    return t;
+  }
 
-    auto r = Box([], []);
-    auto g = Box([], []);
-    string[3] bix;
-    foreach (c; 0 .. range.symbols.length)
-    {
-      auto v = range.symbols[c]; // variable name in NDRange specification
-      r.symbols ~= [v];
-      r.s2i[v] = c;
-      auto m = "0";
-      auto x = "8"; // FIXME block_size;
-      r.intervals ~= [
-                      Interval(
-                               ParseTree("CLOP.IntegerLiteral", true, [m], "", 0, 0, []),
-                               ParseTree("CLOP.IntegerLiteral", true, [x], "", 0, 0, [])
-                              )
-                      ];
-      // n = range.intervals[c].min + b%d * block_size;
-      // x = n + block_size;
-      bix[c] = format("b%d", c);
-      auto y = ParseTree("CLOP.Identifier", true, [bix[c]], "", 0, 0, []);
-      auto w = ParseTree("CLOP.IntegerLiteral", true, [x], "", 0, 0, []);
-      auto f = create_mul_expr(y, w, "*");
-      auto a = create_add_expr(range.intervals[c].min, f, "+");
-      g.intervals ~= [Interval(a, create_add_expr(a, w, "+"))];
-      g.symbols ~= [v];
-      g.s2i[v] = c;
-    }
-
-    debug(NEVER) {
-    auto iv = "iv";
-    // block or work group id
-    auto bid0 = "bid0";
-    // thread or work item id
-    auto tid0 = "tid0";
-    // local index variables
-    auto li0 = "li0";
-    auto li1 = "li1";
-    // size of local index space
-    auto block_size = "8";
-    auto lsz0 = block_size;
-    auto lsz1 = block_size;
-
-    // collect all array variables we want to put in shared memory.
-    auto shadowed = SList!string();
-
-    foreach (v; symtable)
-      v.is_array && v.shadow != null && shadowed.insert(v.name);
-
-    foreach (v; shadowed)
-    {
-      Interval[3] local_box;
-      Interval[3] global_box;
-      auto uses = symtable[v].uses;
-      foreach (i, c; uses[0].children)
-      {
-        local_box[i] = interval_apply(c, r);
-        global_box[i] = interval_apply(c, g);
-      }
-      for (auto ii = 1; ii < uses.length; ++ii)
-      {
-        foreach (i, c; uses[ii].children)
-        {
-          local_box[i] = interval_union(local_box[i], interval_apply(c, r));
-          global_box[i] = interval_union(global_box[i], interval_apply(c, g));
-        }
-      }
-      // size of current array block
-      auto bsz0 = local_box[0].get_size();
-      auto bsz1 = local_box[1].get_size();
-      // global index of current array
-      auto gi0 = format("(%s) + (%s)", global_box[0].get_min(), li0);
-      auto gi1 = format("(%s) + (%s)", global_box[1].get_min(), li1);
-      // size of current global array
-      auto gsz0 = symtable[v].box[0].get_max();
-      // global memory array name
-      auto gma = v;
-      // shared memory array name
-      auto sma = generate_shared_memory_variable(v);
-      auto s = format(template_shared_memory_data_init,
-                      li1, li1, bsz1, li1,
-                      li0, li0, bsz0, li0, lsz0,
-                      li0, tid0, bsz0,
-                      sma, li1, bsz0, li0, tid0,
-                      gma, gi1, gsz0, gi0, tid0);
-      parameters ~= Argument(sma, "", "__local", format("(%s) * (%s)", bsz0, bsz1), gma);
-    }
-    }
+  auto apply_prefetching(ParseTree t)
+  {
+    debug (UNITTEST_DEBUG) writefln("APPLY_PREFETCHING");
     return t;
   }
 
@@ -1144,44 +1057,17 @@ struct Program
       }
     case "CLOP.ForStatement":
       {
-        auto s = indent;
-        // FIXME: each of the children is optional. check they exist.
-        auto num_children = t.children.length;
-        auto num_of_matches = t.children[0].matches.length;
-        auto has_init_part = num_children > 1 && t.matches[2] != ";";
-        auto has_cond_part = has_init_part && num_children > 2 && t.matches[3 + num_of_matches] != ";" ||
-                            !has_init_part && num_children > 1 && t.matches[3] != ";";
-        auto has_step_part = has_init_part &&  has_cond_part && num_children == 4 ||
-                             has_init_part && !has_cond_part && num_children == 3 ||
-                            !has_init_part &&  has_cond_part && num_children == 3 ||
-                            !has_init_part && !has_cond_part && num_children == 2;
-        auto init_part = "";
-        auto cond_part = "";
-        auto step_part = "";
-        auto index = 0;
-        if (has_init_part)
-        {
-          auto r = translate_expression(t.children[index++]);
-          s ~= r.stmts;
-          init_part = r.value;
-        }
-        if (has_cond_part)
-        {
-          auto r = translate_expression(t.children[index++]);
-          s ~= r.stmts;
-          cond_part = r.value;
-        }
-        if (has_step_part)
-        {
-          auto r = translate_expression(t.children[index++]);
-          s ~= r.stmts;
-          step_part = r.value;
-        }
+        auto s = "";
         indent ~= "  ";
+        auto index = t.children.length == 5 ? 1 : 0;
+        auto init_part = translate(t.children[index++]);
+        if (index == 2) init_part = t.children[0].matches[0] ~ " " ~ init_part;
+        auto cond_part = translate(t.children[index++]);
+        auto step_part = translate_expression(t.children[index++]);
         auto loop_body = translate(t.children[index]);
         indent = indent[0 .. $ - 2];
-        s ~= indent ~ "for (" ~ init_part ~ ";" ~ cond_part ~ ";" ~ step_part ~ ")\n"
-          ~ indent ~ loop_body;
+        s ~= step_part.stmts;
+        s ~= indent ~ "for (" ~ init_part ~ cond_part ~ step_part.value ~ ")\n" ~ indent ~ loop_body;
         return s;
       }
     case "CLOP.ReturnStatement":
@@ -1215,6 +1101,7 @@ unittest
   alias A = clop.rt.ndarray.NDArray!float;
 
   // test 1
+  version (disabled)
   {
     auto t1 = clop.ct.parser.CLOP(q{
         NDRange(i : 1 .. h_n, j : 0 .. i_n)
@@ -1241,6 +1128,7 @@ unittest
   }
 
   // test 2
+  version (disabled)
   {
     auto t2 = clop.ct.parser.CLOP(q{
         NDRange(tid : 0 .. gws $ wgs)
@@ -1272,6 +1160,33 @@ unittest
     debug (UNITTEST_DEBUG) writefln("UT:%s k:\n%s", be2.suffix, k2);
     auto c2 = p2.generate_code();
     debug (UNITTEST_DEBUG) writefln("UT:%s c:\n%s", be2.suffix, c2);
+  }
+
+  // test 3
+  {
+    auto t3 = clop.ct.parser.CLOP(q{
+        int max3(int a, int b, int c)
+        {
+          int k = a > b ? a : b;
+          return k > c ? k : c;
+        }
+        Antidiagonal NDRange(r : 1 .. rows, c : 1 .. cols) {
+          F[r, c] = max3(F[r - 1, c - 1] + BLOSUM62[M[r] * CHARS + N[c]],
+                         F[r, c - 1] - penalty,
+                         F[r - 1, c] - penalty);
+        } apply(rectangular_blocking(BLOCK_SIZE, BLOCK_SIZE))
+      });
+    alias I = clop.rt.ndarray.NDArray!int;
+    alias T3 = std.typetuple.TypeTuple!(size_t, size_t, I, I, I, I, int);
+    auto be3 = clop.ct.stage2.Backend!T3(t3, __FILE__, __LINE__, ["rows", "cols", "F", "BLOSUM62", "M", "N", "penalty"]);
+    be3.analyze(t3);
+    be3.update_parameters();
+    be3.lower(t3);
+    be3.compute_intervals();
+    auto o3 = [Transformation("rectangular_blocking", ["BLOCK_SIZE", "BLOCK_SIZE"])];
+    auto p3 = Program(be3.symtable, o3, be3.parameters, be3.KBT, be3.range, be3.lws, be3.pattern, "", "", be3.suffix);
+    auto k3 = p3.translate(p3.optimize(be3.KBT));
+    debug (UNITTEST_DEBUG) writefln("UT:%s k:\n%s", be3.suffix, k3);
   }
 }
 

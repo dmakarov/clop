@@ -679,14 +679,13 @@ class Application {
 
   /**
    */
-/+
   void clop_lud()
   {
     create_matrix();
     for (auto k = 0; k < matrix_dim; k += BLOCK_SIZE)
     {
       mixin(compile(q{
-            NDRange(tx : 0 .. size) {
+            NDRange(tx : 0 .. size) pipe_open {
               for (int k = 0; k < size; ++k)
               {
                 if (tx > k)
@@ -697,7 +696,7 @@ class Application {
                   }
                   m[] /= m[];
                 }
-                // barrier
+                barrier(CLK_LOCAL_MEM_FENCE);
                 if (tx > k)
                 {
                   for (int p = 0; p < k; ++p)
@@ -709,8 +708,14 @@ class Application {
             }
           }));
 
+      /**
+       *  This kernel is in the middle of a pipeline.  It is assumed
+       *  that the data it uses and writes should already be in the
+       *  device memory and should remain there.  CLOP does not
+       *  generate new buffers and data transfers for this kernel.
+       */
       mixin(compile(q{
-            NDRange(tx : 0 .. x) {
+            NDRange(tx : 0 .. x) pipe {
               if (tx)
               {
                 for (int i = 1; i < BLOCK_SIZE; ++i)
@@ -736,7 +741,7 @@ class Application {
           }));
 
       mixin(compile(q{
-            NDRange(tx : 0 .. x, ty : 0 .. ty) {
+            NDRange(tx : 0 .. x, ty : 0 .. ty) pipe_close {
               float sum = 0;
               for (int i = 0; i < size; ++i)
               {
@@ -747,7 +752,6 @@ class Application {
           }));
     }
   }
-+/
 
   /**
    */

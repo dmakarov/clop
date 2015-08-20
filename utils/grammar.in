@@ -67,7 +67,7 @@ CLOP:
  IfStatement            <  "if" '(' Expression ')' Statement ("else" Statement)?
  IterationStatement     <  WhileStatement / ForStatement
  WhileStatement         <  "while" '(' Expression ')' Statement
- ForStatement           <  "for" '(' Expression? ';' Expression? ';' Expression? ')' Statement
+ ForStatement           <  "for" '(' BuiltinType? ExpressionStatement ExpressionStatement Expression? ')' Statement
  ReturnStatement        <  "return" Expression? ';'
 
 # CLOP_Expr:
@@ -117,6 +117,8 @@ CLOP:
                          / "register" / "restrict" / "return" / "short" / "signed"
                          / "sizeof" / "static" / "struct" / "switch" / "typedef"
                          / "union" / "unsigned" / "void" / "volatile" / "while"
+ BuiltinType            <~ ("u"? ("bool" / "char" / "short" / "int" / "long" / "half" / "float" / "double" / "quad") ("2" / "3" / "4" / "8" / "16")?)
+                         / "image3d_t" / "image2d_t" / "sampler_t" / "event_t" / "void" / "ptrdiff_t" / "intptr_t" / "size_t"
  Spacing                <~ (space / endOfLine / Comment)*
  Comment                <~ "//" (!endOfLine .)* endOfLine
  IntegerLiteral         <~ Sign? Integer IntegerSuffix?
