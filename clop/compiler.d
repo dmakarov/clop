@@ -26,6 +26,7 @@ module clop.compiler;
 
 public import clop.rt.ctx;
 import std.format, clop.ct.parser;
+version (LDC) import std.string;
 
 /++
  + Main entry point to the compiler.

@@ -30,6 +30,7 @@ import std.format;
 import std.getopt;
 import std.random;
 import std.stdio;
+import std.string;
 
 import derelict.opencl.cl;
 import clop.compiler;

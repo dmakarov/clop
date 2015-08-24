@@ -518,7 +518,7 @@ struct Program
       else
       {
         kernel_parameter_list_code ~= format(q{
-          macros ~= "#define %s " ~ std.format.format("%%s\n", %s);},
+          macros ~= "#define %s " ~ format("%%s\n", %s);},
           p.name, p.name);
       }
     }

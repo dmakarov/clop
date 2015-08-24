@@ -25,7 +25,8 @@
 module clop.rt.ndarray;
 
 import std.exception;
-import std.format;
+version (LDC) import std.string;
+else import std.format;
 
 /**
  * NDArray is a multi-dimensional array.  The number of dimensions is

@@ -24,9 +24,10 @@
  */
 module clop.ct.stage1;
 
-import std.format;
 import clop.ct.parser, clop.ct.symbol;
 static import clop.ct.templates;
+version (LDC) import std.string;
+else import std.format;
 
 debug (UNITTEST_DEBUG)
 {

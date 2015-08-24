@@ -23,6 +23,7 @@
                 "clop/rt/ctx.d",
                 "clop/rt/instance.d",
                 "clop/rt/ndarray.d",
+                "clop/rt/visualization.d",
                 "clop/rt/clid/*.d"
             ],
             "buildTypes"   : {

@@ -76,8 +76,11 @@ class History {
 
   void save_animation()
   {
-    import std.algorithm.iteration;
-    import std.algorithm.sorting : sort;
+    version (LDC) import std.algorithm;
+    else {
+      import std.algorithm.iteration;
+      import std.algorithm.sorting : sort;
+    }
     auto cells = new long[matrix_width * matrix_width];
     auto cache = new long[matrix_width * matrix_width];
     auto started = false;
