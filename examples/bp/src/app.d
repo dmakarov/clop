@@ -30,6 +30,7 @@ import std.datetime;
 import std.math : abs, exp;
 import std.random;
 import std.stdio;
+import std.string;
 
 import derelict.opencl.cl;
 
@@ -838,3 +839,8 @@ int main(string[] args)
     }
   return 0;
 }
+
+// Local Variables:
+// compile-command: "dub run --build=verbose :bp -- -v 32 10"
+// flycheck-dmd-include-path: ("../../.." "/Users/makarovd/.dub/packages/pegged-0.2.1" "/Users/makarovd/.dub/packages/derelict-cl-1.2.3/source" "/Users/makarovd/.dub/packages/derelict-util-1.9.1/source")
+// End:

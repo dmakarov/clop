@@ -831,7 +831,8 @@ template Backend(TList...)
     {
       if (t.children.length == 0 || t.name != "CLOP.CompoundStatement")
         return t;
-      ParseTree newt = t.dup;
+      ParseTree newt = CLOP.decimateTree(CLOP.CompoundStatement("{}"));
+      newt.children = [ParseTree("CLOP.StatementList", true, [], "", 0, 0, [])];
       ParseTree[] decl;
       auto thread_index = "tx";
       auto sync_diagonal = "diagonal";
@@ -848,10 +849,9 @@ template Backend(TList...)
                                                       sync_diagonal, max,
                                                       range.symbols[0], sync_diagonal, max, thread_index,
                                                       range.symbols[1], max, thread_index)));
-      newt.children[0].children = decl ~ newt.children[0].children;
+      newt.children[0].children = decl ~ t.dup;
       return newt;
     }
-
 
     /++
      +  XXX: can this pass be combined with analyze?

@@ -124,7 +124,7 @@ struct Program
     switch (f.name)
     {
     case "rectangular_blocking":
-      return apply_rectangular_blocking(t);
+      return apply_rectangular_blocking_with_antidiagonal_pattern(t);
     case "rhomboid_blocking":
       return apply_rhomboid_blocking(t);
     case "prefetching":
@@ -145,6 +145,13 @@ struct Program
     return format("clop_kernel_main_%s", toString());
   }
 
+  /**
+   * code generated for rectangular blocking depends on the
+   * synchronization pattern.
+   * There is nesting of transformations: the anti-diagonal pattern
+   * should be applied to a block within a kernel invocation, and also
+   * on the outside level to blocks.  Block is like a macro-element.
+   */
   auto apply_rectangular_blocking(ParseTree t)
   {
     debug (UNITTEST_DEBUG) writefln("APPLY_RECTANGULAR_BLOCKING started");
@@ -154,9 +161,28 @@ struct Program
       return t;
     }
     auto s = CLOP.decimateTree(CLOP.Statement(format("for (int i = 0; i < %s; ++i) {}", block_size)));
-    s.children[0].children[0].children[4].children[0] = t;
+    s.children[0].children[0].children[4].children[0] = t.children[0].children[$ - 1];
+    t.children[0].children[$ - 1] = s;
     debug (UNITTEST_DEBUG) writefln("APPLY_RECTANGULAR_BLOCKING is done");
-    return s;
+    return t;
+  }
+
+  auto apply_rectangular_blocking_with_antidiagonal_pattern(ParseTree t)
+  {
+    if (t.name != "CLOP.CompoundStatement")
+    {
+      debug (UNITTEST_DEBUG) writefln("Node is not a CompoundStatement");
+      return t;
+    }
+    auto s = CLOP.decimateTree(CLOP.Statement(format(q{
+            for (int i = 0; i < 2 * (%s) - 1; ++i)
+              if (i < (%s) && tx <= i || i >= (%s) && tx < 2 * (%s) - 1 - i)
+              {
+                // fill in the index computations
+              }}, block_size, block_size, block_size, block_size)));
+    s.children[0].children[0].children[4].children[0].children[1].children[0] = t.children[0].children[$ - 1];
+    t.children[0].children[$ - 1] = s;
+    return t;
   }
 
   auto apply_rhomboid_blocking(ParseTree t)
@@ -1192,5 +1218,4 @@ unittest
 
 // Local Variables:
 // compile-command: "../../tests/test_module clop.ct.program"
-// flycheck-dmd-include-path: ("~/.dub/packages/pegged-0.2.1")
 // End:
