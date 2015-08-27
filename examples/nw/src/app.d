@@ -210,8 +210,7 @@ class Application {
         for (int k = 0; k < BLOCK_SIZE; ++k)
           s[k * BLOCK_SIZE + tx] = S[I(r0 + k, c0 + tx)];
 
-        if (tx == 0)
-          t[0] = F[I(r0 - 1, c0 - 1)];
+        if (tx == 0) t[0] = F[I(r0 - 1, c0 - 1)];
         t[(tx + 1) * (BLOCK_SIZE + 1)] = F[I(r0 + tx, c0 -  1)];
         t[(tx + 1)                   ] = F[I(r0 -  1, c0 + tx)];
         barrier(CLK_LOCAL_MEM_FENCE);
@@ -264,8 +263,7 @@ class Application {
             s[ty * CHARS + ii + tx] = S[ty * CHARS + ii + tx];
           ii += BLOCK_SIZE;
         }
-        if (tx == 0)
-          t[0] = F[I(r0 - 1, c0 - 1)];
+        if (tx == 0) t[0] = F[I(r0 - 1, c0 - 1)];
         t[(tx + 1) * (BLOCK_SIZE + 1)] = F[I(r0 + tx, c0 -  1)];
         t[(tx + 1)                   ] = F[I(r0 -  1, c0 + tx)];
         barrier(CLK_LOCAL_MEM_FENCE);
