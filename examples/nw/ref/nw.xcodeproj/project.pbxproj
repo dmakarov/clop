@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		7493143F1B96E07100F57010 /* nw.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7493143E1B96E07000F57010 /* nw.cpp */; };
+		7493143F1B96E07100F57010 /* main.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7493143E1B96E07000F57010 /* main.cpp */; };
 		749314431B96E20100F57010 /* OpenCL.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 749314421B96E20100F57010 /* OpenCL.framework */; };
 		749314451B96E24E00F57010 /* Kernels.cl in Sources */ = {isa = PBXBuildFile; fileRef = 749314441B96E24E00F57010 /* Kernels.cl */; };
 /* End PBXBuildFile section */
@@ -26,7 +26,7 @@
 
 /* Begin PBXFileReference section */
 		749314341B96DE4100F57010 /* nw */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = nw; sourceTree = BUILT_PRODUCTS_DIR; };
-		7493143E1B96E07000F57010 /* nw.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = nw.cpp; sourceTree = SOURCE_ROOT; };
+		7493143E1B96E07000F57010 /* main.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = main.cpp; sourceTree = SOURCE_ROOT; };
 		749314421B96E20100F57010 /* OpenCL.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = OpenCL.framework; path = System/Library/Frameworks/OpenCL.framework; sourceTree = SDKROOT; };
 		749314441B96E24E00F57010 /* Kernels.cl */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.opencl; path = Kernels.cl; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
@@ -64,7 +64,7 @@
 			isa = PBXGroup;
 			children = (
 				749314441B96E24E00F57010 /* Kernels.cl */,
-				7493143E1B96E07000F57010 /* nw.cpp */,
+				7493143E1B96E07000F57010 /* main.cpp */,
 			);
 			path = nw;
 			sourceTree = "<group>";
@@ -125,7 +125,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				7493143F1B96E07100F57010 /* nw.cpp in Sources */,
+				7493143F1B96E07100F57010 /* main.cpp in Sources */,
 				749314451B96E24E00F57010 /* Kernels.cl in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

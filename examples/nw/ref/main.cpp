@@ -688,15 +688,14 @@ const int Application::BLOSUM62[CHARS][CHARS] = {
   {-4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4,  1}
 };
 
-int
-main( int argc, char **argv )
+int main(int argc, char** argv)
 {
   try
   {
-    Application app( argc, argv );
+    Application app(argc, argv);
     app.run();
   }
-  catch ( string msg )
+  catch (string msg)
   {
     std::cerr << "nw: " << msg << std::endl;
     return EXIT_FAILURE;
