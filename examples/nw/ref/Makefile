@@ -1,4 +1,3 @@
-DC       := ldc2
 CXX      := g++
 CXXFLAGS := -O3 -Wall
 
@@ -13,13 +12,10 @@ ifeq ($(UNAME), Darwin)
   DOCL_LIB := -L-framework -LOpenCL
 endif
 
-all: nwc nwd
+all: nw
 
-nwc: nw.cpp
+nw: nw.cpp
 	$(CXX) $(CXXFLAGS) -o $@ $< $(OPENCL_LIB)
 
-nwd: nw.d ../lib/libcl4d.a
-	$(DC) $< -d -release -O -of$@ -I../cl4d $(DOCL_LIB) -L-L../lib -L-lcl4d
-
 clean:
-	@rm -rf nwc nwd nwd.o
+	@rm -rf nw nwd.o
