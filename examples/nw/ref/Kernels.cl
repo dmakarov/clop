@@ -1,13 +1,15 @@
 #define BLOCK_SIZE 16
+#define CHARS 24
 
 #define F(i, j)  input_itemsets_l[ (j)      +  (i)      * (BLOCK_SIZE + 1)]
 #define N(i, j)  input_itemsets_l[((j) - 1) +  (i)      * (BLOCK_SIZE + 1)]
 #define W(i, j)  input_itemsets_l[ (j)      + ((i) - 1) * (BLOCK_SIZE + 1)]
 #define NW(i, j) input_itemsets_l[((j) - 1) + ((i) - 1) * (BLOCK_SIZE + 1)]
 #define S(i, j)  similarity_l[(j) + (i) * BLOCK_SIZE]
+#define I(r,c) ((r) * cols + (c))
 
 int
-maximum( int a, int b, int c )
+max3( int a, int b, int c )
 {
   int k = a > b ? a : b;
   return k > c ? k : c;
@@ -52,7 +54,7 @@ nw1( __global int *similarity_d,
       int match = NW( t_index_y, t_index_x ) + S( t_index_y - 1, t_index_x - 1 );
       int remove = W( t_index_y, t_index_x ) - penalty;
       int insert = N( t_index_y, t_index_x ) - penalty;
-      F(t_index_y, t_index_x) = maximum( match, remove, insert );
+      F(t_index_y, t_index_x) = max3( match, remove, insert );
     }
     barrier( CLK_LOCAL_MEM_FENCE );
   }
@@ -66,7 +68,7 @@ nw1( __global int *similarity_d,
       int match = NW( t_index_y, t_index_x ) + S( t_index_y - 1, t_index_x - 1 );
       int remove = W( t_index_y, t_index_x ) - penalty;
       int insert = N( t_index_y, t_index_x ) - penalty;
-      F(t_index_y, t_index_x) = maximum( match, remove, insert );
+      F(t_index_y, t_index_x) = max3( match, remove, insert );
     }
     barrier( CLK_LOCAL_MEM_FENCE );
   }
@@ -111,7 +113,7 @@ nw2( __global int *similarity_d,
       int match = NW( t_index_y, t_index_x ) + S( t_index_y - 1, t_index_x - 1 );
       int remove = W( t_index_y, t_index_x ) - penalty;
       int insert = N( t_index_y, t_index_x ) - penalty;
-      F(t_index_y, t_index_x) = maximum( match, remove, insert );
+      F(t_index_y, t_index_x) = max3( match, remove, insert );
     }
     barrier( CLK_LOCAL_MEM_FENCE );
   }
@@ -124,7 +126,7 @@ nw2( __global int *similarity_d,
       int match = NW( t_index_y, t_index_x ) + S( t_index_y - 1, t_index_x - 1 );
       int remove = W( t_index_y, t_index_x ) - penalty;
       int insert = N( t_index_y, t_index_x ) - penalty;
-      F(t_index_y, t_index_x) = maximum( match, remove, insert );
+      F(t_index_y, t_index_x) = max3( match, remove, insert );
     }
     barrier( CLK_LOCAL_MEM_FENCE );
   }
@@ -132,102 +134,77 @@ nw2( __global int *similarity_d,
     input_itemsets_d[index + ty * cols] = F( ty + 1, tx + 1 );
 }
 
-__kernel void
-rhombus( __global const int* S, __global int* F, int Y, int X, int cols, int penalty, __local int* s, __local int* t )
+__kernel void rhombus(__global const int* A,
+                      __global const int* P,
+                      __global const int* Q,
+                      __global       int* B,
+                                     int  cols,
+                                     int  penalty,
+                                     int  br,
+                                     int  bc)
 {
-  int bx = get_group_id( 0 );
-  int tx = get_local_id( 0 );
-  int xx = X + 2 * bx;
-  int yy = Y -     bx;
+  __local int s[CHARS * CHARS];
+  __local int t[(BLOCK_SIZE + 1) * (BLOCK_SIZE + 2)];
+  int bx = get_group_id(0);
+  int tx = get_local_id(0);
+  int rr = (br -     bx) * BLOCK_SIZE + 1;
+  int cc = (bc + 2 * bx) * BLOCK_SIZE + 1;
 
-  if ( xx == 0 )
+  int index   = I(rr + tx, cc - tx);
+  int index_n = I(rr -  1, cc + tx);
+  int index_w = index - 1;
+  int ii = 0;
+
+  while (ii + tx < CHARS)
   {
-    // 1.
-    int index    = cols * BLOCK_SIZE * yy + tx * cols + cols + 1;
-    int index_w  = cols * BLOCK_SIZE * yy + tx * cols + cols;
-    int index_nw = cols * BLOCK_SIZE * yy + tx * cols;
-    int index_n0 = cols * BLOCK_SIZE * yy + 1;
-
-    if ( tx == 0 ) t[0] = F[index_nw];
-    for ( int ty = 0; ty < BLOCK_SIZE; ++ty ) s[tx * BLOCK_SIZE + ty] = S[index + ty];
-
-    t[tx + 1] = F[index_n0 + tx];
-    t[(tx + 1) * (BLOCK_SIZE + 2)] = F[index_w];
-    barrier( CLK_LOCAL_MEM_FENCE );
-    // 2.
-    for ( int m = 0; m < BLOCK_SIZE; ++m )
-    {
-      if ( tx <= m )
-      {
-        int x = tx + 1;
-        int y = m - tx + 1;
-        int match = t[(y-1) * (BLOCK_SIZE + 2) + x-1] + s[(y-1) * BLOCK_SIZE + x-1];
-        int remove = t[(y-1) * (BLOCK_SIZE + 2) + x] - penalty;
-        int insert = t[y * (BLOCK_SIZE + 2) + x-1] - penalty;
-        t[y * (BLOCK_SIZE + 2) + x] = maximum( match, remove, insert );
-      }
-      barrier( CLK_LOCAL_MEM_FENCE );
-    }
-    // 3.
-    for ( int ty = 0; ty < BLOCK_SIZE - tx; ++ty )
-      F[index + ty] = t[(tx+1) * (BLOCK_SIZE + 2) + ty+1];
+    for (int ty = 0; ty < CHARS; ++ty)
+      s[ty * CHARS + ii + tx] = A[ty * CHARS + ii + tx];
+    ii += BLOCK_SIZE;
   }
-  else if ( xx < cols / BLOCK_SIZE )
+  barrier(CLK_LOCAL_MEM_FENCE);
+
+  if (bc == 1 && bx == 0)
+    for (int m = 0; m < BLOCK_SIZE; ++m)
+    {
+      int x = m - tx + 1;
+      if (x > 0)
+        B[I(rr + tx, x)] = max3(B[I(rr + tx - 1, x - 1)] + s[P[rr + tx] * CHARS + Q[x]],
+                                B[I(rr + tx - 1, x    )] - penalty,
+                                B[I(rr + tx    , x - 1)] - penalty);
+      barrier(CLK_GLOBAL_MEM_FENCE);
+    }
+
+  int y0 = (tx + 1) + (BLOCK_SIZE + 1);
+  int y1 = (tx + 1) * (BLOCK_SIZE + 1);
+  t[tx] = B[I(rr + tx - 1, cc - tx - 1)];
+  t[y0] = B[index_w];
+  t[y1] = B[index_n];
+  barrier(CLK_LOCAL_MEM_FENCE);
+
+  int y = P[rr + tx];
+  int x = Q[cc - tx];
+  for (int k = 0; k < BLOCK_SIZE; ++k)
   {
-    // 1.
-    int index    = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + tx * (cols - 1) + cols + 1;
-    int index_w  = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + tx * (cols - 1) + cols;
-    int index_nw = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + tx * (cols - 1);
-    int index_n0 = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + 1;
-
-    if ( tx == 0 ) t[0] = F[index_nw];
-
-    for ( int ty = 0; ty < BLOCK_SIZE; ++ty ) s[tx * BLOCK_SIZE + ty] = S[index + ty];
-    t[tx + 1] = F[index_n0 + tx];
-    t[(tx + 1) * (BLOCK_SIZE + 2)] = F[index_w - 1];
-    t[(tx + 1) * (BLOCK_SIZE + 2) + 1] = F[index_w];
-    barrier( CLK_LOCAL_MEM_FENCE );
-    // 2.
-    for ( int m = 0; m < BLOCK_SIZE; ++m )
-    {
-      int x =  m + 2;
-      int y =  tx + 1;
-      int match = t[(y-1) * (BLOCK_SIZE + 2) + x-2] + s[(y-1) * BLOCK_SIZE + x-2];
-      int remove = t[(y-1) * (BLOCK_SIZE + 2) + x-1] - penalty;
-      int insert = t[y * (BLOCK_SIZE + 2) + x-1] - penalty;
-      t[y * (BLOCK_SIZE + 2) + x] = maximum( match, remove, insert );
-      barrier( CLK_LOCAL_MEM_FENCE );
-    }
-    // 3.
-    for ( int ty = 0; ty < BLOCK_SIZE; ++ty )
-      F[index + ty] = t[(tx+1) * (BLOCK_SIZE + 2) + ty+2];
+    int nextX = Q[cc - tx + k + 1];
+    t[(k + 2) * (BLOCK_SIZE + 1) + tx + 1] = max3(t[k * (BLOCK_SIZE + 1) + tx] + s[y * CHARS + x],
+                                                  t[(k + 1) * (BLOCK_SIZE + 1) + tx] - penalty,
+                                                  t[(k + 1) * (BLOCK_SIZE + 1) + tx + 1] - penalty);
+    x = nextX;
+    barrier(CLK_LOCAL_MEM_FENCE);
   }
-  else if ( xx == cols / BLOCK_SIZE )
-  {
-    // 1.
-    int index    = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + tx * (cols - 1) + cols + 1;
-    int index_w  = cols * BLOCK_SIZE * yy + BLOCK_SIZE * xx + tx * (cols - 1) + cols;
 
-    for ( int ty = 0; ty < tx; ++ty ) s[tx * BLOCK_SIZE + ty] = S[index + ty];
-    t[(tx + 1) * (BLOCK_SIZE + 2)] = F[index_w - 1];
-    t[(tx + 1) * (BLOCK_SIZE + 2) + 1] = F[index_w];
-    barrier( CLK_LOCAL_MEM_FENCE );
-    // 2.
-    for ( int m = 0; m < BLOCK_SIZE; ++m )
+  for (int k = 0; k < BLOCK_SIZE; ++k)
+    B[I(rr + k, cc - k + tx)] = t[(tx + 2) * (BLOCK_SIZE + 1) + k + 1];
+  barrier(CLK_GLOBAL_MEM_FENCE);
+
+  if (cc + BLOCK_SIZE == cols)
+    for (int m = 0; m < BLOCK_SIZE; ++m)
     {
-      if ( m < tx )
-      {
-        int x =  m + 2;
-        int y =  tx + 1;
-        int match = t[(y-1) * (BLOCK_SIZE + 2) + x-2] + s[(y-1) * BLOCK_SIZE + x-2];
-        int remove = t[(y-1) * (BLOCK_SIZE + 2) + x-1] - penalty;
-        int insert = t[y * (BLOCK_SIZE + 2) + x-1] - penalty;
-        t[y * (BLOCK_SIZE + 2) + x] = maximum( match, remove, insert );
-      }
-      barrier( CLK_LOCAL_MEM_FENCE );
+      int x = cc + BLOCK_SIZE + m - tx;
+      if (x < cols)
+        B[I(rr + tx, x)] = max3(B[I(rr + tx - 1, x - 1)] + s[P[rr + tx] * CHARS + Q[x]],
+                                B[I(rr + tx - 1, x    )] - penalty,
+                                B[I(rr + tx    , x - 1)] - penalty);
+      barrier(CLK_GLOBAL_MEM_FENCE);
     }
-    // 3.
-    for ( int ty = 0; ty < tx; ++ty )
-      F[index + ty] = t[(tx+1) * (BLOCK_SIZE + 2) + ty+2];
-  }
 }

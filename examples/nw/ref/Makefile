@@ -1,21 +1,19 @@
-CXX      := g++
-CXXFLAGS := -O3 -Wall
+CXX      ?= g++
+CXXFLAGS := -std=c++11 -O3 -Wall
+UNAME    := $(shell uname)
 
 # OPENCL
-UNAME := $(shell uname)
 ifeq ($(UNAME), Linux)
   OPENCL_LIB := -lOpenCL -lrt
-  DOCL_LIB := -L-lOpenCL
 endif
 ifeq ($(UNAME), Darwin)
   OPENCL_LIB := -framework OpenCL
-  DOCL_LIB := -L-framework -LOpenCL
 endif
 
 all: nw
 
-nw: nw.cpp
+nw: main.cpp
 	$(CXX) $(CXXFLAGS) -o $@ $< $(OPENCL_LIB)
 
 clean:
-	@rm -rf nw nwd.o
+	@rm -rf nw
