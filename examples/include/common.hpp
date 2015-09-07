@@ -49,9 +49,7 @@ class clop_examples_common
 #endif
 
   bool release_opencl_resources;
-  cl_platform_id* platforms;
   cl_platform_id platform;
-  cl_device_id* devices;
   cl_device_id device;
   cl_program program;
   cl_context context;
@@ -73,43 +71,47 @@ public:
     release_opencl_resources = false;
   }
 
-  void reset(cl_uint platform_index, cl_uint device_index)
+  void reset(cl_uint platform_index, cl_uint device_index, const string& options)
   {
     cl_uint num_platforms, num_devices;
     cl_int status = clGetPlatformIDs(0, nullptr, &num_platforms);
-    check_status(status, "init_cl (clGetPlatformIDs 1) ");
-    if (0 == num_platforms) throw string("init_cl no OpenCL platform found");
-    if (platform_index >= num_platforms) throw string("init_cl invalid platform index");
-    if (nullptr == (platforms = new cl_platform_id[num_platforms])) throw string("init_cl can't allocate memory for platforms");
-    status = clGetPlatformIDs(num_platforms, platforms, nullptr);
-    check_status(status, "init_cl (clGetPlatformIDs 2) ");
+    check_status(status);
+    if (0 == num_platforms)
+      throw runtime_error("No OpenCL platform found");
+    if (platform_index >= num_platforms)
+      throw runtime_error("Invalid platform index");
+    unique_ptr<cl_platform_id[]> platforms(new cl_platform_id[num_platforms]);
+    status = clGetPlatformIDs(num_platforms, platforms.get(), nullptr);
+    check_status(status);
     platform = platforms[platform_index];
 
     // 2: detect OpenCL devices
     status = clGetDeviceIDs(platform, CL_DEVICE_TYPE_ALL, 0, nullptr, &num_devices);
-    check_status(status, "init_cl (clGetDeviceIDs 1) ");
-    if (0 == num_devices) throw string("init_cl no OpenCL device found");
-    if (device_index >= num_devices) throw string("init_cl invalid device index");
-    if (nullptr == (devices = new cl_device_id[num_devices])) throw string("init_cl can't allocate memory for devices");
-    status = clGetDeviceIDs(platform, CL_DEVICE_TYPE_ALL, num_devices, devices, nullptr);
-    check_status(status, "init_cl (clGetDeviceIDs 2) ");
+    check_status(status);
+    if (0 == num_devices)
+      throw runtime_error("No OpenCL device found");
+    if (device_index >= num_devices)
+      throw runtime_error("Invalid device index");
+    unique_ptr<cl_device_id[]> devices(new cl_device_id[num_devices]);
+    status = clGetDeviceIDs(platform, CL_DEVICE_TYPE_ALL, num_devices, devices.get(), nullptr);
+    check_status(status);
     device = devices[device_index];
 
     // 3: Create an OpenCL context
     context = clCreateContext(nullptr, 1, &device, nullptr, nullptr, &status);
-    check_status(status, "init_cl (clCreateContext) ");
+    check_status(status);
 
     // 4: Create an OpenCL command queue
     queue = clCreateCommandQueue(context, device, 0, &status);
-    check_status(status, "init_cl (clCreateCommandQueue) ");
+    check_status(status);
 
     // 5: Load CL file, build CL program object, create CL kernel object
-    load_kernels(kernel_file, device_index);
+    load_kernels(kernel_file, device_index, options);
     for (int kn = 0; kn < kernels.size(); ++kn)
     {
       // get a kernel object handle for a kernel with the given name
       cl_kernel kernel = clCreateKernel(program, (kernel_names[kn]).c_str(), &status);
-      check_status(status, "init_cl(clCreateKernel) \"" + string(kernel_names[kn]) + "\" ");
+      check_status(status);
       kernels[kn] = kernel;
     }
     release_opencl_resources = true;
@@ -156,41 +158,41 @@ public:
     return ts.tv_sec + ts.tv_nsec * 1e-9;
   }
 
-  /**
-   */
-  void check_status(cl_int status, string msg)
+private:
+
+  void check_status(cl_int status)
   {
-    if (CL_SUCCESS != status) throw msg + error_code_to_string(status);
+    if (CL_SUCCESS != status)
+      throw runtime_error(error_code_to_string(status));
   }
 
-  void load_kernels(string src_file, cl_uint device_index)
+  void load_kernels(string& src_file, cl_uint device_index, const string& options)
   {
     cl_int status;
     size_t size;
-    const char* source = (char*) binary_to_array(src_file, &size);
-    program = clCreateProgramWithSource(context, 1, &source, &size, &status);
-    check_status(status, "CLHelper::CLHelper: (clCreateProgramWithSource) ");
-    delete [] source;
-    status = clBuildProgram(program, 1, &device, nullptr, nullptr, nullptr);
+    unique_ptr<char[]> source(binary_to_array(src_file, &size));
+    const char* source_array = source.get();
+    program = clCreateProgramWithSource(context, 1, &source_array, &size, &status);
+    check_status(status);
+    status = clBuildProgram(program, 1, &device, options.c_str(), nullptr, nullptr);
     if (CL_SUCCESS != status)
     {
-      string msg = "CLHelper::CLHelper: (clBuildProgram) " + error_code_to_string(status);
+      auto msg = error_code_to_string(status);
       size_t size;
       status = clGetProgramBuildInfo(program, device, CL_PROGRAM_BUILD_LOG, 0, nullptr, &size);
-      check_status(status, "CLHelper::CLHelper: (clGetProgramBuildInfo 1) ");
-      char* buf = new char[size];
-      status = clGetProgramBuildInfo(program, device, CL_PROGRAM_BUILD_LOG, size, buf, nullptr);
-      check_status(status, "CLHelper::CLHelper: (clGetProgramBuildInfo 2) ");
-      array_to_binary("errinfo.txt", buf, size - 1);
-      delete [] buf;
-      throw msg;
+      check_status(status);
+      unique_ptr<char[]> buf(new char[size]);
+      status = clGetProgramBuildInfo(program, device, CL_PROGRAM_BUILD_LOG, size, buf.get(), nullptr);
+      check_status(status);
+      array_to_binary("errinfo.txt", buf.get(), size - 1);
+      throw runtime_error(msg);
     }
   }
 
   /**
    * @function read the contents of a file into a byte array.
    */
-  void* binary_to_array(const string bin_file, size_t *size) throw (string)
+  char* binary_to_array(const string& bin_file, size_t *size)
   {
     ifstream f(bin_file.c_str(), ifstream::in | ifstream::binary);
     try
@@ -200,24 +202,23 @@ public:
         f.seekg(0, ifstream::end);
         *size = f.tellg();
         f.seekg(0, ifstream::beg);
-        char *buf = new char[*size + 1];
-        if (nullptr == buf) throw string("CLHelper::binary_to_array: can't allocate memory");
+        auto *buf = new char[*size + 1];
         f.read(buf, *size);
         buf[*size] = '\0';
         f.close();
         return buf;
       }
     }
-    catch(string msg) { fprintf(stderr, "CLHelper::binary_to_array: exception caught %s\n", msg.c_str()); }
-    catch(...) {}
-    if (f.is_open()) f.close();
-    throw string("CLHelper::binary_to_array: can't read file ") + bin_file;
+    catch (...) {}
+    if (f.is_open())
+      f.close();
+    throw runtime_error(string("Can't read file ") + bin_file);
   }
 
   /**
    * @function write a byte array into a binary file.
    */
-  void array_to_binary(const string bin_file, const char *buf, size_t size) throw (string)
+  void array_to_binary(const string& bin_file, const char* buf, size_t size)
   {
     ofstream f(bin_file.c_str(), ofstream::out | ofstream::binary);
     try
@@ -229,10 +230,10 @@ public:
         return;
       }
     }
-    catch(string msg) { fprintf(stderr, "CLHelper::array_to_binary: exception caught %s\n", msg.c_str()); }
     catch(...) {}
-    if (f.is_open()) f.close();
-    throw string("CLHelper::array_to_binary: can't write to file ") + bin_file;
+    if (f.is_open())
+      f.close();
+    throw runtime_error(string("Can't write to file ") + bin_file);
   }
 
   string error_code_to_string(cl_int code)

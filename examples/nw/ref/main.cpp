@@ -56,7 +56,7 @@ using namespace std;
 
 class Application {
 
-  static const int BLOCK = 16;
+  static const int BLOCK = 32;
   static const int CHARS = 24;
   static const int BLOSUM62[CHARS][CHARS];
 
@@ -85,6 +85,7 @@ public:
     if ((rows - 1) % 16 != 0)
       throw invalid_argument(string("sequence length must be a multiple of ") + to_string(BLOCK));
     F.reset(new int[rows * cols]);
+    G.reset(new int[rows * cols]);
     S.reset(new int[rows * cols]);
     M.reset(new int[rows]);
     N.reset(new int[cols]);
@@ -92,9 +93,15 @@ public:
     uniform_int_distribution<unsigned> u(0, CHARS - 1);
     default_random_engine e;
     for (int jj = 0; jj < cols; ++jj)
-      F[jj       ] = -penalty * jj;
+    {
+      F[jj] = -penalty * jj;
+      G[jj] = -penalty * jj;
+    }
     for (int ii = 0; ii < rows; ++ii)
+    {
       F[ii * cols] = -penalty * ii;
+      G[ii * cols] = -penalty * ii;
+    }
     for (int ii = 1; ii < rows; ++ii)
       M[ii] = u(e);
     for (int jj = 1; jj < cols; ++jj)
@@ -103,7 +110,7 @@ public:
       for (int jj = 1; jj < cols; ++jj)
         S[ii * cols + jj] = BLOSUM62[M[ii]][N[jj]];
 
-    setup.reset(platform, device);
+    setup.reset(platform, device, string("-DBLOCK=") + to_string(BLOCK) + string(" -DCHARS=") + to_string(CHARS));
     kernels = setup.get_kernels();
     context = setup.get_context();
     queue = setup.get_queue();
@@ -113,12 +120,14 @@ public:
   {
     compute_scores_serial();
     compute_scores_device();
+    validate_results();
     compute_scores_device_rhombus();
+    validate_results();
   }
 
 private:
 
-  unique_ptr<int[]> M, N, F, S;
+  unique_ptr<int[]> M, N, S, F, G;
   int rows, cols, penalty;
   clop_examples_common setup;
   cl_context context;
@@ -145,65 +154,71 @@ private:
     auto t1 = setup.gettime();
     for (int ii = 1; ii < rows; ++ii)
       for (int jj = 1; jj < rows; ++jj)
-        F[ii * cols + jj] = max3(F[(ii - 1) * cols + jj - 1] + S[ii * cols + jj],
-                                 F[(ii - 1) * cols + jj    ] - penalty,
-                                 F[ ii      * cols + jj - 1] - penalty);
+        G[ii * cols + jj] = max3(G[(ii - 1) * cols + jj - 1] + S[ii * cols + jj],
+                                 G[(ii - 1) * cols + jj    ] - penalty,
+                                 G[ ii      * cols + jj - 1] - penalty);
     auto t2 = setup.gettime();
     cout << "SERIAL  " << t2 - t1 << " s" << endl;
+  }
+
+  void validate_results()
+  {
+    size_t diffs = 0;
+    for (int ii = 0; ii < rows; ++ii)
+      for (int jj = 0; jj < cols; ++jj)
+        if (F[ii * cols + jj] != G[ii * cols + jj])
+          ++diffs;
+    if (diffs)
+      cerr << "DIFFS " << diffs << endl;
   }
 
   void compute_scores_device()
   {
     auto t1 = setup.gettime();
-    int nworkitems = 16, workgroupsize = 0;
-    // set global and local workitems
-    size_t local_work = workgroupsize > 0 ? workgroupsize : 1;
-    size_t global_work = nworkitems; //nworkitems = no. of GPU threads
-    cl_mem F_d = clCreateBuffer(context, CL_MEM_READ_WRITE, cols * rows * sizeof(int), NULL, nullptr);
-    cl_mem S_d = clCreateBuffer(context, CL_MEM_READ_WRITE, cols * rows * sizeof(int), NULL, nullptr);
-    clEnqueueWriteBuffer(queue, F_d, CL_TRUE, 0, cols * rows * sizeof(int), F.get(), 0, NULL, NULL);
-    clEnqueueWriteBuffer(queue, S_d, CL_TRUE, 0, cols * rows * sizeof(int), S.get(), 0, NULL, NULL);
+    auto F_d = clCreateBuffer(context, CL_MEM_READ_WRITE, cols * rows * sizeof(int), nullptr, nullptr);
+    auto S_d = clCreateBuffer(context, CL_MEM_READ_WRITE, cols * rows * sizeof(int), nullptr, nullptr);
+    clEnqueueWriteBuffer(queue, F_d, CL_TRUE, 0, cols * rows * sizeof(int), F.get(), 0, nullptr, nullptr);
+    clEnqueueWriteBuffer(queue, S_d, CL_TRUE, 0, cols * rows * sizeof(int), S.get(), 0, nullptr, nullptr);
     int worksize = cols - 1;
     int offset_r = 0, offset_c = 0; // these two parameters are for extension use, don't worry about it.
     int block_width = worksize / BLOCK ;
 
-    clSetKernelArg(kernels[0],  0, sizeof(cl_mem)                             , &S_d        );
-    clSetKernelArg(kernels[0],  1, sizeof(cl_mem)                             , &F_d        );
-    clSetKernelArg(kernels[0],  2, sizeof(int)                                , &cols       );
-    clSetKernelArg(kernels[0],  3, sizeof(int)                                , &penalty    );
-    clSetKernelArg(kernels[0],  5, sizeof(int)                                , &block_width);
-    clSetKernelArg(kernels[0],  6, sizeof(int)                                , &worksize   );
-    clSetKernelArg(kernels[0],  7, sizeof(int)                                , &offset_r   );
-    clSetKernelArg(kernels[0],  8, sizeof(int)                                , &offset_c   );
-    clSetKernelArg(kernels[0],  9, sizeof(int) * (BLOCK + 1) * (BLOCK + 1), NULL        );
-    clSetKernelArg(kernels[0], 10, sizeof(int) * (BLOCK    ) * (BLOCK    ), NULL        );
+    clSetKernelArg(kernels[0],  0, sizeof(cl_mem)                            , &S_d        );
+    clSetKernelArg(kernels[0],  1, sizeof(cl_mem)                            , &F_d        );
+    clSetKernelArg(kernels[0],  2, sizeof(cl_int)                            , &cols       );
+    clSetKernelArg(kernels[0],  3, sizeof(cl_int)                            , &penalty    );
+    clSetKernelArg(kernels[0],  5, sizeof(cl_int)                            , &block_width);
+    clSetKernelArg(kernels[0],  6, sizeof(cl_int)                            , &worksize   );
+    clSetKernelArg(kernels[0],  7, sizeof(cl_int)                            , &offset_r   );
+    clSetKernelArg(kernels[0],  8, sizeof(cl_int)                            , &offset_c   );
+    clSetKernelArg(kernels[0],  9, sizeof(cl_int) * (BLOCK + 1) * (BLOCK + 1), nullptr);
+    clSetKernelArg(kernels[0], 10, sizeof(cl_int) * (BLOCK    ) * (BLOCK    ), nullptr);
 
-    clSetKernelArg(kernels[1],  0, sizeof(cl_mem)                             , &S_d        );
-    clSetKernelArg(kernels[1],  1, sizeof(cl_mem)                             , &F_d        );
-    clSetKernelArg(kernels[1],  2, sizeof(int)                                , &cols       );
-    clSetKernelArg(kernels[1],  3, sizeof(int)                                , &penalty    );
-    clSetKernelArg(kernels[1],  5, sizeof(int)                                , &block_width);
-    clSetKernelArg(kernels[1],  6, sizeof(int)                                , &worksize   );
-    clSetKernelArg(kernels[1],  7, sizeof(int)                                , &offset_r   );
-    clSetKernelArg(kernels[1],  8, sizeof(int)                                , &offset_c   );
-    clSetKernelArg(kernels[1],  9, sizeof(int) * (BLOCK + 1) * (BLOCK + 1), NULL        );
-    clSetKernelArg(kernels[1], 10, sizeof(int) *  BLOCK      *   BLOCK    , NULL        );
+    clSetKernelArg(kernels[1],  0, sizeof(cl_mem)                            , &S_d        );
+    clSetKernelArg(kernels[1],  1, sizeof(cl_mem)                            , &F_d        );
+    clSetKernelArg(kernels[1],  2, sizeof(cl_int)                            , &cols       );
+    clSetKernelArg(kernels[1],  3, sizeof(cl_int)                            , &penalty    );
+    clSetKernelArg(kernels[1],  5, sizeof(cl_int)                            , &block_width);
+    clSetKernelArg(kernels[1],  6, sizeof(cl_int)                            , &worksize   );
+    clSetKernelArg(kernels[1],  7, sizeof(cl_int)                            , &offset_r   );
+    clSetKernelArg(kernels[1],  8, sizeof(cl_int)                            , &offset_c   );
+    clSetKernelArg(kernels[1],  9, sizeof(cl_int) * (BLOCK + 1) * (BLOCK + 1), nullptr);
+    clSetKernelArg(kernels[1], 10, sizeof(cl_int) * (BLOCK    ) * (BLOCK    ), nullptr);
 
+    size_t local_work  = BLOCK;
     for(int blk = 1 ; blk <= worksize / BLOCK; ++blk)
     {
-      global_work = BLOCK * blk;
-      local_work  = BLOCK;
+      size_t global_work = BLOCK * blk;
       clSetKernelArg(kernels[0], 4, sizeof(int), &blk);
-      clEnqueueNDRangeKernel(queue, kernels[0], 1, NULL, &global_work, &local_work, 0, NULL, NULL);
+      clEnqueueNDRangeKernel(queue, kernels[0], 1, nullptr, &global_work, &local_work, 0, nullptr, nullptr);
     }
     for(int blk = worksize / BLOCK - 1; blk > 0; --blk)
     {
-      global_work = BLOCK * blk;
-      local_work  = BLOCK;
+      size_t global_work = BLOCK * blk;
       clSetKernelArg(kernels[1], 4, sizeof(int), &blk);
-      clEnqueueNDRangeKernel(queue, kernels[1], 1, NULL, &global_work, &local_work, 0, NULL, NULL);
+      clEnqueueNDRangeKernel(queue, kernels[1], 1, nullptr, &global_work, &local_work, 0, nullptr, nullptr);
     }
-    clEnqueueReadBuffer(queue, F_d, CL_TRUE, 0, cols * rows * sizeof(int), F.get(), 0, NULL, NULL);
+    clEnqueueReadBuffer(queue, F_d, CL_TRUE, 0, cols * rows * sizeof(int), F.get(), 0, nullptr, nullptr);
     clReleaseMemObject(F_d);
     clReleaseMemObject(S_d);
     auto t2 = setup.gettime();
@@ -213,19 +228,16 @@ private:
   void compute_scores_device_rhombus()
   {
     auto t1 = setup.gettime();
-    // set global and local workitems
     auto F_d = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, cols * rows * sizeof(int), F.get(), nullptr);
     auto S_d = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, cols * rows * sizeof(int), S.get(), nullptr);
     auto M_d = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, rows * sizeof(int), M.get(), nullptr);
     auto N_d = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, cols * sizeof(int), N.get(), nullptr);
-
-    clSetKernelArg(kernels[2], 0, sizeof(cl_mem), &S_d    );
-    clSetKernelArg(kernels[2], 1, sizeof(cl_mem), &M_d    );
-    clSetKernelArg(kernels[2], 2, sizeof(cl_mem), &N_d    );
-    clSetKernelArg(kernels[2], 3, sizeof(cl_mem), &F_d    );
-    clSetKernelArg(kernels[2], 4, sizeof(cl_int), &cols   );
+    clSetKernelArg(kernels[2], 0, sizeof(cl_mem), &S_d);
+    clSetKernelArg(kernels[2], 1, sizeof(cl_mem), &M_d);
+    clSetKernelArg(kernels[2], 2, sizeof(cl_mem), &N_d);
+    clSetKernelArg(kernels[2], 3, sizeof(cl_mem), &F_d);
+    clSetKernelArg(kernels[2], 4, sizeof(cl_int), &cols);
     clSetKernelArg(kernels[2], 5, sizeof(cl_int), &penalty);
-
     size_t local_work = BLOCK;
     for (int i = 0; i < rows / BLOCK - 1; ++i)
     {
@@ -236,7 +248,8 @@ private:
       clEnqueueNDRangeKernel(queue, kernels[2], 1, nullptr, &global_work, &local_work, 0, nullptr, nullptr);
       bc = 2;
       global_work = ((2 * i + bc) * BLOCK < cols - 1) ? BLOCK * (i + 1) : (cols - 1) / 2 - BLOCK;
-      if (global_work == 0) continue;
+      if (global_work == 0)
+        continue;
       clSetKernelArg(kernels[2], 7, sizeof(int), &bc);
       clEnqueueNDRangeKernel(queue, kernels[2], 1, nullptr, &global_work, &local_work, 0, nullptr, nullptr);
     }
@@ -251,6 +264,8 @@ private:
     clEnqueueReadBuffer(queue, F_d, CL_TRUE, 0, cols * rows * sizeof(int), F.get(), 0, nullptr, nullptr);
     clReleaseMemObject(F_d);
     clReleaseMemObject(S_d);
+    clReleaseMemObject(M_d);
+    clReleaseMemObject(N_d);
     auto t2 = setup.gettime();
     cout << "RHOMBUS " << t2 - t1 << " s" << endl;
   }
