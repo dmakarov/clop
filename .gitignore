@@ -5,8 +5,11 @@ bin/
 lib/
 examples/*/bin/
 *.lst
+.dir-locals.el
 .project
 .settings
 dub.selections.json
 FILES
-TAGS
+GPATH
+GRTAGS
+GTAGS
