@@ -1,5 +1,5 @@
 CXX      ?= g++
-CXXFLAGS := -std=c++11 -O3 -Wall
+CXXFLAGS := -std=c++11 -O3 -Wall -Werror -I../../include
 UNAME    := $(shell uname)
 
 # OPENCL
@@ -12,7 +12,7 @@ endif
 
 all: nw
 
-nw: main.cpp
+nw: main.cpp ../../include/common.hpp
 	$(CXX) $(CXXFLAGS) -o $@ $< $(OPENCL_LIB)
 
 clean:

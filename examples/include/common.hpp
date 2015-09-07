@@ -39,10 +39,7 @@
 #include <CL/cl.h>
 #endif
 
-using std::ifstream;
-using std::ofstream;
-using std::string;
-using std::vector;
+using namespace std;
 
 class clop_examples_common
 {
@@ -51,7 +48,7 @@ class clop_examples_common
   clock_serv_t cclock;
 #endif
 
-  vector<cl_kernel> kernels;
+  bool release_opencl_resources;
   cl_platform_id* platforms;
   cl_platform_id platform;
   cl_device_id* devices;
@@ -59,18 +56,25 @@ class clop_examples_common
   cl_program program;
   cl_context context;
   cl_command_queue queue;
-  double t1_, t2_;
+  string kernel_file;
+  vector<string> kernel_names;
+  vector<cl_kernel> kernels;
 
 public:
 
-  clop_examples_common(cl_uint platform_index, cl_uint device_index, const char* kernel_file, vector<const char*> kernel_names)
-    : kernels(kernel_names.size())
+  clop_examples_common(const string& file, vector<const char*> names) : kernel_file(file), kernels(names.size())
   {
 #ifdef __MACH__
     self = mach_host_self();
     host_get_clock_service(self, REALTIME_CLOCK, &cclock);
 #endif
-    t1_ = gettime();
+    for (auto n : names)
+      kernel_names.emplace_back(n);
+    release_opencl_resources = false;
+  }
+
+  void reset(cl_uint platform_index, cl_uint device_index)
+  {
     cl_uint num_platforms, num_devices;
     cl_int status = clGetPlatformIDs(0, nullptr, &num_platforms);
     check_status(status, "init_cl (clGetPlatformIDs 1) ");
@@ -104,20 +108,22 @@ public:
     for (int kn = 0; kn < kernels.size(); ++kn)
     {
       // get a kernel object handle for a kernel with the given name
-      cl_kernel kernel = clCreateKernel(program, (kernel_names[kn]), &status);
+      cl_kernel kernel = clCreateKernel(program, (kernel_names[kn]).c_str(), &status);
       check_status(status, "init_cl(clCreateKernel) \"" + string(kernel_names[kn]) + "\" ");
       kernels[kn] = kernel;
     }
+    release_opencl_resources = true;
   }
 
   ~clop_examples_common()
   {
-    for (int kn = 0; kn < kernels.size(); ++kn)
+    if (release_opencl_resources)
     {
-      clReleaseKernel(kernels[kn]);
+      for (auto k : kernels)
+        clReleaseKernel(k);
+      clReleaseCommandQueue(queue);
+      clReleaseContext(context);
     }
-    t2_ = gettime();
-    fprintf(stdout, "TOTAL %f [s]\n", t2_ - t1_);
 #ifdef __MACH__
     mach_port_deallocate(self, cclock);
 #endif
