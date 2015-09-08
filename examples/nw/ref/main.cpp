@@ -54,11 +54,37 @@ using namespace std;
      }
   */
 
+static int BLOSUM62[] = {
+   4, -1, -2, -2,  0, -1, -1,  0, -2, -1, -1, -1, -1, -2, -1,  1,  0, -3, -2,  0, -2, -1,  0, -4,
+  -1,  5,  0, -2, -3,  1,  0, -2,  0, -3, -2,  2, -1, -3, -2, -1, -1, -3, -2, -3, -1,  0, -1, -4,
+  -2,  0,  6,  1, -3,  0,  0,  0,  1, -3, -3,  0, -2, -3, -2,  1,  0, -4, -2, -3,  3,  0, -1, -4,
+  -2, -2,  1,  6, -3,  0,  2, -1, -1, -3, -4, -1, -3, -3, -1,  0, -1, -4, -3, -3,  4,  1, -1, -4,
+   0, -3, -3, -3,  9, -3, -4, -3, -3, -1, -1, -3, -1, -2, -3, -1, -1, -2, -2, -1, -3, -3, -2, -4,
+  -1,  1,  0,  0, -3,  5,  2, -2,  0, -3, -2,  1,  0, -3, -1,  0, -1, -2, -1, -2,  0,  3, -1, -4,
+  -1,  0,  0,  2, -4,  2,  5, -2,  0, -3, -3,  1, -2, -3, -1,  0, -1, -3, -2, -2,  1,  4, -1, -4,
+   0, -2,  0, -1, -3, -2, -2,  6, -2, -4, -4, -2, -3, -3, -2,  0, -2, -2, -3, -3, -1, -2, -1, -4,
+  -2,  0,  1, -1, -3,  0,  0, -2,  8, -3, -3, -1, -2, -1, -2, -1, -2, -2,  2, -3,  0,  0, -1, -4,
+  -1, -3, -3, -3, -1, -3, -3, -4, -3,  4,  2, -3,  1,  0, -3, -2, -1, -3, -1,  3, -3, -3, -1, -4,
+  -1, -2, -3, -4, -1, -2, -3, -4, -3,  2,  4, -2,  2,  0, -3, -2, -1, -2, -1,  1, -4, -3, -1, -4,
+  -1,  2,  0, -1, -3,  1,  1, -2, -1, -3, -2,  5, -1, -3, -1,  0, -1, -3, -2, -2,  0,  1, -1, -4,
+  -1, -1, -2, -3, -1,  0, -2, -3, -2,  1,  2, -1,  5,  0, -2, -1, -1, -1, -1,  1, -3, -1, -1, -4,
+  -2, -3, -3, -3, -2, -3, -3, -3, -1,  0,  0, -3,  0,  6, -4, -2, -2,  1,  3, -1, -3, -3, -1, -4,
+  -1, -2, -2, -1, -3, -1, -1, -2, -2, -3, -3, -1, -2, -4,  7, -1, -1, -4, -3, -2, -2, -1, -2, -4,
+   1, -1,  1,  0, -1,  0,  0,  0, -1, -2, -2,  0, -1, -2, -1,  4,  1, -3, -2, -2,  0,  0,  0, -4,
+   0, -1,  0, -1, -1, -1, -1, -2, -2, -1, -1, -1, -1, -2, -1,  1,  5, -2, -2,  0, -1, -1,  0, -4,
+  -3, -3, -4, -4, -2, -2, -3, -2, -2, -3, -2, -3, -1,  1, -4, -3, -2, 11,  2, -3, -4, -3, -2, -4,
+  -2, -2, -2, -3, -2, -1, -2, -3,  2, -1, -1, -2, -1,  3, -3, -2, -2,  2,  7, -1, -3, -2, -1, -4,
+   0, -3, -3, -3, -1, -2, -2, -3, -3,  3,  1, -2,  1, -1, -2, -2,  0, -3, -1,  4, -3, -2, -1, -4,
+  -2, -1,  3,  4, -3,  0,  1, -1,  0, -3, -4,  0, -3, -3, -2,  0, -1, -4, -3, -3,  4,  1, -1, -4,
+  -1,  0,  0,  1, -3,  3,  4, -2,  0, -3, -3,  1, -1, -3, -1,  0, -1, -3, -2, -2,  1,  4, -1, -4,
+   0, -1, -1, -1, -2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -2,  0,  0, -2, -1, -1, -1, -1, -1, -4,
+  -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4,  1
+};
+
 class Application {
 
   static const int BLOCK = 32;
   static const int CHARS = 24;
-  static const int BLOSUM62[CHARS][CHARS];
 
 public:
 
@@ -87,8 +113,8 @@ public:
     F.reset(new int[rows * cols]);
     G.reset(new int[rows * cols]);
     S.reset(new int[rows * cols]);
-    M.reset(new int[rows]);
-    N.reset(new int[cols]);
+    M.reset(new int[rows + cols]);
+    N.reset(new int[cols + cols]);
 
     uniform_int_distribution<unsigned> u(0, CHARS - 1);
     default_random_engine e;
@@ -96,19 +122,17 @@ public:
     {
       F[jj] = -penalty * jj;
       G[jj] = -penalty * jj;
+      N[jj] = u(e);
     }
     for (int ii = 0; ii < rows; ++ii)
     {
       F[ii * cols] = -penalty * ii;
       G[ii * cols] = -penalty * ii;
+      M[ii] = u(e);
     }
     for (int ii = 1; ii < rows; ++ii)
-      M[ii] = u(e);
-    for (int jj = 1; jj < cols; ++jj)
-      N[jj] = u(e);
-    for (int ii = 1; ii < rows; ++ii)
       for (int jj = 1; jj < cols; ++jj)
-        S[ii * cols + jj] = BLOSUM62[M[ii]][N[jj]];
+        S[ii * cols + jj] = BLOSUM62[M[ii] * CHARS + N[jj]];
 
     setup.reset(platform, device, string("-DBLOCK=") + to_string(BLOCK) + string(" -DCHARS=") + to_string(CHARS));
     kernels = setup.get_kernels();
@@ -129,10 +153,10 @@ private:
 
   unique_ptr<int[]> M, N, S, F, G;
   int rows, cols, penalty;
-  clop_examples_common setup;
   cl_context context;
   cl_command_queue queue;
   vector<cl_kernel> kernels;
+  clop_examples_common setup;
 
   void usage(char** argv)
   {
@@ -149,14 +173,15 @@ private:
     return k > c ? k : c;
   }
 
+#define I(i,j) ((i) * cols + (j))
   void compute_scores_serial()
   {
     auto t1 = setup.gettime();
     for (int ii = 1; ii < rows; ++ii)
       for (int jj = 1; jj < rows; ++jj)
-        G[ii * cols + jj] = max3(G[(ii - 1) * cols + jj - 1] + S[ii * cols + jj],
-                                 G[(ii - 1) * cols + jj    ] - penalty,
-                                 G[ ii      * cols + jj - 1] - penalty);
+        G[I(ii, jj)] = max3(G[I(ii - 1, jj - 1)] + S[I(ii, jj)],
+                            G[I(ii - 1, jj)] - penalty,
+                            G[I(ii, jj - 1)] - penalty);
     auto t2 = setup.gettime();
     cout << "SERIAL  " << t2 - t1 << " s" << endl;
   }
@@ -166,11 +191,12 @@ private:
     size_t diffs = 0;
     for (int ii = 0; ii < rows; ++ii)
       for (int jj = 0; jj < cols; ++jj)
-        if (F[ii * cols + jj] != G[ii * cols + jj])
+        if (F[I(ii, jj)] != G[I(ii, jj)])
           ++diffs;
     if (diffs)
       cerr << "DIFFS " << diffs << endl;
   }
+#undef I
 
   void compute_scores_device()
   {
@@ -228,10 +254,14 @@ private:
   void compute_scores_device_rhombus()
   {
     auto t1 = setup.gettime();
-    auto F_d = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, cols * rows * sizeof(int), F.get(), nullptr);
-    auto S_d = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, cols * rows * sizeof(int), S.get(), nullptr);
-    auto M_d = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, rows * sizeof(int), M.get(), nullptr);
-    auto N_d = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, cols * sizeof(int), N.get(), nullptr);
+    auto F_d = clCreateBuffer(context, CL_MEM_READ_WRITE, cols * rows * sizeof(int), nullptr, nullptr);
+    auto S_d = clCreateBuffer(context, CL_MEM_READ_ONLY, CHARS * CHARS * sizeof(int), nullptr, nullptr);
+    auto M_d = clCreateBuffer(context, CL_MEM_READ_ONLY, rows * sizeof(int), nullptr, nullptr);
+    auto N_d = clCreateBuffer(context, CL_MEM_READ_ONLY, cols * sizeof(int), nullptr, nullptr);
+    clEnqueueWriteBuffer(queue, F_d, CL_TRUE, 0, cols * rows * sizeof(int), F.get(), 0, nullptr, nullptr);
+    clEnqueueWriteBuffer(queue, S_d, CL_TRUE, 0, CHARS * CHARS * sizeof(int), BLOSUM62, 0, nullptr, nullptr);
+    clEnqueueWriteBuffer(queue, M_d, CL_TRUE, 0, rows * sizeof(int), M.get(), 0, nullptr, nullptr);
+    clEnqueueWriteBuffer(queue, N_d, CL_TRUE, 0, cols * sizeof(int), N.get(), 0, nullptr, nullptr);
     clSetKernelArg(kernels[2], 0, sizeof(cl_mem), &S_d);
     clSetKernelArg(kernels[2], 1, sizeof(cl_mem), &M_d);
     clSetKernelArg(kernels[2], 2, sizeof(cl_mem), &N_d);
@@ -269,33 +299,6 @@ private:
     auto t2 = setup.gettime();
     cout << "RHOMBUS " << t2 - t1 << " s" << endl;
   }
-};
-
-const int Application::BLOSUM62[CHARS][CHARS] = {
-  { 4, -1, -2, -2,  0, -1, -1,  0, -2, -1, -1, -1, -1, -2, -1,  1,  0, -3, -2,  0, -2, -1,  0, -4},
-  {-1,  5,  0, -2, -3,  1,  0, -2,  0, -3, -2,  2, -1, -3, -2, -1, -1, -3, -2, -3, -1,  0, -1, -4},
-  {-2,  0,  6,  1, -3,  0,  0,  0,  1, -3, -3,  0, -2, -3, -2,  1,  0, -4, -2, -3,  3,  0, -1, -4},
-  {-2, -2,  1,  6, -3,  0,  2, -1, -1, -3, -4, -1, -3, -3, -1,  0, -1, -4, -3, -3,  4,  1, -1, -4},
-  { 0, -3, -3, -3,  9, -3, -4, -3, -3, -1, -1, -3, -1, -2, -3, -1, -1, -2, -2, -1, -3, -3, -2, -4},
-  {-1,  1,  0,  0, -3,  5,  2, -2,  0, -3, -2,  1,  0, -3, -1,  0, -1, -2, -1, -2,  0,  3, -1, -4},
-  {-1,  0,  0,  2, -4,  2,  5, -2,  0, -3, -3,  1, -2, -3, -1,  0, -1, -3, -2, -2,  1,  4, -1, -4},
-  { 0, -2,  0, -1, -3, -2, -2,  6, -2, -4, -4, -2, -3, -3, -2,  0, -2, -2, -3, -3, -1, -2, -1, -4},
-  {-2,  0,  1, -1, -3,  0,  0, -2,  8, -3, -3, -1, -2, -1, -2, -1, -2, -2,  2, -3,  0,  0, -1, -4},
-  {-1, -3, -3, -3, -1, -3, -3, -4, -3,  4,  2, -3,  1,  0, -3, -2, -1, -3, -1,  3, -3, -3, -1, -4},
-  {-1, -2, -3, -4, -1, -2, -3, -4, -3,  2,  4, -2,  2,  0, -3, -2, -1, -2, -1,  1, -4, -3, -1, -4},
-  {-1,  2,  0, -1, -3,  1,  1, -2, -1, -3, -2,  5, -1, -3, -1,  0, -1, -3, -2, -2,  0,  1, -1, -4},
-  {-1, -1, -2, -3, -1,  0, -2, -3, -2,  1,  2, -1,  5,  0, -2, -1, -1, -1, -1,  1, -3, -1, -1, -4},
-  {-2, -3, -3, -3, -2, -3, -3, -3, -1,  0,  0, -3,  0,  6, -4, -2, -2,  1,  3, -1, -3, -3, -1, -4},
-  {-1, -2, -2, -1, -3, -1, -1, -2, -2, -3, -3, -1, -2, -4,  7, -1, -1, -4, -3, -2, -2, -1, -2, -4},
-  { 1, -1,  1,  0, -1,  0,  0,  0, -1, -2, -2,  0, -1, -2, -1,  4,  1, -3, -2, -2,  0,  0,  0, -4},
-  { 0, -1,  0, -1, -1, -1, -1, -2, -2, -1, -1, -1, -1, -2, -1,  1,  5, -2, -2,  0, -1, -1,  0, -4},
-  {-3, -3, -4, -4, -2, -2, -3, -2, -2, -3, -2, -3, -1,  1, -4, -3, -2, 11,  2, -3, -4, -3, -2, -4},
-  {-2, -2, -2, -3, -2, -1, -2, -3,  2, -1, -1, -2, -1,  3, -3, -2, -2,  2,  7, -1, -3, -2, -1, -4},
-  { 0, -3, -3, -3, -1, -2, -2, -3, -3,  3,  1, -2,  1, -1, -2, -2,  0, -3, -1,  4, -3, -2, -1, -4},
-  {-2, -1,  3,  4, -3,  0,  1, -1,  0, -3, -4,  0, -3, -3, -2,  0, -1, -4, -3, -3,  4,  1, -1, -4},
-  {-1,  0,  0,  1, -3,  3,  4, -2,  0, -3, -3,  1, -1, -3, -1,  0, -1, -3, -2, -2,  1,  4, -1, -4},
-  { 0, -1, -1, -1, -2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -2,  0,  0, -2, -1, -1, -1, -1, -1, -4},
-  {-4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4,  1}
 };
 
 int main(int argc, char** argv)

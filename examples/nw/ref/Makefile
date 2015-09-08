@@ -12,7 +12,7 @@ endif
 
 all: nw
 
-nw: main.cpp ../../include/common.hpp
+nw: main.cpp ../../include/common.hpp Makefile
 	$(CXX) $(CXXFLAGS) -o $@ $< $(OPENCL_LIB)
 
 clean:

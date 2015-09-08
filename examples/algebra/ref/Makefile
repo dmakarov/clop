@@ -1,21 +1,19 @@
-CXX      := g++
-CXXFLAGS := -I../../include -O3 --std=c++11 -Wall
+CXX      ?= g++
+CXXFLAGS := -std=c++11 -O3 -Wall -Werror -I../../include
+UNAME    := $(shell uname)
 
 # OPENCL
-UNAME := $(shell uname)
 ifeq ($(UNAME), Linux)
   OPENCL_LIB := -lOpenCL -lrt
-  DOCL_LIB := -L-lOpenCL
 endif
 ifeq ($(UNAME), Darwin)
   OPENCL_LIB := -framework OpenCL
-  DOCL_LIB := -L-framework -LOpenCL
 endif
 
 all: algebra
 
-algebra: app.cpp ../../include/common.hpp Makefile
+algebra: main.cpp ../../include/common.hpp Makefile
 	$(CXX) $(CXXFLAGS) -o $@ $< $(OPENCL_LIB)
 
 clean:
-	@rm -rf algebra app.o
+	@rm -rf algebra

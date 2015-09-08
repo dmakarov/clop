@@ -9,7 +9,6 @@
 /* Begin PBXBuildFile section */
 		7493143F1B96E07100F57010 /* main.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7493143E1B96E07000F57010 /* main.cpp */; };
 		749314431B96E20100F57010 /* OpenCL.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 749314421B96E20100F57010 /* OpenCL.framework */; };
-		749314451B96E24E00F57010 /* Kernels.cl in Sources */ = {isa = PBXBuildFile; fileRef = 749314441B96E24E00F57010 /* Kernels.cl */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -126,7 +125,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				7493143F1B96E07100F57010 /* main.cpp in Sources */,
-				749314451B96E24E00F57010 /* Kernels.cl in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

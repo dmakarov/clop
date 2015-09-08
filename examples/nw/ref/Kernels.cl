@@ -1,8 +1,5 @@
-#define F(i, j)  input_itemsets_l[ (j)      +  (i)      * (BLOCK + 1)]
-#define N(i, j)  input_itemsets_l[((j) - 1) +  (i)      * (BLOCK + 1)]
-#define W(i, j)  input_itemsets_l[ (j)      + ((i) - 1) * (BLOCK + 1)]
-#define NW(i, j) input_itemsets_l[((j) - 1) + ((i) - 1) * (BLOCK + 1)]
-#define S(i, j)  similarity_l[(j) + (i) * BLOCK]
+#define F(i,j)  input_itemsets_l[(j) + (i) * (BLOCK + 1)]
+#define S(i,j)  similarity_l[(j) + (i) * BLOCK]
 #define I(r,c) ((r) * cols + (c))
 
 int
@@ -48,9 +45,9 @@ nw1( __global int *similarity_d,
     {
       int t_index_x =  tx + 1;
       int t_index_y =  m - tx + 1;
-      int match = NW( t_index_y, t_index_x ) + S( t_index_y - 1, t_index_x - 1 );
-      int remove = W( t_index_y, t_index_x ) - penalty;
-      int insert = N( t_index_y, t_index_x ) - penalty;
+      int match = F(t_index_y - 1, t_index_x - 1) + S(t_index_y - 1, t_index_x - 1);
+      int remove = F(t_index_y, t_index_x - 1) - penalty;
+      int insert = F(t_index_y - 1, t_index_x) - penalty;
       F(t_index_y, t_index_x) = max3( match, remove, insert );
     }
     barrier( CLK_LOCAL_MEM_FENCE );
@@ -62,9 +59,9 @@ nw1( __global int *similarity_d,
     {
       int t_index_x =  tx + BLOCK - m ;
       int t_index_y =  BLOCK - tx;
-      int match = NW( t_index_y, t_index_x ) + S( t_index_y - 1, t_index_x - 1 );
-      int remove = W( t_index_y, t_index_x ) - penalty;
-      int insert = N( t_index_y, t_index_x ) - penalty;
+      int match = F(t_index_y - 1, t_index_x - 1) + S(t_index_y - 1, t_index_x - 1);
+      int remove = F(t_index_y, t_index_x - 1) - penalty;
+      int insert = F(t_index_y - 1, t_index_x) - penalty;
       F(t_index_y, t_index_x) = max3( match, remove, insert );
     }
     barrier( CLK_LOCAL_MEM_FENCE );
@@ -107,9 +104,9 @@ nw2( __global int *similarity_d,
     {
       int t_index_x =  tx + 1;
       int t_index_y =  m - tx + 1;
-      int match = NW( t_index_y, t_index_x ) + S( t_index_y - 1, t_index_x - 1 );
-      int remove = W( t_index_y, t_index_x ) - penalty;
-      int insert = N( t_index_y, t_index_x ) - penalty;
+      int match = F(t_index_y - 1, t_index_x - 1) + S(t_index_y - 1, t_index_x - 1);
+      int remove = F(t_index_y, t_index_x - 1) - penalty;
+      int insert = F(t_index_y - 1, t_index_x) - penalty;
       F(t_index_y, t_index_x) = max3( match, remove, insert );
     }
     barrier( CLK_LOCAL_MEM_FENCE );
@@ -120,9 +117,9 @@ nw2( __global int *similarity_d,
     {
       int t_index_x =  tx + BLOCK - m ;
       int t_index_y =  BLOCK - tx;
-      int match = NW( t_index_y, t_index_x ) + S( t_index_y - 1, t_index_x - 1 );
-      int remove = W( t_index_y, t_index_x ) - penalty;
-      int insert = N( t_index_y, t_index_x ) - penalty;
+      int match = F(t_index_y - 1, t_index_x - 1) + S(t_index_y - 1, t_index_x - 1);
+      int remove = F(t_index_y, t_index_x - 1) - penalty;
+      int insert = F(t_index_y - 1, t_index_x) - penalty;
       F(t_index_y, t_index_x) = max3( match, remove, insert );
     }
     barrier( CLK_LOCAL_MEM_FENCE );
@@ -132,8 +129,8 @@ nw2( __global int *similarity_d,
 }
 
 __kernel void rhombus(__global const int* A,
-                      __global const int* P,
-                      __global const int* Q,
+                      __global const int* M,
+                      __global const int* N,
                       __global       int* B,
                                      int  cols,
                                      int  penalty,
@@ -165,7 +162,7 @@ __kernel void rhombus(__global const int* A,
     {
       int x = m - tx + 1;
       if (x > 0)
-        B[I(rr + tx, x)] = max3(B[I(rr + tx - 1, x - 1)] + s[P[rr + tx] * CHARS + Q[x]],
+        B[I(rr + tx, x)] = max3(B[I(rr + tx - 1, x - 1)] + s[M[rr + tx] * CHARS + N[x]],
                                 B[I(rr + tx - 1, x    )] - penalty,
                                 B[I(rr + tx    , x - 1)] - penalty);
       barrier(CLK_GLOBAL_MEM_FENCE);
@@ -178,11 +175,11 @@ __kernel void rhombus(__global const int* A,
   t[y1] = B[index_n];
   barrier(CLK_LOCAL_MEM_FENCE);
 
-  int y = P[rr + tx];
-  int x = Q[cc - tx];
+  int y = M[rr + tx];
+  int x = N[cc - tx];
   for (int k = 0; k < BLOCK; ++k)
   {
-    int nextX = Q[cc - tx + k + 1];
+    int nextX = N[cc - tx + k + 1];
     t[(k + 2) * (BLOCK + 1) + tx + 1] = max3(t[k * (BLOCK + 1) + tx] + s[y * CHARS + x],
                                                   t[(k + 1) * (BLOCK + 1) + tx] - penalty,
                                                   t[(k + 1) * (BLOCK + 1) + tx + 1] - penalty);
@@ -199,7 +196,7 @@ __kernel void rhombus(__global const int* A,
     {
       int x = cc + BLOCK + m - tx;
       if (x < cols)
-        B[I(rr + tx, x)] = max3(B[I(rr + tx - 1, x - 1)] + s[P[rr + tx] * CHARS + Q[x]],
+        B[I(rr + tx, x)] = max3(B[I(rr + tx - 1, x - 1)] + s[M[rr + tx] * CHARS + N[x]],
                                 B[I(rr + tx - 1, x    )] - penalty,
                                 B[I(rr + tx    , x - 1)] - penalty);
       barrier(CLK_GLOBAL_MEM_FENCE);
