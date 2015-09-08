@@ -173,7 +173,11 @@ private:
     return k > c ? k : c;
   }
 
-#define I(i,j) ((i) * cols + (j))
+  inline int I(int i, int j)
+  {
+    return i * cols + j;
+  }
+
   void compute_scores_serial()
   {
     auto t1 = setup.gettime();
@@ -183,7 +187,7 @@ private:
                             G[I(ii - 1, jj)] - penalty,
                             G[I(ii, jj - 1)] - penalty);
     auto t2 = setup.gettime();
-    cout << "SERIAL  " << t2 - t1 << " s" << endl;
+    cout << "HOST CPU " << t2 - t1 << " s" << endl;
   }
 
   void validate_results()
@@ -196,7 +200,6 @@ private:
     if (diffs)
       cerr << "DIFFS " << diffs << endl;
   }
-#undef I
 
   void compute_scores_device()
   {
@@ -248,7 +251,7 @@ private:
     clReleaseMemObject(F_d);
     clReleaseMemObject(S_d);
     auto t2 = setup.gettime();
-    cout << "BLOCKED " << t2 - t1 << " s" << endl;
+    cout << "SQUARES  " << t2 - t1 << " s" << endl;
   }
 
   void compute_scores_device_rhombus()
@@ -297,7 +300,7 @@ private:
     clReleaseMemObject(M_d);
     clReleaseMemObject(N_d);
     auto t2 = setup.gettime();
-    cout << "RHOMBUS " << t2 - t1 << " s" << endl;
+    cout << "DIAMONDS " << t2 - t1 << " s" << endl;
   }
 };
 
