@@ -8,51 +8,51 @@
 
 using namespace std;
 
-  /**
-     The Needleman-Wunsch algorithm for sequence alignment.
+/**
+   The Needleman-Wunsch algorithm for sequence alignment.
 
-     Compute the F matrix:
+   Compute the F matrix:
 
-     for i=0 to length(A) F_{i,0} ← d*i
-     for j=0 to length(B) F_{0,j} ← d*j
-     for i=1 to length(A)
-       for j=1 to length(B)
-       {
-         Match  ← F_{i-1,j-1} + S_{A_i,B_j}
-         Delete ← F_{i-1,j} + d
-         Insert ← F_{i,j-1} + d
-         F_{i,j} ← max(Match, Insert, Delete)
-       }
-
-     Compute alignments:
-
-     AlignmentA ← ""
-     AlignmentB ← ""
-     i ← length(A)
-     j ← length(B)
-     while (i > 0 or j > 0)
+   for i=0 to length(A) F_{i,0} ← d*i
+   for j=0 to length(B) F_{0,j} ← d*j
+   for i=1 to length(A)
+     for j=1 to length(B)
      {
-       if (i > 0 and j > 0 and F_{i,j} == F_{i-1,j-1} + S_{A_i, B_j})
-       {
-         AlignmentA ← A_i + AlignmentA
-         AlignmentB ← B_j + AlignmentB
-         i ← i - 1
-         j ← j - 1
-       }
-       else if (i > 0 and F_{i,j} == F_{i-1,j} + d)
-       {
-         AlignmentA ← A_i + AlignmentA
-         AlignmentB ← "-" + AlignmentB
-         i ← i - 1
-       }
-       else (j > 0 and F_{i,j} == F_{i,j-1} + d)
-       {
-         AlignmentA ← "-" + AlignmentA
-         AlignmentB ← B_j + AlignmentB
-         j ← j - 1
-       }
+       Match  ← F_{i-1,j-1} + S_{A_i,B_j}
+       Delete ← F_{i-1,j} + d
+       Insert ← F_{i,j-1} + d
+       F_{i,j} ← max(Match, Insert, Delete)
      }
-  */
+
+   Compute alignments:
+
+   AlignmentA ← ""
+   AlignmentB ← ""
+   i ← length(A)
+   j ← length(B)
+   while (i > 0 or j > 0)
+   {
+     if (i > 0 and j > 0 and F_{i,j} == F_{i-1,j-1} + S_{A_i, B_j})
+     {
+       AlignmentA ← A_i + AlignmentA
+       AlignmentB ← B_j + AlignmentB
+       i ← i - 1
+       j ← j - 1
+     }
+     else if (i > 0 and F_{i,j} == F_{i-1,j} + d)
+     {
+       AlignmentA ← A_i + AlignmentA
+       AlignmentB ← "-" + AlignmentB
+       i ← i - 1
+     }
+     else (j > 0 and F_{i,j} == F_{i,j-1} + d)
+     {
+       AlignmentA ← "-" + AlignmentA
+       AlignmentB ← B_j + AlignmentB
+       j ← j - 1
+     }
+   }
+*/
 
 static int BLOSUM62[] = {
    4, -1, -2, -2,  0, -1, -1,  0, -2, -1, -1, -1, -1, -2, -1,  1,  0, -3, -2,  0, -2, -1,  0, -4,
