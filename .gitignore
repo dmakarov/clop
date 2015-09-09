@@ -4,6 +4,7 @@
 bin/
 lib/
 examples/*/bin/
+xcuserdata/
 *.lst
 .dir-locals.el
 .project
