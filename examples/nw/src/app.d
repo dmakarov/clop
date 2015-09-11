@@ -92,7 +92,7 @@ class Application {
   cl_kernel kernel_diamonds_indirectS_prefetch_noconflicts;
 
   bool do_animate = false;
-  bool do_verify = false;
+  bool do_validate = false;
   History history;
 
   /**
@@ -100,7 +100,7 @@ class Application {
   this(string[] args)
   {
     uint block_size = 16;
-    getopt(args, "animate|a", &do_animate, "block_size|b", &block_size, "verify|v", &do_verify);
+    getopt(args, "animate|a", &do_animate, "block_size|b", &block_size, "validate|v", &do_validate);
     if (args.length != 3)
     {
       writefln("Usage: %s [-a -b <block size> -v] <sequence length> <penalty>", args[0]);
@@ -768,9 +768,9 @@ class Application {
 
   /**
    */
-  void verify()
+  void validate()
   {
-    if (do_verify)
+    if (do_validate)
     {
       auto diff = 0;
       foreach (ii; 0 .. F.length)
@@ -1849,7 +1849,7 @@ class Application {
     double benchmark = runtime.benchmark((rows - 1) * (cols - 1));
     double time;
 
-    if (do_verify)
+    if (do_validate)
     {
       timer.start();
       baseline_nw();
@@ -1867,13 +1867,13 @@ class Application {
       rectangles();
       writefln("%2.0f MI RECTANGLES", (rows - 1) * (cols - 1) / (1024.0 * 1024.0));
       history.save_animation();
-      verify();
+      validate();
 
       reset();
       diamonds();
       writefln("%2.0f MI DIAMONDS", (rows - 1) * (cols - 1) / (1024.0 * 1024.0));
       history.save_animation();
-      verify();
+      validate();
       run_once = false;
     }
 
@@ -1888,7 +1888,7 @@ class Application {
               ticks.usecs / 1E6, time,
               (rows - 1) * (cols - 1) / (1024 * 1024 * time),
               2 * benchmark / 5);
-    verify();
+    validate();
 
     reset();
     timer.reset();
@@ -1900,7 +1900,7 @@ class Application {
               (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
               ticks.usecs / 1E6, time,
               (rows - 1) * (cols - 1) / (1024 * 1024 * time));
-    verify();
+    validate();
 
     reset();
     timer.reset();
@@ -1912,7 +1912,7 @@ class Application {
               (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
               ticks.usecs / 1E6, time,
               (rows - 1) * (cols - 1) / (1024 * 1024 * time));
-    verify();
+    validate();
 
     reset();
     timer.reset();
@@ -1924,7 +1924,7 @@ class Application {
               (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
               ticks.usecs / 1E6, time,
               (rows - 1) * (cols - 1) / (1024 * 1024 * time));
-    verify();
+    validate();
 
     reset();
     timer.reset();
@@ -1936,7 +1936,7 @@ class Application {
               (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
               ticks.usecs / 1E6, time,
               (rows - 1) * (cols - 1) / (1024 * 1024 * time));
-    verify();
+    validate();
 
     reset();
     timer.reset();
@@ -1948,7 +1948,7 @@ class Application {
               (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
               ticks.usecs / 1E6, time,
               (rows - 1) * (cols - 1) / (1024 * 1024 * time));
-    verify();
+    validate();
 
     reset();
     timer.reset();
@@ -1960,7 +1960,7 @@ class Application {
               (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
               ticks.usecs / 1E6, time,
               (rows - 1) * (cols - 1) / (1024 * 1024 * time));
-    verify();
+    validate();
 
     reset();
     timer.reset();
@@ -1972,7 +1972,7 @@ class Application {
               (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
               ticks.usecs / 1E6, time,
               (rows - 1) * (cols - 1) / (1024 * 1024 * time));
-    verify();
+    validate();
 
     reset();
     timer.reset();
@@ -1984,7 +1984,7 @@ class Application {
               (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
               ticks.usecs / 1E6, time,
               (rows - 1) * (cols - 1) / (1024 * 1024 * time));
-    verify();
+    validate();
 
     reset();
     timer.reset();
@@ -1996,15 +1996,15 @@ class Application {
               (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
               ticks.usecs / 1E6, time,
               (rows - 1) * (cols - 1) / (1024 * 1024 * time));
-    verify();
+    validate();
 
     reset();
     clop_nw();
-    verify();
+    validate();
 
     reset();
     clop_nw_indirectS();
-    verify();
+    validate();
   }
 }
 

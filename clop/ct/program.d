@@ -174,14 +174,28 @@ struct Program
       debug (UNITTEST_DEBUG) writefln("Node is not a CompoundStatement");
       return t;
     }
+    auto bx = CLOP.decimateTree(CLOP.Declaration(format("int bx = get_group_id(0);")));
+    auto bs = CLOP.decimateTree(CLOP.Declaration(format("int bsz = get_local_size(0);")));
+    auto nb = CLOP.decimateTree(CLOP.Declaration(format("int nbs = ((%s) - (%s)) / bsz;",
+                                                        range.intervals[1].get_max(),
+                                                        range.intervals[1].get_min())));
+    auto d0 = CLOP.decimateTree(CLOP.Declaration(format("int %s0 = (diagonal < nbs ? diagonal - bx : nbs - bx - %s) * bsz + %s;",
+                                                        range.symbols[0], range.intervals[1].get_min(), range.intervals[1].get_min())));
+    auto d1 = CLOP.decimateTree(CLOP.Declaration(format("int %s0 = (diagonal < nbs ? bx : diagonal - nbs + bx + %s) * bsz + %s;",
+                                                        range.symbols[1], range.intervals[1].get_min(), range.intervals[1].get_min())));
     auto s = CLOP.decimateTree(CLOP.Statement(format(q{
             for (int i = 0; i < 2 * (%s) - 1; ++i)
-              if (i < (%s) && tx <= i || i >= (%s) && tx < 2 * (%s) - 1 - i)
+              if ((i < (%s) && tx <= i) || (i >= (%s) && tx < 2 * (%s) - 1 - i))
               {
+                %s = i < (%s) ? %s0 + i - tx : %s0     + %s     - tx;
+                %s = i < (%s) ? %s0     + tx : %s0 + i - %s + 2 + tx;
                 // fill in the index computations
-              }}, block_size, block_size, block_size, block_size)));
-    s.children[0].children[0].children[4].children[0].children[1].children[0] = t.children[0].children[$ - 1];
-    t.children[0].children[$ - 1] = s;
+              }}, block_size, block_size, block_size, block_size,
+                  range.symbols[0], block_size, range.symbols[0], range.symbols[0], block_size,
+                  range.symbols[1], block_size, range.symbols[1], range.symbols[1], block_size)));
+    //loop stmt   for stmt    stmt        if stmt     stmt        comp stmt
+    s.children[0].children[0].children[4].children[0].children[1].children[0].children[0].children ~= t.children[0].children[$ - 1];
+    t.children[0].children = t.children[0].children[0 .. $ - 2] ~ [bx, bs, nb, d0, d1, s];
     return t;
   }
 
