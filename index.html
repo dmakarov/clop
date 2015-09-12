@@ -1,84 +1,88 @@
-<!doctype html>
-<html>
-
-  <head>
-    <meta charset="utf-8">
-    <meta http-equiv="X-UA-Compatible" content="chrome=1">
-    <title>CLOP by dmakarov</title>
-
-    <link rel="stylesheet" href="stylesheets/styles.css">
-    <link rel="stylesheet" href="stylesheets/pygment_trac.css">
-    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-  </head>
-
-  <body>
-    <div class="wrapper">
-
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head>
+<title>CLOP by dmakarov</title>
+<!-- 2015-09-12 Sat 22:11 -->
+<meta  http-equiv="Content-Type" content="text/html;charset=utf-8" />
+<meta  name="generator" content="Org-mode" />
+<link rel="stylesheet" href="stylesheets/styles.css"/>
+<link rel="stylesheet" href="stylesheets/pygment_trac.css"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no"/>
+</head>
+<body>
+<div id="wrapper" class="status">
+      <div>
       <!-- ============== HEADER ============== -->
-
       <header>
         <h1>CLOP</h1>
         <p>a language for OpenCL OPtimizations</p>
-
         <p class="view">
           <a href="https://github.com/dmakarov/clop">
             View the Project on GitHub <small>dmakarov/clop</small>
           </a>
         </p>
-
         <ul>
           <li><a href="https://github.com/dmakarov/clop/zipball/master">Download <strong>ZIP File</strong></a></li>
           <li><a href="https://github.com/dmakarov/clop/tarball/master">Download <strong>TAR Ball</strong></a></li>
           <li><a href="https://github.com/dmakarov/clop">View On <strong>GitHub</strong></a></li>
         </ul>
       </header>
-
       <!-- ============== SECTION ============== -->
+</div>
+<section id="">
+<h1 class="title">CLOP by dmakarov</h1>
 
-      <section>
-        <h3>Overview</h3>
+<div id="outline-container-sec-1" class="outline-3">
+<h3 id="sec-1">Overview</h3>
+<div class="outline-text-3" id="text-1">
+<p>
+CLOP is an embedded language for separating an algorithm from the device
+specific optimizations that improve the performance of the algorithm on the
+device.  The CLOP implementation uses the D programming language as its host
+language.  The CLOP syntax is similar to, but not restricted by the syntax of
+D.  CLOP fragments embedded in the application code allow to refer to the
+objects defined in the host application.
+</p>
 
-        <p>
-          CLOP is a domain specific language for separating an
-          algorithm from the device specific optimizations that
-          improve the performance of the algorithm on the device.  The
-          CLOP implementation uses the D programming language as its
-          host language.  The CLOP  syntax is similar to, but not
-          restricted by the syntax of D.  CLOP fragments embedded in
-          the application code allow to refer to the objects defined
-          in the host application.
-        </p>
+<p>
+In its simplest use case, CLOP is a more convenient way to embed OpenCL
+kernels in a host application code.
+</p>
 
-        <div class="highlight highlight-d">
-          <pre>
-<span class="pl-c">// Needleman-Wunsch algorithm implementation.</span>
-<span class="pl-c">// Use CLOP to generate OpenCL kernel and API calls.</span>
-<span class="pl-k">mixin</span>(compile(q{
-     <span class="pl-k">int</span> <span class="pl-en">max3</span>(<span class="pl-k">int</span> a, <span class="pl-k">int</span> b, <span class="pl-k">int</span> c)
-     {
-       <span class="pl-k">int</span> k = a <span class="pl-k">&gt;</span> b ? a : b;
-       <span class="pl-k">return</span> k <span class="pl-k">&gt;</span> c ? k : c;
-     }
-     <span class="pl-k">Antidiagonal</span> <span class="pl-en">NDRange</span>(r : <span class="pl-c1">1</span> .. rows, c : <span class="pl-c1">1</span> .. cols) {
-       F[r, c] = max3(F[r <span class="pl-k">-</span> <span class="pl-c1">1</span>, c <span class="pl-k">-</span> <span class="pl-c1">1</span>] <span class="pl-k">+</span> S[r, c],
-                      F[r, c <span class="pl-k">-</span> <span class="pl-c1">1</span>] <span class="pl-k">-</span> penalty,
-                      F[r <span class="pl-k">-</span> <span class="pl-c1">1</span>, c] <span class="pl-k">-</span> penalty);
-     } apply(rectangular_blocking(<span class="pl-c1">BLOCK_SIZE</span>, <span class="pl-c1">BLOCK_SIZE</span>))
-}));</pre>
-        </div>
-      </section>
+<div class="org-src-container">
 
+<pre class="src src-cpp"><span style="color: #999999;">// </span><span style="color: #999999; font-style: italic;">Needleman-Wunsch algorithm implementation.</span>
+<span style="color: #999999;">// </span><span style="color: #999999; font-style: italic;">Use CLOP to generate OpenCL kernel and API calls.</span>
+<span style="color: #3F6E74;">void</span> <span style="color: #26474B;">clop_nw</span>()
+{
+  mixin(compile(q{
+       <span style="color: #3F6E74;">int</span> <span style="color: #26474B;">max3</span>(<span style="color: #3F6E74;">int</span> <span style="color: #3F6E74;">a</span>, <span style="color: #3F6E74;">int</span> <span style="color: #3F6E74;">b</span>, <span style="color: #3F6E74;">int</span> <span style="color: #3F6E74;">c</span>)
+       {
+         <span style="color: #3F6E74;">int</span> <span style="color: #3F6E74;">k</span> = a &gt; b ? a : b;
+         <span style="color: #AA0D91; font-weight: bold;">return</span> k &gt; c ? k : c;
+       }
+       <span style="color: #3F6E74;">Antidiagonal</span> <span style="color: #26474B;">NDRange</span>(r : 1 .. rows, c : 1 .. cols) {
+         F[r, c] = max3(F[r - 1, c - 1] + S[r, c],
+                        F[r, c - 1] - penalty,
+                        F[r - 1, c] - penalty);
+       } apply(rectangular_blocking(BLOCK_SIZE, BLOCK_SIZE))
+  }));
+}
+</pre>
+</div>
+</div>
+</div>
+</section>
+<div id="postamble" class="status">
       <!-- ============== FOOTER ============== -->
-
       <footer>
         <p>This project is maintained by <a href="https://github.com/dmakarov">dmakarov</a></p>
         <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></small></p>
       </footer>
-
     </div>
-
     <!-- ============== SCRIPTS ============== -->
-
     <script src="javascripts/scale.fix.js"></script>
     <script type="text/javascript">
       var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
@@ -90,6 +94,6 @@
         pageTracker._trackPageview();
       } catch(err) {}
     </script>
-
-  </body>
+</div>
+</body>
 </html>

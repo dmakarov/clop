@@ -16,6 +16,12 @@ p, ul, ol, table, pre, dl {
   margin:0 0 20px;
 }
 
+.title {
+    font-size:0px;
+    color:#fff;
+    margin:0 0 0px;
+}
+
 h1, h2, h3 {
   line-height:1.1;
 }
@@ -45,7 +51,7 @@ a small {
   display:block;
 }
 
-.wrapper {
+.status {
   width:860px;
   margin:0 auto;
 }

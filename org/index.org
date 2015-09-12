@@ -1,0 +1,36 @@
+#+TITLE: CLOP by dmakarov
+#+AUTHOR: Dmitri Makarov
+#+EMAIL: dmakarov@alumni.stanford.edu
+#+OPTIONS: html-style:nil
+
+* Overview
+
+  CLOP is an embedded language for separating an algorithm from the device
+  specific optimizations that improve the performance of the algorithm on the
+  device.  The CLOP implementation uses the D programming language as its host
+  language.  The CLOP syntax is similar to, but not restricted by the syntax of
+  D.  CLOP fragments embedded in the application code allow to refer to the
+  objects defined in the host application.
+
+  In its simplest use case, CLOP is a more convenient way to embed OpenCL
+  kernels in a host application code.
+
+  #+BEGIN_SRC cpp
+    // Needleman-Wunsch algorithm implementation.
+    // Use CLOP to generate OpenCL kernel and API calls.
+    void clop_nw()
+    {
+      mixin(compile(q{
+           int max3(int a, int b, int c)
+           {
+             int k = a > b ? a : b;
+             return k > c ? k : c;
+           }
+           Antidiagonal NDRange(r : 1 .. rows, c : 1 .. cols) {
+             F[r, c] = max3(F[r - 1, c - 1] + S[r, c],
+                            F[r, c - 1] - penalty,
+                            F[r - 1, c] - penalty);
+           } apply(rectangular_blocking(BLOCK_SIZE, BLOCK_SIZE))
+      }));
+    }
+  #+END_SRC
