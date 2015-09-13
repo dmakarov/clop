@@ -92,6 +92,7 @@ class Application {
   cl_kernel kernel_diamonds_indirectS_prefetch_noconflicts;
 
   bool do_animate = false;
+  bool do_multirun = false;
   bool do_validate = false;
   History history;
 
@@ -100,7 +101,11 @@ class Application {
   this(string[] args)
   {
     uint block_size = 16;
-    getopt(args, "animate|a", &do_animate, "block_size|b", &block_size, "validate|v", &do_validate);
+    getopt(args,
+           "animate|a"   , &do_animate,
+           "block_size|b", &block_size,
+           "multirun|m"  , &do_multirun,
+           "validate|v"  , &do_validate);
     if (args.length != 3)
     {
       writefln("Usage: %s [-a -b <block size> -v] <sequence length> <penalty>", args[0]);
@@ -1791,7 +1796,11 @@ class Application {
       status = clReleaseMemObject(dN);                                                                                         assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
       status = clReleaseMemObject(dM);                                                                                         assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
       status = clReleaseMemObject(dS);                                                                                         assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
-      status = clReleaseKernel(kernel_diamonds_indirectS_prefetch_noconflicts);                                                                     assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
+      if (!do_multirun)
+      {
+        status = clReleaseKernel(kernel_diamonds_indirectS_prefetch_noconflicts);
+        assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
+      }
     }
     catch(Exception e)
     {
@@ -1986,6 +1995,12 @@ class Application {
               (rows - 1) * (cols - 1) / (1024 * 1024 * time));
     validate();
 
+    reset();
+    if (do_multirun)
+    {
+      opencl_diamonds_indirectS_prefetch_noconflicts();
+      do_multirun = false;
+    }
     reset();
     timer.reset();
     timer.start();
