@@ -2052,5 +2052,4 @@ int main(string[] args)
 
 // Local Variables:
 // compile-command: "dub run --build=verbose :nw -- -v 32 10"
-// flycheck-dmd-include-path: ("../../.." "/Users/makarovd/.dub/packages/pegged-0.2.1" "/Users/makarovd/.dub/packages/derelict-cl-1.2.3/source" "/Users/makarovd/.dub/packages/derelict-util-1.9.1/source")
 // End:
