@@ -100,6 +100,11 @@ struct Program
   string kernel_parameter_list_code;
   string kernel_set_args_code;
   uint temporary_id;
+  string global_work_size;
+  string local_work_size;
+  string additional_arguments = "";
+  string range_start = "0";
+  string range_finish = "1";
 
   struct translation_result
   {
@@ -174,11 +179,15 @@ struct Program
       debug (UNITTEST_DEBUG) writefln("Node is not a CompoundStatement");
       return t;
     }
+    auto interval_height= format("(%s) - (%s)", range.intervals[0].get_max(), range.intervals[0].get_min());
+    auto interval_width = format("(%s) - (%s)", range.intervals[1].get_max(), range.intervals[1].get_min());
+    range_finish = format("((%s) + (%s)) / (%s) - 1", interval_height, interval_width, block_size);
+    local_work_size = format("(%s)", block_size);
+    global_work_size= format("(%s) * (i < (%s) ? i + 1 : ((%s) + (%s)) - i)",
+                             block_size, interval_height, interval_height, interval_width);
     auto bx = CLOP.decimateTree(CLOP.Declaration(format("int bx = get_group_id(0);")));
     auto bs = CLOP.decimateTree(CLOP.Declaration(format("int bsz = get_local_size(0);")));
-    auto nb = CLOP.decimateTree(CLOP.Declaration(format("int nbs = ((%s) - (%s)) / bsz;",
-                                                        range.intervals[1].get_max(),
-                                                        range.intervals[1].get_min())));
+    auto nb = CLOP.decimateTree(CLOP.Declaration(format("int nbs = (%s) / bsz;", interval_width)));
     auto d0 = CLOP.decimateTree(CLOP.Declaration(format("int %s0 = (diagonal < nbs ? diagonal - bx : nbs - bx - %s) * bsz + %s;",
                                                         range.symbols[0], range.intervals[1].get_min(), range.intervals[1].get_min())));
     auto d1 = CLOP.decimateTree(CLOP.Declaration(format("int %s0 = (diagonal < nbs ? bx : diagonal - nbs + bx + %s) * bsz + %s;",
@@ -599,40 +608,31 @@ struct Program
    +/
   string generate_code_to_invoke_kernel()
   {
+    auto kernel_object = "instance_" ~ suffix ~ ".kernel";
+
     if (pattern is null)
     {
       auto wgsize = lws is null ? "null" : "[" ~ reduce!`a ~ "," ~ b`(lws[0], lws[1 .. $]) ~ "]";
       auto global = "[" ~ range.get_interval_sizes() ~ "]";
       auto offset = "[" ~ range.get_lower_bounds() ~ "]";
-      auto kernel = "instance_" ~ suffix ~ ".kernel";
       auto dimensions = range.get_dimensions();
-      return format(clop.ct.templates.template_plain_invoke_kernel, offset, global, wgsize, kernel, dimensions);
+      return format(clop.ct.templates.template_plain_invoke_kernel, offset, global, wgsize, kernel_object, dimensions);
     }
     if (pattern == "Antidiagonal")
     {
-      if (true) // plain anti-diagonal pattern, no blocking.
+      if (global_work_size == "")
       {
-        auto gsz0 = range.intervals[0].get_max();
-        auto name = "instance_" ~ suffix ~ ".kernel";
-        return format(clop.ct.templates.template_antidiagonal_invoke_kernel,
-                      gsz0, gsz0, gsz0, name, parameters[$ - 1].number, name);
-      }
-      else
-      {
-        auto gsz0 = range.intervals[0].get_max();
-        auto bsz0 = block_size;
-        auto bsz1 = block_size;
-        auto name = "instance_" ~ suffix ~ ".kernel";
-        auto n = 0;
-        ulong[2] argindex;
-        foreach (i, p; parameters)
-          if (p.skip)
-            argindex[n++] = i;
-        return format(clop.ct.templates.template_antidiagonal_rectangular_blocks_invoke_kernel,
-                      gsz0, bsz0, bsz0, bsz0, name, argindex[0], name, argindex[1], name);
+        auto interval_height= format("(%s) - (%s)", range.intervals[0].get_max(), range.intervals[0].get_min());
+        auto interval_width = format("(%s) - (%s)", range.intervals[1].get_max(), range.intervals[1].get_min());
+        global_work_size = format("i < (%s) ? i + 1 : (%s) + (%s) - i", interval_height, interval_height, interval_width);
+        local_work_size = format("runtime.get_max_local_work_size()");
+        range_finish = format("(%s) + (%s) - 1", interval_height, interval_width);
       }
     }
-    return "";
+
+    return format(clop.ct.templates.template_kernel_invocation_loop,
+                  range_start, range_finish, global_work_size, local_work_size,
+                  additional_arguments, kernel_object);
   }
 
   /++
@@ -1227,6 +1227,8 @@ unittest
     auto p3 = Program(be3.symtable, o3, be3.parameters, be3.KBT, be3.range, be3.lws, be3.pattern, "", "", be3.suffix);
     auto k3 = p3.translate(p3.optimize(be3.KBT));
     debug (UNITTEST_DEBUG) writefln("UT:%s k:\n%s", be3.suffix, k3);
+    auto i3 = p3.generate_code_to_invoke_kernel();
+    debug (UNITTEST_DEBUG) writefln("UT:%s code to invoke kernel:\n%s", be3.suffix, i3);
   }
 }
 

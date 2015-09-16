@@ -138,6 +138,11 @@ struct Runtime
     assert(status == CL_SUCCESS, "Can't get max work item sizes " ~ cl_strerror(status));
   }
 
+  size_t get_max_local_work_size()
+  {
+    return work_item_sizes[0];
+  }
+
   bool is_valid_work_group(size_t[] sizes)
   {
     foreach (i, s; sizes)

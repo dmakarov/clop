@@ -108,7 +108,7 @@ class Application {
            "validate|v"  , &do_validate);
     if (args.length != 3)
     {
-      writefln("Usage: %s [-a -b <block size> -v] <sequence length> <penalty>", args[0]);
+      writefln("Usage: %s [-a -b <block size> -d device -m -p platform -v] <sequence length> <penalty>", args[0]);
       throw new Exception("invalid command line arguments");
     }
     do_animate = do_animate && run_once;
@@ -2025,10 +2025,20 @@ class Application {
 
 int main(string[] args)
 {
+  uint platform = uint.max, device = uint.max;
+  auto gor = getopt(args, "device|d", &device, "platform|p", &platform);
+  if (gor.helpWanted)
+  {
+    writefln("Usage: %s [-a -b <block size> -d device -m -p platform -v] <sequence length> <penalty>", args[0]);
+    return 0;
+  }
+  bool selected_device = platform != uint.max && device != uint.max;
   auto platforms = runtime.get_platforms();
   foreach (p; 0 .. platforms.length)
     foreach (d; 0 .. platforms[p])
     {
+      if (selected_device && (p != platform || d != device))
+        continue;
       try
       {
         runtime.init(p, d);
