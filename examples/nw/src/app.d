@@ -1849,6 +1849,16 @@ class Application {
   }
 
   /**
+   * a placeholder to quickly copy-paste the generated code for
+   * debugging.
+   */
+  void clop_tester()
+  {
+    reset();
+    validate();
+  }
+
+  /**
    */
   void run()
   {
@@ -2020,13 +2030,16 @@ class Application {
     reset();
     clop_nw_indirectS();
     validate();
+/+
+    clop_tester();
++/
   }
 }
 
 int main(string[] args)
 {
   uint platform = uint.max, device = uint.max;
-  auto gor = getopt(args, "device|d", &device, "platform|p", &platform);
+  auto gor = getopt(args, std.getopt.config.passThrough, "device|d", &device, "platform|p", &platform);
   if (gor.helpWanted)
   {
     writefln("Usage: %s [-a -b <block size> -d device -m -p platform -v] <sequence length> <penalty>", args[0]);

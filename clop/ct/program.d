@@ -95,7 +95,7 @@ struct Program
   string suffix;           ///
 
   string indent = "            ";
-  string block_size = "8"; ///
+  string block_size = "16"; ///
   bool use_shadow = false; ///
   string kernel_parameter_list_code;
   string kernel_set_args_code;
@@ -105,6 +105,7 @@ struct Program
   string additional_arguments = "";
   string range_start = "0";
   string range_finish = "1";
+  string kernel_object;
 
   struct translation_result
   {
@@ -117,6 +118,7 @@ struct Program
    +/
   ParseTree optimize(ParseTree t)
   {
+    kernel_object = "instance_" ~ suffix ~ ".kernel";
     auto r = t;
     foreach (f; trans)
       r = apply_trans(f, r);
@@ -183,28 +185,29 @@ struct Program
     auto interval_width = format("(%s) - (%s)", range.intervals[1].get_max(), range.intervals[1].get_min());
     range_finish = format("((%s) + (%s)) / (%s) - 1", interval_height, interval_width, block_size);
     local_work_size = format("(%s)", block_size);
-    global_work_size= format("(%s) * (i < (%s) ? i + 1 : ((%s) + (%s)) - i)",
-                             block_size, interval_height, interval_height, interval_width);
+    global_work_size= format("(%s) * (i + 1) < (%s) ? (%s) * (i + 1) : (%s) + (%s) - (%s) * (i + 1)",
+                             block_size, interval_height, block_size, interval_height, interval_width, block_size);
+    additional_arguments = format("clSetKernelArg(%s, %s, cl_int.sizeof, &i);", kernel_object, parameters[$ - 1].number);
+    auto tx = CLOP.decimateTree(CLOP.Statement(format("tx = get_local_id(0);")));
     auto bx = CLOP.decimateTree(CLOP.Declaration(format("int bx = get_group_id(0);")));
     auto bs = CLOP.decimateTree(CLOP.Declaration(format("int bsz = get_local_size(0);")));
-    auto nb = CLOP.decimateTree(CLOP.Declaration(format("int nbs = (%s) / bsz;", interval_width)));
+    auto nb = CLOP.decimateTree(CLOP.Declaration(format("int nbs = (%s) / bsz;", interval_height)));
     auto d0 = CLOP.decimateTree(CLOP.Declaration(format("int %s0 = (diagonal < nbs ? diagonal - bx : nbs - bx - %s) * bsz + %s;",
                                                         range.symbols[0], range.intervals[1].get_min(), range.intervals[1].get_min())));
     auto d1 = CLOP.decimateTree(CLOP.Declaration(format("int %s0 = (diagonal < nbs ? bx : diagonal - nbs + bx + %s) * bsz + %s;",
                                                         range.symbols[1], range.intervals[1].get_min(), range.intervals[1].get_min())));
     auto s = CLOP.decimateTree(CLOP.Statement(format(q{
-            for (int i = 0; i < 2 * (%s) - 1; ++i)
-              if ((i < (%s) && tx <= i) || (i >= (%s) && tx < 2 * (%s) - 1 - i))
+            for (int i = 0; i < 2 * bsz - 1; ++i)
+              if ((i < bsz && tx <= i) || (i >= bsz && tx < 2 * bsz - 1 - i))
               {
-                %s = i < (%s) ? %s0 + i - tx : %s0     + %s     - tx;
-                %s = i < (%s) ? %s0     + tx : %s0 + i - %s + 2 + tx;
+                %s = i < bsz ? %s0 + i - tx : %s0     + bsz - 1 - tx;
+                %s = i < bsz ? %s0     + tx : %s0 + i - bsz + 1 + tx;
                 // fill in the index computations
-              }}, block_size, block_size, block_size, block_size,
-                  range.symbols[0], block_size, range.symbols[0], range.symbols[0], block_size,
-                  range.symbols[1], block_size, range.symbols[1], range.symbols[1], block_size)));
+              }}, range.symbols[0], range.symbols[0], range.symbols[0],
+                  range.symbols[1], range.symbols[1], range.symbols[1])));
     //loop stmt   for stmt    stmt        if stmt     stmt        comp stmt
     s.children[0].children[0].children[4].children[0].children[1].children[0].children[0].children ~= t.children[0].children[$ - 1];
-    t.children[0].children = t.children[0].children[0 .. $ - 2] ~ [bx, bs, nb, d0, d1, s];
+    t.children[0].children = t.children[0].children[0 .. $ - 1] ~ [tx, bx, bs, nb, d0, d1, s];
     return t;
   }
 
@@ -608,7 +611,6 @@ struct Program
    +/
   string generate_code_to_invoke_kernel()
   {
-    auto kernel_object = "instance_" ~ suffix ~ ".kernel";
 
     if (pattern is null)
     {
@@ -624,9 +626,10 @@ struct Program
       {
         auto interval_height= format("(%s) - (%s)", range.intervals[0].get_max(), range.intervals[0].get_min());
         auto interval_width = format("(%s) - (%s)", range.intervals[1].get_max(), range.intervals[1].get_min());
-        global_work_size = format("i < (%s) ? i + 1 : (%s) + (%s) - i", interval_height, interval_height, interval_width);
-        local_work_size = format("runtime.get_max_local_work_size()");
+        global_work_size = format("i < (%s) ? i + 1 : (%s) + (%s) - i - 1", interval_height, interval_height, interval_width);
+        local_work_size = format("min(global_work_size, runtime.get_max_local_work_size())");
         range_finish = format("(%s) + (%s) - 1", interval_height, interval_width);
+        additional_arguments = format("clSetKernelArg(%s, %s, cl_int.sizeof, &i);", kernel_object, parameters[$ - 1].number);
       }
     }
 

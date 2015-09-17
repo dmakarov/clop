@@ -842,13 +842,24 @@ template Backend(TList...)
         parameters ~= [Argument(sync_diagonal, `"int "`, "", "", "", true)];
       }
       decl ~= CLOP.decimateTree(CLOP.Declaration(format("int %s = get_global_id(0);", thread_index)));
-      decl ~= CLOP.decimateTree(CLOP.Declaration(format("int %s = %s + 1;", range.symbols[0], thread_index)));
-      decl ~= CLOP.decimateTree(CLOP.Declaration(format("int %s = %s - %s - 1;", range.symbols[1], sync_diagonal, thread_index)));
-      auto max = range.intervals[0].get_max();
-      decl ~= CLOP.decimateTree(CLOP.Statement(format("if (%s >= %s) {%s = %s - %s + %s + 1; %s = %s - %s - 1;}",
-                                                      sync_diagonal, max,
-                                                      range.symbols[0], sync_diagonal, max, thread_index,
-                                                      range.symbols[1], max, thread_index)));
+      decl ~= CLOP.decimateTree(CLOP.Declaration(format("int %s = %s < ((%s) - (%s)) ? %s - %s + (%s) : ((%s) - 1) - %s;",
+                                                        range.symbols[0], sync_diagonal,
+                                                        range.intervals[0].get_max(),
+                                                        range.intervals[0].get_min(),
+                                                        sync_diagonal, thread_index,
+                                                        range.intervals[0].get_min(),
+                                                        range.intervals[0].get_max(),
+                                                        thread_index)));
+      decl ~= CLOP.decimateTree(CLOP.Declaration(format("int %s = %s < ((%s) - (%s)) ? (%s) + %s : %s - ((%s) - (%s)) + (%s) + %s + 1;",
+                                                        range.symbols[1], sync_diagonal,
+                                                        range.intervals[0].get_max(),
+                                                        range.intervals[0].get_min(),
+                                                        range.intervals[0].get_min(),
+                                                        thread_index, sync_diagonal,
+                                                        range.intervals[0].get_max(),
+                                                        range.intervals[0].get_min(),
+                                                        range.intervals[0].get_min(),
+                                                        thread_index)));
       newt.children[0].children = decl ~ t.dup;
       return newt;
     }
