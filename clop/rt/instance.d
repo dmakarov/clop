@@ -114,6 +114,19 @@ final class Instance
       debug (VERBOSE) writeln("CLOP Instance " ~ name ~ " released all resources.");
     }
   }
+
+  size_t get_work_group_size(size_t global_work_size)
+  {
+    size_t param_value = 1;
+    auto status = clGetKernelWorkGroupInfo(kernel, null, CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE, size_t.sizeof, &param_value, null);
+    assert(status == CL_SUCCESS, cl_strerror(status, "clGetKernelWorkGroupInfo"));
+    if (param_value >= global_work_size)
+      return global_work_size;
+    param_value = global_work_size / param_value;
+    while (param_value < global_work_size && global_work_size % param_value != 0)
+      ++param_value;
+    return global_work_size / param_value;
+  }
 }
 
 unittest
@@ -126,5 +139,4 @@ unittest
 
 // Local Variables:
 // coding: utf-8
-// flycheck-dmd-include-path: ("~/.dub/packages/derelict-cl-1.2.2/source")
 // End:

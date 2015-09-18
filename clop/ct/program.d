@@ -106,6 +106,7 @@ struct Program
   string range_start = "0";
   string range_finish = "1";
   string kernel_object;
+  string instance_object;
 
   struct translation_result
   {
@@ -118,7 +119,8 @@ struct Program
    +/
   ParseTree optimize(ParseTree t)
   {
-    kernel_object = "instance_" ~ suffix ~ ".kernel";
+    instance_object = "instance_" ~ suffix;
+    kernel_object = instance_object ~ ".kernel";
     auto r = t;
     foreach (f; trans)
       r = apply_trans(f, r);
@@ -627,7 +629,7 @@ struct Program
         auto interval_height= format("(%s) - (%s)", range.intervals[0].get_max(), range.intervals[0].get_min());
         auto interval_width = format("(%s) - (%s)", range.intervals[1].get_max(), range.intervals[1].get_min());
         global_work_size = format("i < (%s) ? i + 1 : (%s) + (%s) - i - 1", interval_height, interval_height, interval_width);
-        local_work_size = format("min(global_work_size, runtime.get_max_local_work_size())");
+        local_work_size = format("%s.get_work_group_size(global_work_size)", instance_object);
         range_finish = format("(%s) + (%s) - 1", interval_height, interval_width);
         additional_arguments = format("clSetKernelArg(%s, %s, cl_int.sizeof, &i);", kernel_object, parameters[$ - 1].number);
       }
