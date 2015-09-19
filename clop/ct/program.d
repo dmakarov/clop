@@ -132,10 +132,10 @@ struct Program
     debug (UNITTEST_DEBUG) writefln("Program.apply_trans(%s)", f.name);
     switch (f.name)
     {
-    case "rectangular_blocking":
-      return apply_rectangular_blocking_with_antidiagonal_pattern(t);
-    case "rhomboid_blocking":
-      return apply_rhomboid_blocking(t);
+    case "rectangular_tiling":
+      return apply_rectangular_tiling_with_antidiagonal_pattern(t);
+    case "rhomboid_tiling":
+      return apply_rhomboid_tiling_with_antidiagonal_pattern(t);
     case "prefetching":
       return apply_prefetching(t);
     default:
@@ -155,15 +155,15 @@ struct Program
   }
 
   /**
-   * code generated for rectangular blocking depends on the
+   * code generated for rectangular tiling depends on the
    * synchronization pattern.
    * There is nesting of transformations: the anti-diagonal pattern
    * should be applied to a block within a kernel invocation, and also
    * on the outside level to blocks.  Block is like a macro-element.
    */
-  auto apply_rectangular_blocking(ParseTree t)
+  auto apply_rectangular_tiling(ParseTree t)
   {
-    debug (UNITTEST_DEBUG) writefln("APPLY_RECTANGULAR_BLOCKING started");
+    debug (UNITTEST_DEBUG) writefln("APPLY_RECTANGULAR_TILING started");
     if (t.name != "CLOP.CompoundStatement")
     {
       debug (UNITTEST_DEBUG) writefln("Node is not a CompoundStatement");
@@ -172,12 +172,53 @@ struct Program
     auto s = CLOP.decimateTree(CLOP.Statement(format("for (int i = 0; i < %s; ++i) {}", block_size)));
     s.children[0].children[0].children[4].children[0] = t.children[0].children[$ - 1];
     t.children[0].children[$ - 1] = s;
-    debug (UNITTEST_DEBUG) writefln("APPLY_RECTANGULAR_BLOCKING is done");
+    debug (UNITTEST_DEBUG) writefln("APPLY_RECTANGULAR_TILING is done");
     return t;
   }
 
-  auto apply_rectangular_blocking_with_antidiagonal_pattern(ParseTree t)
+  auto apply_rectangular_tiling_with_antidiagonal_pattern(ParseTree t)
   {
+    if (t.name != "CLOP.CompoundStatement")
+    {
+      debug (UNITTEST_DEBUG) writefln("Node is not a CompoundStatement");
+      return t;
+    }
+    auto interval_height= format("(%s) - (%s)", range.intervals[0].get_max(), range.intervals[0].get_min());
+    auto interval_width = format("(%s) - (%s)", range.intervals[1].get_max(), range.intervals[1].get_min());
+    range_finish = format("((%s) + (%s)) / (%s) - 1", interval_height, interval_width, block_size);
+    local_work_size = format("(%s)", block_size);
+    global_work_size= format("(%s) * (i + 1) < (%s) ? (%s) * (i + 1) : (%s) + (%s) - (%s) * (i + 1)",
+                             block_size, interval_height, block_size, interval_height, interval_width, block_size);
+    additional_arguments = format("clSetKernelArg(%s, %s, cl_int.sizeof, &i);", kernel_object, parameters[$ - 1].number);
+    auto tx = CLOP.decimateTree(CLOP.Statement("tx = get_local_id(0);"));
+    auto bx = CLOP.decimateTree(CLOP.Declaration(format("int bx = get_group_id(0);")));
+    auto bs = CLOP.decimateTree(CLOP.Declaration(format("int bsz = get_local_size(0);")));
+    auto nb = CLOP.decimateTree(CLOP.Declaration(format("int nbs = (%s) / bsz;", interval_height)));
+    auto d0 = CLOP.decimateTree(CLOP.Declaration(format("int %s0 = (diagonal < nbs ? diagonal - bx : nbs - bx - %s) * bsz + %s;",
+                                                        range.symbols[0], range.intervals[1].get_min(), range.intervals[1].get_min())));
+    auto d1 = CLOP.decimateTree(CLOP.Declaration(format("int %s0 = (diagonal < nbs ? bx : diagonal - nbs + bx + %s) * bsz + %s;",
+                                                        range.symbols[1], range.intervals[1].get_min(), range.intervals[1].get_min())));
+    auto s = CLOP.decimateTree(CLOP.Statement(format(q{
+            for (int i = 0; i < 2 * bsz - 1; ++i)
+            {
+              if ((i < bsz && tx <= i) || (i >= bsz && tx < 2 * bsz - 1 - i))
+              {
+                %s = i < bsz ? %s0 + i - tx : %s0     + bsz - 1 - tx;
+                %s = i < bsz ? %s0     + tx : %s0 + i - bsz + 1 + tx;
+                // fill in the index computations
+              }
+              barrier(CLK_LOCAL_MEM_FENCE);
+            }}, range.symbols[0], range.symbols[0], range.symbols[0],
+                  range.symbols[1], range.symbols[1], range.symbols[1])));
+    //loop stmt   for stmt    stmt        compound    stmt list   stmt        if stmt     stmt        comp stmt   stmt list
+    s.children[0].children[0].children[4].children[0].children[0].children[0].children[0].children[1].children[0].children[0].children ~= t.children[0].children[$ - 1];
+    t.children[0].children = t.children[0].children[0 .. $ - 1] ~ [tx, bx, bs, nb, d0, d1, s];
+    return t;
+  }
+
+  auto apply_rhomboid_tiling_with_antidiagonal_pattern(ParseTree t)
+  {
+    debug (UNITTEST_DEBUG) writefln("APPLY_RHOMBOID_TILING");
     if (t.name != "CLOP.CompoundStatement")
     {
       debug (UNITTEST_DEBUG) writefln("Node is not a CompoundStatement");
@@ -210,12 +251,6 @@ struct Program
     //loop stmt   for stmt    stmt        if stmt     stmt        comp stmt
     s.children[0].children[0].children[4].children[0].children[1].children[0].children[0].children ~= t.children[0].children[$ - 1];
     t.children[0].children = t.children[0].children[0 .. $ - 1] ~ [tx, bx, bs, nb, d0, d1, s];
-    return t;
-  }
-
-  auto apply_rhomboid_blocking(ParseTree t)
-  {
-    debug (UNITTEST_DEBUG) writefln("APPLY_RHOMBOID_BLOCKING");
     return t;
   }
 
@@ -1210,16 +1245,13 @@ unittest
   // test 3
   {
     auto t3 = clop.ct.parser.CLOP(q{
-        int max3(int a, int b, int c)
-        {
+        int max3(int a, int b, int c) {
           int k = a > b ? a : b;
           return k > c ? k : c;
         }
         Antidiagonal NDRange(r : 1 .. rows, c : 1 .. cols) {
-          F[r, c] = max3(F[r - 1, c - 1] + BLOSUM62[M[r] * CHARS + N[c]],
-                         F[r, c - 1] - penalty,
-                         F[r - 1, c] - penalty);
-        } apply(rectangular_blocking(BLOCK_SIZE, BLOCK_SIZE))
+          F[r, c] = max3(F[r - 1, c - 1] + BLOSUM62[M[r] * CHARS + N[c]], F[r, c - 1] - penalty, F[r - 1, c] - penalty);
+        } apply(rectangular_tiling(BLOCK_SIZE, BLOCK_SIZE))
       });
     alias I = clop.rt.ndarray.NDArray!int;
     alias T3 = std.typetuple.TypeTuple!(size_t, size_t, I, I, I, I, int);
@@ -1228,7 +1260,7 @@ unittest
     be3.update_parameters();
     be3.lower(t3);
     be3.compute_intervals();
-    auto o3 = [Transformation("rectangular_blocking", ["BLOCK_SIZE", "BLOCK_SIZE"])];
+    auto o3 = [Transformation("rectangular_tiling", ["BLOCK_SIZE", "BLOCK_SIZE"])];
     auto p3 = Program(be3.symtable, o3, be3.parameters, be3.KBT, be3.range, be3.lws, be3.pattern, "", "", be3.suffix);
     auto k3 = p3.translate(p3.optimize(be3.KBT));
     debug (UNITTEST_DEBUG) writefln("UT:%s k:\n%s", be3.suffix, k3);

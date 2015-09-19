@@ -1826,7 +1826,7 @@ class Application {
         F[r, c] = max3(F[r - 1, c - 1] + S[r, c],
                        F[r, c - 1] - penalty,
                        F[r - 1, c] - penalty);
-      } apply(rectangular_blocking(BLOCK_SIZE, BLOCK_SIZE))
+      } apply(rectangular_tiling(BLOCK_SIZE, BLOCK_SIZE))
     }));
   }
 
@@ -1844,7 +1844,7 @@ class Application {
         F[r, c] = max3(F[r - 1, c - 1] + BLOSUM62[M[r] * CHARS + N[c]],
                        F[r, c - 1] - penalty,
                        F[r - 1, c] - penalty);
-      } apply(rhomboid_blocking(BLOCK_SIZE, BLOCK_SIZE), prefetching())
+      } apply(rhomboid_tiling(BLOCK_SIZE, BLOCK_SIZE), prefetching())
     }));
   }
 
