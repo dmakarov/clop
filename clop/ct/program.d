@@ -511,16 +511,16 @@ struct Program
     return "";
   }
 
-          // if ( "CLOP.ArrayIndex" == t.children[1].name &&
-          //      symtable.get( s, Symbol() ) != Symbol() &&
-          //      symtable[s].shadow != null )
-          // {
-          //   use_shadow = true;
-          //   s = symtable[s].shadow ~
-          //       patch_index_expression_for_shared_memory( s, t.children[1] );
-          //   use_shadow = false;
-          // }
-          // else
+  // if ( "CLOP.ArrayIndex" == t.children[1].name &&
+  //      symtable.get( s, Symbol() ) != Symbol() &&
+  //      symtable[s].shadow != null )
+  // {
+  //   use_shadow = true;
+  //   s = symtable[s].shadow ~
+  //       patch_index_expression_for_shared_memory( s, t.children[1] );
+  //   use_shadow = false;
+  // }
+  // else
   auto patch_index_expression_for_shared_memory (string s, ParseTree t)
   {
     auto r = Box( [], [] );

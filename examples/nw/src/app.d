@@ -82,14 +82,14 @@ class Application {
 
   cl_kernel kernel_noblocks;
   cl_kernel kernel_noblocks_indirectS;
-  cl_kernel kernel_rectangles;
-  cl_kernel kernel_rectangles_indirectS;
-  cl_kernel kernel_diamonds;
-  cl_kernel kernel_diamonds_noconflicts;
-  cl_kernel kernel_diamonds_indirectS;
-  cl_kernel kernel_diamonds_indirectS_noconflicts;
-  cl_kernel kernel_diamonds_indirectS_prefetch;
-  cl_kernel kernel_diamonds_indirectS_prefetch_noconflicts;
+  cl_kernel kernel_rectangle;
+  cl_kernel kernel_rectangle_indirectS;
+  cl_kernel kernel_rhomboid;
+  cl_kernel kernel_rhomboid_noconflicts;
+  cl_kernel kernel_rhomboid_indirectS;
+  cl_kernel kernel_rhomboid_indirectS_noconflicts;
+  cl_kernel kernel_rhomboid_indirectS_prefetch;
+  cl_kernel kernel_rhomboid_indirectS_prefetch_noconflicts;
 
   bool do_animate = false;
   bool do_multirun = false;
@@ -197,7 +197,7 @@ class Application {
       /**
        */
       __kernel void
-      nw_rectangles(__global const int* S,
+      nw_rectangle(__global const int* S,
                     __global       int* F,
                                    int  cols,
                                    int  penalty,
@@ -235,12 +235,12 @@ class Application {
         // 3.
         for (int k = 0; k < BLOCK_SIZE; ++k)
           F[I(r0 + k, c0 + tx)] = t[(k + 1) * (BLOCK_SIZE + 1) + tx + 1];
-      } /* nw_rectangles */
+      } /* nw_rectangle */
 
       /**
        */
       __kernel void
-      nw_rectangles_indirectS(__global const int* S,
+      nw_rectangle_indirectS(__global const int* S,
                               __global const int* M,
                               __global const int* N,
                               __global       int* F,
@@ -288,12 +288,12 @@ class Application {
         // 3.
         for (int k = 0; k < BLOCK_SIZE; ++k)
           F[I(r0 + k, c0 + tx)] = t[(k + 1) * (BLOCK_SIZE + 1) + tx + 1];
-      } /* nw_rectangles_indirectS */
+      } /* nw_rectangle_indirectS */
 
       /**
        */
       __kernel void
-      nw_diamonds(__global const int* S,
+      nw_rhomboid(__global const int* S,
                   __global       int* F,
                                  int  cols,
                                  int  penalty,
@@ -357,12 +357,12 @@ class Application {
             barrier(CLK_GLOBAL_MEM_FENCE);
             }
 
-      } /* nw_diamonds */
+      } /* nw_rhomboid */
 
       /**
        */
       __kernel void
-      nw_diamonds_noconflicts(__global const int* S,
+      nw_rhomboid_noconflicts(__global const int* S,
                               __global       int* F,
                                              int  cols,
                                              int  penalty,
@@ -427,12 +427,12 @@ class Application {
             barrier(CLK_GLOBAL_MEM_FENCE);
             }
 
-      } /* nw_diamonds */
+      } /* nw_rhomboid */
 
       /**
        */
       __kernel void
-      nw_diamonds_indirectS(__global const int* S      , //
+      nw_rhomboid_indirectS(__global const int* S      , //
                             __global const int* M      , //
                             __global const int* N      , //
                             __global       int* F      , //
@@ -501,13 +501,13 @@ class Application {
                                       F[I(rr + tx    , x - 1)] - penalty);
             barrier(CLK_GLOBAL_MEM_FENCE);
           }
-      } /* nw_diamonds_indirectS */
+      } /* nw_rhomboid_indirectS */
 
 
       /**
        */
       __kernel void
-      nw_diamonds_indirectS_noconflicts(__global const int* S      , //
+      nw_rhomboid_indirectS_noconflicts(__global const int* S      , //
                                         __global const int* M      , //
                                         __global const int* N      , //
                                         __global       int* F      , //
@@ -576,12 +576,12 @@ class Application {
                                       F[I(rr + tx    , x - 1)] - penalty);
             barrier(CLK_GLOBAL_MEM_FENCE);
           }
-      } /* nw_diamonds_indirectS_noconflicts */
+      } /* nw_rhomboid_indirectS_noconflicts */
 
       /**
        */
       __kernel void
-      nw_diamonds_indirectS_prefetch(__global const int* S      , //
+      nw_rhomboid_indirectS_prefetch(__global const int* S      , //
                                      __global const int* M      , //
                                      __global const int* N      , //
                                      __global       int* F      , //
@@ -654,12 +654,12 @@ class Application {
                                       F[I(rr + tx    , x - 1)] - penalty);
             barrier(CLK_GLOBAL_MEM_FENCE);
           }
-      } /* nw_diamonds_indirectS_prefetch */
+      } /* nw_rhomboid_indirectS_prefetch */
 
       /**
        */
       __kernel void
-      nw_diamonds_indirectS_prefetch_noconflicts(__global const int* S      , //
+      nw_rhomboid_indirectS_prefetch_noconflicts(__global const int* S      , //
                                                  __global const int* M      , //
                                                  __global const int* N      , //
                                                  __global       int* F      , //
@@ -732,12 +732,13 @@ class Application {
                                       F[I(rr + tx    , x - 1)] - penalty);
             barrier(CLK_GLOBAL_MEM_FENCE);
           }
-      } /* nw_diamonds_indirectS_prefetch_noconflicts */
+      } /* nw_rhomboid_indirectS_prefetch_noconflicts */
     }.dup;
     cl_int status;
     size_t size = code.length;
     char*[] strs = [code.ptr];
-    auto program = clCreateProgramWithSource(runtime.context, 1, strs.ptr, &size, &status);                                    assert(status == CL_SUCCESS, "this" ~ cl_strerror(status));
+    auto program = clCreateProgramWithSource(runtime.context, 1, strs.ptr, &size, &status);
+    assert(status == CL_SUCCESS, "this" ~ cl_strerror(status));
     auto clopts = format("-DBLOCK_SIZE=%s -DCHARS=%s", BLOCK_SIZE, CHARS);
     status = clBuildProgram(program, 1, &runtime.device, clopts.ptr, null, null);
     if (status != CL_SUCCESS)
@@ -746,18 +747,30 @@ class Application {
       size_t log_size;
       clGetProgramBuildInfo(program, runtime.device, CL_PROGRAM_BUILD_LOG, log.length, log.ptr, &log_size);
       writeln("CL_PROGRAM_BUILD_LOG:\n", log[0 .. log_size - 1], "\nEOL");
-    }                                                                                                                          assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
-    kernel_noblocks             = clCreateKernel(program, "nw_noblocks"             , &status);                                assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
-    kernel_rectangles           = clCreateKernel(program, "nw_rectangles"           , &status);                                assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
-    kernel_diamonds             = clCreateKernel(program, "nw_diamonds"             , &status);                                assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
-    kernel_diamonds_noconflicts = clCreateKernel(program, "nw_diamonds_noconflicts" , &status);                                assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
-    kernel_noblocks_indirectS   = clCreateKernel(program, "nw_noblocks_indirectS"   , &status);                                assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
-    kernel_rectangles_indirectS = clCreateKernel(program, "nw_rectangles_indirectS" , &status);                                assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
-    kernel_diamonds_indirectS   = clCreateKernel(program, "nw_diamonds_indirectS"   , &status);                                assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
-    kernel_diamonds_indirectS_noconflicts = clCreateKernel(program, "nw_diamonds_indirectS_noconflicts"   , &status);          assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
-    kernel_diamonds_indirectS_prefetch = clCreateKernel(program, "nw_diamonds_indirectS_prefetch", &status);                   assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
-    kernel_diamonds_indirectS_prefetch_noconflicts = clCreateKernel(program, "nw_diamonds_indirectS_prefetch_noconflicts", &status); assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
-    status = clReleaseProgram(program);                                                                                        assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
+    }
+    assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
+    kernel_noblocks             = clCreateKernel(program, "nw_noblocks"             , &status);
+    assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
+    kernel_rectangle            = clCreateKernel(program, "nw_rectangle"            , &status);
+    assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
+    kernel_rhomboid             = clCreateKernel(program, "nw_rhomboid"             , &status);
+    assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
+    kernel_rhomboid_noconflicts = clCreateKernel(program, "nw_rhomboid_noconflicts" , &status);
+    assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
+    kernel_noblocks_indirectS   = clCreateKernel(program, "nw_noblocks_indirectS"   , &status);
+    assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
+    kernel_rectangle_indirectS  = clCreateKernel(program, "nw_rectangle_indirectS"  , &status);
+    assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
+    kernel_rhomboid_indirectS   = clCreateKernel(program, "nw_rhomboid_indirectS"   , &status);
+    assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
+    kernel_rhomboid_indirectS_noconflicts = clCreateKernel(program, "nw_rhomboid_indirectS_noconflicts"   , &status);
+    assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
+    kernel_rhomboid_indirectS_prefetch = clCreateKernel(program, "nw_rhomboid_indirectS_prefetch", &status);
+    assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
+    kernel_rhomboid_indirectS_prefetch_noconflicts = clCreateKernel(program, "nw_rhomboid_indirectS_prefetch_noconflicts", &status);
+    assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
+    status = clReleaseProgram(program);
+    assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
     if (do_animate)
     {
       history = new History("a.tex", rows);
@@ -832,11 +845,11 @@ class Application {
   }
 
   /**
-   * rectangles: implements sequential computation of the alignment
+   * rectangle: implements sequential computation of the alignment
    * scores matrix for a single rectangular block of fixed size
    * #BLOCK_SIZE.
    */
-  void rectangles()
+  void rectangle()
   {
     auto ts = 0;
     auto max_blocks = (cols - 1) / BLOCK_SIZE;
@@ -943,7 +956,7 @@ class Application {
 
   /**
    */
-  void diamonds()
+  void rhomboid()
   {
     auto ts = 0;
     auto max_groups = (cols - 1) / BLOCK_SIZE;
@@ -974,38 +987,53 @@ class Application {
       cl_int status;
       cl_event event;
       cl_mem_flags flags = CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR;
-      cl_mem dS = clCreateBuffer(runtime.context, flags, cl_int.sizeof * S.length, S.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
+      cl_mem dS = clCreateBuffer(runtime.context, flags, cl_int.sizeof * S.length, S.ptr, &status);
+      assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
       flags = CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR;
-      cl_mem dF = clCreateBuffer(runtime.context, flags, cl_int.sizeof * F.length, F.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_noblocks, 0, cl_mem.sizeof, &dS     );                                                    assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_noblocks, 1, cl_mem.sizeof, &dF     );                                                    assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_noblocks, 2, cl_int.sizeof, &cols   );                                                    assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_noblocks, 3, cl_int.sizeof, &penalty);                                                    assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
+      cl_mem dF = clCreateBuffer(runtime.context, flags, cl_int.sizeof * F.length, F.ptr, &status);
+      assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_noblocks, 0, cl_mem.sizeof, &dS     );
+      assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_noblocks, 1, cl_mem.sizeof, &dF     );
+      assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_noblocks, 2, cl_int.sizeof, &cols   );
+      assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_noblocks, 3, cl_int.sizeof, &penalty);
+      assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
       foreach (i; 2 .. 2 * cols - 1)
       {
         size_t global = (i < cols) ? i - 1 : 2 * cols - i - 1;
-        status = clSetKernelArg(kernel_noblocks, 4, cl_int.sizeof, &i);                                                        assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
-        status = clEnqueueNDRangeKernel(runtime.queue, kernel_noblocks, 1, null, &global, null, 0, null, &event);              assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
-        status = clWaitForEvents(1, &event);                                                                                   assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_noblocks, 4, cl_int.sizeof, &i);
+        assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
+        status = clEnqueueNDRangeKernel(runtime.queue, kernel_noblocks, 1, null, &global, null, 0, null, &event);
+        assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
+        status = clWaitForEvents(1, &event);
+        assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
 
         cl_ulong start_time;
         status = clGetEventProfilingInfo (event                     , // cl_event          event
                                           CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
                                           cl_ulong.sizeof           , // size_t            param_value_size
                                           &start_time               , // void*             param_value
-                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
+                                          null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
         cl_ulong end_time;
         status = clGetEventProfilingInfo (event                     , // cl_event          event
                                           CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
                                           cl_ulong.sizeof           , // size_t            param_value_size
                                           &end_time                 , // void*             param_value
-                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
+                                          null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
         result += (end_time - start_time) / 1E9;
       }
-      status = clEnqueueReadBuffer(runtime.queue, dF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr, 0, null, null);             assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
-      status = clReleaseMemObject(dS);                                                                                         assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
-      status = clReleaseMemObject(dF);                                                                                         assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
-      status = clReleaseKernel(kernel_noblocks);                                                                               assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
+      status = clEnqueueReadBuffer(runtime.queue, dF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr, 0, null, null);
+      assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
+      status = clReleaseMemObject(dS);
+      assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
+      status = clReleaseMemObject(dF);
+      assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
+      status = clReleaseKernel(kernel_noblocks);
+      assert(status == CL_SUCCESS, "opencl_noblocks" ~ cl_strerror(status));
     }
     catch (Exception e)
     {
@@ -1025,44 +1053,65 @@ class Application {
       cl_int status;
       cl_event event;
       cl_mem_flags flags = CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR;
-      cl_mem dS = clCreateBuffer(runtime.context, flags, cl_int.sizeof * BLOSUM62.length, BLOSUM62.ptr, &status);              assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
-      cl_mem dM = clCreateBuffer(runtime.context, flags, cl_int.sizeof * M.length, M.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
-      cl_mem dN = clCreateBuffer(runtime.context, flags, cl_int.sizeof * N.length, N.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
+      cl_mem dS = clCreateBuffer(runtime.context, flags, cl_int.sizeof * BLOSUM62.length, BLOSUM62.ptr, &status);
+      assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
+      cl_mem dM = clCreateBuffer(runtime.context, flags, cl_int.sizeof * M.length, M.ptr, &status);
+      assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
+      cl_mem dN = clCreateBuffer(runtime.context, flags, cl_int.sizeof * N.length, N.ptr, &status);
+      assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
       flags = CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR;
-      cl_mem dF = clCreateBuffer(runtime.context, flags, cl_int.sizeof * F.length, F.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_noblocks_indirectS, 0, cl_mem.sizeof, &dS     );                                          assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_noblocks_indirectS, 1, cl_mem.sizeof, &dM     );                                          assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_noblocks_indirectS, 2, cl_mem.sizeof, &dN     );                                          assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_noblocks_indirectS, 3, cl_mem.sizeof, &dF     );                                          assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_noblocks_indirectS, 4, cl_int.sizeof, &cols   );                                          assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_noblocks_indirectS, 5, cl_int.sizeof, &penalty);                                          assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
+      cl_mem dF = clCreateBuffer(runtime.context, flags, cl_int.sizeof * F.length, F.ptr, &status);
+      assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_noblocks_indirectS, 0, cl_mem.sizeof, &dS     );
+      assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_noblocks_indirectS, 1, cl_mem.sizeof, &dM     );
+      assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_noblocks_indirectS, 2, cl_mem.sizeof, &dN     );
+      assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_noblocks_indirectS, 3, cl_mem.sizeof, &dF     );
+      assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_noblocks_indirectS, 4, cl_int.sizeof, &cols   );
+      assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_noblocks_indirectS, 5, cl_int.sizeof, &penalty);
+      assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
       foreach (i; 2 .. 2 * cols - 1)
       {
         size_t global = (i < cols) ? i - 1 : 2 * cols - i - 1;
-        status = clSetKernelArg(kernel_noblocks_indirectS, 6, cl_int.sizeof, &i);                                              assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
-        status = clEnqueueNDRangeKernel(runtime.queue, kernel_noblocks_indirectS, 1, null, &global, null, 0, null, &event);    assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
-        status = clWaitForEvents(1, &event);                                                                                   assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_noblocks_indirectS, 6, cl_int.sizeof, &i);
+        assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
+        status = clEnqueueNDRangeKernel(runtime.queue, kernel_noblocks_indirectS, 1, null, &global, null, 0, null, &event);
+        assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
+        status = clWaitForEvents(1, &event);
+        assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
 
         cl_ulong start_time;
         status = clGetEventProfilingInfo (event                     , // cl_event          event
                                           CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
                                           cl_ulong.sizeof           , // size_t            param_value_size
                                           &start_time               , // void*             param_value
-                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
+                                          null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
         cl_ulong end_time;
         status = clGetEventProfilingInfo (event                     , // cl_event          event
                                           CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
                                           cl_ulong.sizeof           , // size_t            param_value_size
                                           &end_time                 , // void*             param_value
-                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
+                                          null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
         result += (end_time - start_time) / 1E9;
       }
-      status = clEnqueueReadBuffer(runtime.queue, dF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr, 0, null, null);             assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
-      status = clReleaseMemObject(dF);                                                                                         assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
-      status = clReleaseMemObject(dN);                                                                                         assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
-      status = clReleaseMemObject(dM);                                                                                         assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
-      status = clReleaseMemObject(dS);                                                                                         assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
-      status = clReleaseKernel(kernel_noblocks_indirectS);                                                                     assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
+      status = clEnqueueReadBuffer(runtime.queue, dF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr, 0, null, null);
+      assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
+      status = clReleaseMemObject(dF);
+      assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
+      status = clReleaseMemObject(dN);
+      assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
+      status = clReleaseMemObject(dM);
+      assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
+      status = clReleaseMemObject(dS);
+      assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
+      status = clReleaseKernel(kernel_noblocks_indirectS);
+      assert(status == CL_SUCCESS, "opencl_noblocks_indirectS" ~ cl_strerror(status));
     }
     catch(Exception e)
     {
@@ -1074,7 +1123,7 @@ class Application {
 
   /**
    */
-  double opencl_rectangles()
+  double opencl_rectangle()
   {
     double result = 0.0;
     try
@@ -1082,13 +1131,19 @@ class Application {
       cl_int status;
       cl_event event;
       cl_mem_flags flags = CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR;
-      cl_mem dS = clCreateBuffer(runtime.context, flags, cl_int.sizeof * S.length, S.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_rectangles" ~ cl_strerror(status));
+      cl_mem dS = clCreateBuffer(runtime.context, flags, cl_int.sizeof * S.length, S.ptr, &status);
+      assert(status == CL_SUCCESS, "opencl_rectangle" ~ cl_strerror(status));
       flags = CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR;
-      cl_mem dF = clCreateBuffer(runtime.context, flags, cl_int.sizeof * F.length, F.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_rectangles" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_rectangles, 0, cl_mem.sizeof, &dS     );                                                  assert(status == CL_SUCCESS, "opencl_rectangles" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_rectangles, 1, cl_mem.sizeof, &dF     );                                                  assert(status == CL_SUCCESS, "opencl_rectangles" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_rectangles, 2, cl_int.sizeof, &cols   );                                                  assert(status == CL_SUCCESS, "opencl_rectangles" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_rectangles, 3, cl_int.sizeof, &penalty);                                                  assert(status == CL_SUCCESS, "opencl_rectangles" ~ cl_strerror(status));
+      cl_mem dF = clCreateBuffer(runtime.context, flags, cl_int.sizeof * F.length, F.ptr, &status);
+      assert(status == CL_SUCCESS, "opencl_rectangle" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rectangle, 0, cl_mem.sizeof, &dS     );
+      assert(status == CL_SUCCESS, "opencl_rectangle" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rectangle, 1, cl_mem.sizeof, &dF     );
+      assert(status == CL_SUCCESS, "opencl_rectangle" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rectangle, 2, cl_int.sizeof, &cols   );
+      assert(status == CL_SUCCESS, "opencl_rectangle" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rectangle, 3, cl_int.sizeof, &penalty);
+      assert(status == CL_SUCCESS, "opencl_rectangle" ~ cl_strerror(status));
       auto max_blocks = (cols - 1) / BLOCK_SIZE;
       auto cur_blocks = 1;
       auto inc_blocks = 1;
@@ -1096,30 +1151,39 @@ class Application {
       {
         size_t wgroup = BLOCK_SIZE;
         size_t global = BLOCK_SIZE * cur_blocks;
-        status = clSetKernelArg(kernel_rectangles, 4, cl_int.sizeof, &i);                                                      assert(status == CL_SUCCESS, "opencl_rectangles" ~ cl_strerror(status));
-        status = clEnqueueNDRangeKernel(runtime.queue, kernel_rectangles, 1, null, &global, &wgroup, 0, null, &event);         assert(status == CL_SUCCESS, "opencl_rectangles" ~ cl_strerror(status));
-        status = clWaitForEvents(1, &event);                                                                                   assert(status == CL_SUCCESS, "opencl_rectangles" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_rectangle, 4, cl_int.sizeof, &i);
+        assert(status == CL_SUCCESS, "opencl_rectangle" ~ cl_strerror(status));
+        status = clEnqueueNDRangeKernel(runtime.queue, kernel_rectangle, 1, null, &global, &wgroup, 0, null, &event);
+        assert(status == CL_SUCCESS, "opencl_rectangle" ~ cl_strerror(status));
+        status = clWaitForEvents(1, &event);
+        assert(status == CL_SUCCESS, "opencl_rectangle" ~ cl_strerror(status));
 
         cl_ulong start_time;
         status = clGetEventProfilingInfo(event                     , // cl_event          event
                                          CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
                                          cl_ulong.sizeof           , // size_t            param_value_size
                                          &start_time               , // void*             param_value
-                                         null                     ); /* size_t*           param_value_size_ret */              assert(status == CL_SUCCESS, "opencl_rectangles" ~ cl_strerror(status));
+                                         null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_rectangle" ~ cl_strerror(status));
         cl_ulong end_time;
         status = clGetEventProfilingInfo(event                     , // cl_event          event
                                          CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
                                          cl_ulong.sizeof           , // size_t            param_value_size
                                          &end_time                 , // void*             param_value
-                                         null                     ); /* size_t*           param_value_size_ret */              assert(status == CL_SUCCESS, "opencl_rectangles" ~ cl_strerror(status));
+                                         null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_rectangle" ~ cl_strerror(status));
         result += (end_time - start_time) / 1E9;
         if (i == max_blocks - 1) inc_blocks = -1;
         cur_blocks += inc_blocks;
       }
-      status = clEnqueueReadBuffer(runtime.queue, dF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr, 0, null, null);             assert(status == CL_SUCCESS, "opencl_rectangles" ~ cl_strerror(status));
-      status = clReleaseMemObject(dS);                                                                                         assert(status == CL_SUCCESS, "opencl_rectangles" ~ cl_strerror(status));
-      status = clReleaseMemObject(dF);                                                                                         assert(status == CL_SUCCESS, "opencl_rectangles" ~ cl_strerror(status));
-      status = clReleaseKernel(kernel_rectangles);                                                                             assert(status == CL_SUCCESS, "opencl_rectangles" ~ cl_strerror(status));
+      status = clEnqueueReadBuffer(runtime.queue, dF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr, 0, null, null);
+      assert(status == CL_SUCCESS, "opencl_rectangle" ~ cl_strerror(status));
+      status = clReleaseMemObject(dS);
+      assert(status == CL_SUCCESS, "opencl_rectangle" ~ cl_strerror(status));
+      status = clReleaseMemObject(dF);
+      assert(status == CL_SUCCESS, "opencl_rectangle" ~ cl_strerror(status));
+      status = clReleaseKernel(kernel_rectangle);
+      assert(status == CL_SUCCESS, "opencl_rectangle" ~ cl_strerror(status));
     }
     catch(Exception e)
     {
@@ -1131,7 +1195,7 @@ class Application {
 
   /**
    */
-  double opencl_rectangles_indirectS()
+  double opencl_rectangle_indirectS()
   {
     double result = 0.0;
     try
@@ -1139,17 +1203,27 @@ class Application {
       cl_int status;
       cl_event event;
       cl_mem_flags flags = CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR;
-      cl_mem dS = clCreateBuffer(runtime.context, flags, cl_int.sizeof * BLOSUM62.length, BLOSUM62.ptr, &status);              assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
-      cl_mem dM = clCreateBuffer(runtime.context, flags, cl_int.sizeof * M.length, M.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
-      cl_mem dN = clCreateBuffer(runtime.context, flags, cl_int.sizeof * N.length, N.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
+      cl_mem dS = clCreateBuffer(runtime.context, flags, cl_int.sizeof * BLOSUM62.length, BLOSUM62.ptr, &status);
+      assert(status == CL_SUCCESS, "opencl_rectangle_indirectS" ~ cl_strerror(status));
+      cl_mem dM = clCreateBuffer(runtime.context, flags, cl_int.sizeof * M.length, M.ptr, &status);
+      assert(status == CL_SUCCESS, "opencl_rectangle_indirectS" ~ cl_strerror(status));
+      cl_mem dN = clCreateBuffer(runtime.context, flags, cl_int.sizeof * N.length, N.ptr, &status);
+      assert(status == CL_SUCCESS, "opencl_rectangle_indirectS" ~ cl_strerror(status));
       flags = CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR;
-      cl_mem dF = clCreateBuffer(runtime.context, flags, cl_int.sizeof * F.length, F.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_rectangles_indirectS, 0, cl_mem.sizeof, &dS     );                                        assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_rectangles_indirectS, 1, cl_mem.sizeof, &dM     );                                        assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_rectangles_indirectS, 2, cl_mem.sizeof, &dN     );                                        assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_rectangles_indirectS, 3, cl_mem.sizeof, &dF     );                                        assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_rectangles_indirectS, 4, cl_int.sizeof, &cols   );                                        assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_rectangles_indirectS, 5, cl_int.sizeof, &penalty);                                        assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
+      cl_mem dF = clCreateBuffer(runtime.context, flags, cl_int.sizeof * F.length, F.ptr, &status);
+      assert(status == CL_SUCCESS, "opencl_rectangle_indirectS" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rectangle_indirectS, 0, cl_mem.sizeof, &dS     );
+      assert(status == CL_SUCCESS, "opencl_rectangle_indirectS" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rectangle_indirectS, 1, cl_mem.sizeof, &dM     );
+      assert(status == CL_SUCCESS, "opencl_rectangle_indirectS" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rectangle_indirectS, 2, cl_mem.sizeof, &dN     );
+      assert(status == CL_SUCCESS, "opencl_rectangle_indirectS" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rectangle_indirectS, 3, cl_mem.sizeof, &dF     );
+      assert(status == CL_SUCCESS, "opencl_rectangle_indirectS" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rectangle_indirectS, 4, cl_int.sizeof, &cols   );
+      assert(status == CL_SUCCESS, "opencl_rectangle_indirectS" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rectangle_indirectS, 5, cl_int.sizeof, &penalty);
+      assert(status == CL_SUCCESS, "opencl_rectangle_indirectS" ~ cl_strerror(status));
       auto max_blocks = (cols - 1) / BLOCK_SIZE;
       auto cur_blocks = 1;
       auto inc_blocks = 1;
@@ -1157,40 +1231,51 @@ class Application {
       {
         size_t wgroup = BLOCK_SIZE;
         size_t global = BLOCK_SIZE * cur_blocks;
-        status = clSetKernelArg(kernel_rectangles_indirectS, 6, cl_int.sizeof, &i);                                            assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_rectangle_indirectS, 6, cl_int.sizeof, &i);
+        assert(status == CL_SUCCESS, "opencl_rectangle_indirectS" ~ cl_strerror(status));
         status = clEnqueueNDRangeKernel(runtime.queue,
-                                        kernel_rectangles_indirectS,
+                                        kernel_rectangle_indirectS,
                                         1,
                                         null,
                                         &global,
                                         &wgroup,
                                         0,
                                         null,
-                                        &event);                                                                               assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
-        status = clWaitForEvents(1, &event);                                                                                   assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
+                                        &event);
+        assert(status == CL_SUCCESS, "opencl_rectangle_indirectS" ~ cl_strerror(status));
+        status = clWaitForEvents(1, &event);
+        assert(status == CL_SUCCESS, "opencl_rectangle_indirectS" ~ cl_strerror(status));
 
         cl_ulong start_time;
         status = clGetEventProfilingInfo(event                     , // cl_event          event
                                          CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
                                          cl_ulong.sizeof           , // size_t            param_value_size
                                          &start_time               , // void*             param_value
-                                         null                     ); /* size_t*           param_value_size_ret */              assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
+                                         null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_rectangle_indirectS" ~ cl_strerror(status));
         cl_ulong end_time;
         status = clGetEventProfilingInfo(event                     , // cl_event          event
                                          CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
                                          cl_ulong.sizeof           , // size_t            param_value_size
                                          &end_time                 , // void*             param_value
-                                         null                     ); /* size_t*           param_value_size_ret */              assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
+                                         null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_rectangle_indirectS" ~ cl_strerror(status));
         result += (end_time - start_time) / 1E9;
         if (i == max_blocks - 1) inc_blocks = -1;
         cur_blocks += inc_blocks;
       }
-      status = clEnqueueReadBuffer(runtime.queue, dF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr, 0, null, null);             assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
-      status = clReleaseMemObject(dF);                                                                                         assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
-      status = clReleaseMemObject(dN);                                                                                         assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
-      status = clReleaseMemObject(dM);                                                                                         assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
-      status = clReleaseMemObject(dS);                                                                                         assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
-      status = clReleaseKernel(kernel_rectangles_indirectS);                                                                   assert(status == CL_SUCCESS, "opencl_rectangles_indirectS" ~ cl_strerror(status));
+      status = clEnqueueReadBuffer(runtime.queue, dF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr, 0, null, null);
+      assert(status == CL_SUCCESS, "opencl_rectangle_indirectS" ~ cl_strerror(status));
+      status = clReleaseMemObject(dF);
+      assert(status == CL_SUCCESS, "opencl_rectangle_indirectS" ~ cl_strerror(status));
+      status = clReleaseMemObject(dN);
+      assert(status == CL_SUCCESS, "opencl_rectangle_indirectS" ~ cl_strerror(status));
+      status = clReleaseMemObject(dM);
+      assert(status == CL_SUCCESS, "opencl_rectangle_indirectS" ~ cl_strerror(status));
+      status = clReleaseMemObject(dS);
+      assert(status == CL_SUCCESS, "opencl_rectangle_indirectS" ~ cl_strerror(status));
+      status = clReleaseKernel(kernel_rectangle_indirectS);
+      assert(status == CL_SUCCESS, "opencl_rectangle_indirectS" ~ cl_strerror(status));
     }
     catch(Exception e)
     {
@@ -1202,7 +1287,7 @@ class Application {
 
   /**
    */
-  double opencl_diamonds()
+  double opencl_rhomboid()
   {
     double result = 0.0;
     try
@@ -1210,54 +1295,71 @@ class Application {
       cl_int status;
       cl_event event;
       cl_mem_flags flags = CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR;
-      cl_mem dS = clCreateBuffer(runtime.context, flags, cl_int.sizeof * S.length, S.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
+      cl_mem dS = clCreateBuffer(runtime.context, flags, cl_int.sizeof * S.length, S.ptr, &status);
+      assert(status == CL_SUCCESS, "opencl_rhomboid" ~ cl_strerror(status));
       flags = CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR;
-      cl_mem dF = clCreateBuffer(runtime.context, flags, cl_int.sizeof * F.length, F.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_diamonds, 0, cl_mem.sizeof, &dS     );                                                    assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_diamonds, 1, cl_mem.sizeof, &dF     );                                                    assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_diamonds, 2, cl_int.sizeof, &cols   );                                                    assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_diamonds, 3, cl_int.sizeof, &penalty);                                                    assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
+      cl_mem dF = clCreateBuffer(runtime.context, flags, cl_int.sizeof * F.length, F.ptr, &status);
+      assert(status == CL_SUCCESS, "opencl_rhomboid" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rhomboid, 0, cl_mem.sizeof, &dS     );
+      assert(status == CL_SUCCESS, "opencl_rhomboid" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rhomboid, 1, cl_mem.sizeof, &dF     );
+      assert(status == CL_SUCCESS, "opencl_rhomboid" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rhomboid, 2, cl_int.sizeof, &cols   );
+      assert(status == CL_SUCCESS, "opencl_rhomboid" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rhomboid, 3, cl_int.sizeof, &penalty);
+      assert(status == CL_SUCCESS, "opencl_rhomboid" ~ cl_strerror(status));
       size_t wgroup = BLOCK_SIZE;
       foreach (i; 0 .. rows / BLOCK_SIZE - 1)
       {
         cl_int br = i;
         cl_int bc = 1;
         size_t global = ((2 * i + bc) * BLOCK_SIZE < cols - 1) ? BLOCK_SIZE * (i + 1) : (cols - 1) / 2;
-        status = clSetKernelArg(kernel_diamonds, 4, cl_int.sizeof, &br);                                                       assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
-        status = clSetKernelArg(kernel_diamonds, 5, cl_int.sizeof, &bc);                                                       assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
-        status = clEnqueueNDRangeKernel(runtime.queue, kernel_diamonds, 1, null, &global, &wgroup, 0, null, &event);           assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
-        status = clWaitForEvents(1, &event);                                                                                   assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_rhomboid, 4, cl_int.sizeof, &br);
+        assert(status == CL_SUCCESS, "opencl_rhomboid" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_rhomboid, 5, cl_int.sizeof, &bc);
+        assert(status == CL_SUCCESS, "opencl_rhomboid" ~ cl_strerror(status));
+        status = clEnqueueNDRangeKernel(runtime.queue, kernel_rhomboid, 1, null, &global, &wgroup, 0, null, &event);
+        assert(status == CL_SUCCESS, "opencl_rhomboid" ~ cl_strerror(status));
+        status = clWaitForEvents(1, &event);
+        assert(status == CL_SUCCESS, "opencl_rhomboid" ~ cl_strerror(status));
 
         cl_ulong start_time;
         status = clGetEventProfilingInfo (event                     , // cl_event          event
                                           CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
                                           cl_ulong.sizeof           , // size_t            param_value_size
                                           &start_time               , // void*             param_value
-                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
+                                          null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_rhomboid" ~ cl_strerror(status));
         cl_ulong end_time;
         status = clGetEventProfilingInfo (event                     , // cl_event          event
                                           CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
                                           cl_ulong.sizeof           , // size_t            param_value_size
                                           &end_time                 , // void*             param_value
-                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
+                                          null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_rhomboid" ~ cl_strerror(status));
         result += (end_time - start_time) / 1E9;
         bc = 2;
         global = ((2 * i + bc) * BLOCK_SIZE < cols - 1) ? BLOCK_SIZE * (i + 1) : (cols - 1) / 2 - BLOCK_SIZE;
         if (global == 0) continue;
-        status = clSetKernelArg(kernel_diamonds, 5, cl_int.sizeof, &bc);                                                       assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
-        status = clEnqueueNDRangeKernel(runtime.queue, kernel_diamonds, 1, null, &global, &wgroup, 0, null, &event);           assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
-        status = clWaitForEvents(1, &event);                                                                                   assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_rhomboid, 5, cl_int.sizeof, &bc);
+        assert(status == CL_SUCCESS, "opencl_rhomboid" ~ cl_strerror(status));
+        status = clEnqueueNDRangeKernel(runtime.queue, kernel_rhomboid, 1, null, &global, &wgroup, 0, null, &event);
+        assert(status == CL_SUCCESS, "opencl_rhomboid" ~ cl_strerror(status));
+        status = clWaitForEvents(1, &event);
+        assert(status == CL_SUCCESS, "opencl_rhomboid" ~ cl_strerror(status));
 
         status = clGetEventProfilingInfo (event                     , // cl_event          event
                                           CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
                                           cl_ulong.sizeof           , // size_t            param_value_size
                                           &start_time               , // void*             param_value
-                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
+                                          null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_rhomboid" ~ cl_strerror(status));
         status = clGetEventProfilingInfo (event                     , // cl_event          event
                                           CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
                                           cl_ulong.sizeof           , // size_t            param_value_size
                                           &end_time                 , // void*             param_value
-                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
+                                          null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_rhomboid" ~ cl_strerror(status));
         result += (end_time - start_time) / 1E9;
       }
       foreach (i; 1 .. cols / BLOCK_SIZE)
@@ -1265,29 +1367,39 @@ class Application {
         cl_int br = rows / BLOCK_SIZE - 1;
         cl_int bc = i;
         size_t global = BLOCK_SIZE * (((cols - 1) / BLOCK_SIZE - bc + 1) / 2);
-        status = clSetKernelArg(kernel_diamonds, 4, cl_int.sizeof, &br);                                                       assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
-        status = clSetKernelArg(kernel_diamonds, 5, cl_int.sizeof, &bc);                                                       assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
-        status = clEnqueueNDRangeKernel(runtime.queue, kernel_diamonds, 1, null, &global, &wgroup, 0, null, &event);           assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
-        status = clWaitForEvents(1, &event);                                                                                   assert(status == CL_SUCCESS, "opencl_diamonds" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_rhomboid, 4, cl_int.sizeof, &br);
+        assert(status == CL_SUCCESS, "opencl_rhomboid" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_rhomboid, 5, cl_int.sizeof, &bc);
+        assert(status == CL_SUCCESS, "opencl_rhomboid" ~ cl_strerror(status));
+        status = clEnqueueNDRangeKernel(runtime.queue, kernel_rhomboid, 1, null, &global, &wgroup, 0, null, &event);
+        assert(status == CL_SUCCESS, "opencl_rhomboid" ~ cl_strerror(status));
+        status = clWaitForEvents(1, &event);
+        assert(status == CL_SUCCESS, "opencl_rhomboid" ~ cl_strerror(status));
 
         cl_ulong start_time;
         status = clGetEventProfilingInfo (event                     , // cl_event          event
                                           CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
                                           cl_ulong.sizeof           , // size_t            param_value_size
                                           &start_time               , // void*             param_value
-                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror(status));
+                                          null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_rhomboid " ~ cl_strerror(status));
         cl_ulong end_time;
         status = clGetEventProfilingInfo (event                     , // cl_event          event
                                           CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
                                           cl_ulong.sizeof           , // size_t            param_value_size
                                           &end_time                 , // void*             param_value
-                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror(status));
+                                          null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_rhomboid " ~ cl_strerror(status));
         result += (end_time - start_time) / 1E9;
       }
-      status = clEnqueueReadBuffer(runtime.queue, dF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr, 0, null, null);             assert(status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror(status));
-      status = clReleaseMemObject(dS);                                                                                         assert(status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror(status));
-      status = clReleaseMemObject(dF);                                                                                         assert(status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror(status));
-      status = clReleaseKernel(kernel_diamonds);                                                                               assert(status == CL_SUCCESS, "opencl_diamonds " ~ cl_strerror(status));
+      status = clEnqueueReadBuffer(runtime.queue, dF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr, 0, null, null);
+      assert(status == CL_SUCCESS, "opencl_rhomboid " ~ cl_strerror(status));
+      status = clReleaseMemObject(dS);
+      assert(status == CL_SUCCESS, "opencl_rhomboid " ~ cl_strerror(status));
+      status = clReleaseMemObject(dF);
+      assert(status == CL_SUCCESS, "opencl_rhomboid " ~ cl_strerror(status));
+      status = clReleaseKernel(kernel_rhomboid);
+      assert(status == CL_SUCCESS, "opencl_rhomboid " ~ cl_strerror(status));
     }
     catch(Exception e)
     {
@@ -1299,7 +1411,7 @@ class Application {
 
   /**
    */
-  double opencl_diamonds_noconflicts()
+  double opencl_rhomboid_noconflicts()
   {
     double result = 0.0;
     try
@@ -1307,54 +1419,71 @@ class Application {
       cl_int status;
       cl_event event;
       cl_mem_flags flags = CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR;
-      cl_mem dS = clCreateBuffer(runtime.context, flags, cl_int.sizeof * S.length, S.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_diamonds_noconflicts" ~ cl_strerror(status));
+      cl_mem dS = clCreateBuffer(runtime.context, flags, cl_int.sizeof * S.length, S.ptr, &status);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_noconflicts" ~ cl_strerror(status));
       flags = CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR;
-      cl_mem dF = clCreateBuffer(runtime.context, flags, cl_int.sizeof * F.length, F.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_diamonds_noconflicts" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_diamonds_noconflicts, 0, cl_mem.sizeof, &dS     );                                        assert(status == CL_SUCCESS, "opencl_diamonds_noconflicts" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_diamonds_noconflicts, 1, cl_mem.sizeof, &dF     );                                        assert(status == CL_SUCCESS, "opencl_diamonds_noconflicts" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_diamonds_noconflicts, 2, cl_int.sizeof, &cols   );                                        assert(status == CL_SUCCESS, "opencl_diamonds_noconflicts" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_diamonds_noconflicts, 3, cl_int.sizeof, &penalty);                                        assert(status == CL_SUCCESS, "opencl_diamonds_noconflicts" ~ cl_strerror(status));
+      cl_mem dF = clCreateBuffer(runtime.context, flags, cl_int.sizeof * F.length, F.ptr, &status);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_noconflicts" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rhomboid_noconflicts, 0, cl_mem.sizeof, &dS     );
+      assert(status == CL_SUCCESS, "opencl_rhomboid_noconflicts" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rhomboid_noconflicts, 1, cl_mem.sizeof, &dF     );
+      assert(status == CL_SUCCESS, "opencl_rhomboid_noconflicts" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rhomboid_noconflicts, 2, cl_int.sizeof, &cols   );
+      assert(status == CL_SUCCESS, "opencl_rhomboid_noconflicts" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rhomboid_noconflicts, 3, cl_int.sizeof, &penalty);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_noconflicts" ~ cl_strerror(status));
       size_t wgroup = BLOCK_SIZE;
       foreach (i; 0 .. rows / BLOCK_SIZE - 1)
       {
         cl_int br = i;
         cl_int bc = 1;
         size_t global = ((2 * i + bc) * BLOCK_SIZE < cols - 1) ? BLOCK_SIZE * (i + 1) : (cols - 1) / 2;
-        status = clSetKernelArg(kernel_diamonds_noconflicts, 4, cl_int.sizeof, &br);                                           assert(status == CL_SUCCESS, "opencl_diamonds_noconflicts" ~ cl_strerror(status));
-        status = clSetKernelArg(kernel_diamonds_noconflicts, 5, cl_int.sizeof, &bc);                                           assert(status == CL_SUCCESS, "opencl_diamonds_noconflicts" ~ cl_strerror(status));
-        status = clEnqueueNDRangeKernel(runtime.queue, kernel_diamonds_noconflicts, 1, null, &global, &wgroup, 0, null, &event);assert(status == CL_SUCCESS, "opencl_diamonds_noconflicts" ~ cl_strerror(status));
-        status = clWaitForEvents(1, &event);                                                                                   assert(status == CL_SUCCESS, "opencl_diamonds_noconflicts" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_rhomboid_noconflicts, 4, cl_int.sizeof, &br);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_noconflicts" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_rhomboid_noconflicts, 5, cl_int.sizeof, &bc);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_noconflicts" ~ cl_strerror(status));
+        status = clEnqueueNDRangeKernel(runtime.queue, kernel_rhomboid_noconflicts, 1, null, &global, &wgroup, 0, null, &event);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_noconflicts" ~ cl_strerror(status));
+        status = clWaitForEvents(1, &event);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_noconflicts" ~ cl_strerror(status));
 
         cl_ulong start_time;
         status = clGetEventProfilingInfo (event                     , // cl_event          event
                                           CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
                                           cl_ulong.sizeof           , // size_t            param_value_size
                                           &start_time               , // void*             param_value
-                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_noconflicts" ~ cl_strerror(status));
+                                          null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_rhomboid_noconflicts" ~ cl_strerror(status));
         cl_ulong end_time;
         status = clGetEventProfilingInfo (event                     , // cl_event          event
                                           CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
                                           cl_ulong.sizeof           , // size_t            param_value_size
                                           &end_time                 , // void*             param_value
-                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_noconflicts" ~ cl_strerror(status));
+                                          null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_rhomboid_noconflicts" ~ cl_strerror(status));
         result += (end_time - start_time) / 1E9;
         bc = 2;
         global = ((2 * i + bc) * BLOCK_SIZE < cols - 1) ? BLOCK_SIZE * (i + 1) : (cols - 1) / 2 - BLOCK_SIZE;
         if (global == 0) continue;
-        status = clSetKernelArg(kernel_diamonds_noconflicts, 5, cl_int.sizeof, &bc);                                           assert(status == CL_SUCCESS, "opencl_diamonds_noconflicts" ~ cl_strerror(status));
-        status = clEnqueueNDRangeKernel(runtime.queue, kernel_diamonds_noconflicts, 1, null, &global, &wgroup, 0, null, &event);assert(status == CL_SUCCESS, "opencl_diamonds_noconflicts" ~ cl_strerror(status));
-        status = clWaitForEvents(1, &event);                                                                                   assert(status == CL_SUCCESS, "opencl_diamonds_noconflicts" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_rhomboid_noconflicts, 5, cl_int.sizeof, &bc);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_noconflicts" ~ cl_strerror(status));
+        status = clEnqueueNDRangeKernel(runtime.queue, kernel_rhomboid_noconflicts, 1, null, &global, &wgroup, 0, null, &event);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_noconflicts" ~ cl_strerror(status));
+        status = clWaitForEvents(1, &event);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_noconflicts" ~ cl_strerror(status));
 
         status = clGetEventProfilingInfo (event                     , // cl_event          event
                                           CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
                                           cl_ulong.sizeof           , // size_t            param_value_size
                                           &start_time               , // void*             param_value
-                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_noconflicts" ~ cl_strerror(status));
+                                          null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_rhomboid_noconflicts" ~ cl_strerror(status));
         status = clGetEventProfilingInfo (event                     , // cl_event          event
                                           CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
                                           cl_ulong.sizeof           , // size_t            param_value_size
                                           &end_time                 , // void*             param_value
-                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_noconflicts" ~ cl_strerror(status));
+                                          null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_rhomboid_noconflicts" ~ cl_strerror(status));
         result += (end_time - start_time) / 1E9;
       }
       foreach (i; 1 .. cols / BLOCK_SIZE)
@@ -1362,29 +1491,39 @@ class Application {
         cl_int br = rows / BLOCK_SIZE - 1;
         cl_int bc = i;
         size_t global = BLOCK_SIZE * (((cols - 1) / BLOCK_SIZE - bc + 1) / 2);
-        status = clSetKernelArg(kernel_diamonds_noconflicts, 4, cl_int.sizeof, &br);                                           assert(status == CL_SUCCESS, "opencl_diamonds_noconflicts" ~ cl_strerror(status));
-        status = clSetKernelArg(kernel_diamonds_noconflicts, 5, cl_int.sizeof, &bc);                                           assert(status == CL_SUCCESS, "opencl_diamonds_noconflicts" ~ cl_strerror(status));
-        status = clEnqueueNDRangeKernel(runtime.queue, kernel_diamonds_noconflicts, 1, null, &global, &wgroup, 0, null, &event);assert(status == CL_SUCCESS, "opencl_diamonds_noconflicts" ~ cl_strerror(status));
-        status = clWaitForEvents(1, &event);                                                                                   assert(status == CL_SUCCESS, "opencl_diamonds_noconflicts" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_rhomboid_noconflicts, 4, cl_int.sizeof, &br);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_noconflicts" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_rhomboid_noconflicts, 5, cl_int.sizeof, &bc);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_noconflicts" ~ cl_strerror(status));
+        status = clEnqueueNDRangeKernel(runtime.queue, kernel_rhomboid_noconflicts, 1, null, &global, &wgroup, 0, null, &event);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_noconflicts" ~ cl_strerror(status));
+        status = clWaitForEvents(1, &event);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_noconflicts" ~ cl_strerror(status));
 
         cl_ulong start_time;
         status = clGetEventProfilingInfo (event                     , // cl_event          event
                                           CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
                                           cl_ulong.sizeof           , // size_t            param_value_size
                                           &start_time               , // void*             param_value
-                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_noconflicts " ~ cl_strerror(status));
+                                          null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_rhomboid_noconflicts " ~ cl_strerror(status));
         cl_ulong end_time;
         status = clGetEventProfilingInfo (event                     , // cl_event          event
                                           CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
                                           cl_ulong.sizeof           , // size_t            param_value_size
                                           &end_time                 , // void*             param_value
-                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_noconflicts " ~ cl_strerror(status));
+                                          null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_rhomboid_noconflicts " ~ cl_strerror(status));
         result += (end_time - start_time) / 1E9;
       }
-      status = clEnqueueReadBuffer(runtime.queue, dF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr, 0, null, null);             assert(status == CL_SUCCESS, "opencl_diamonds_noconflicts " ~ cl_strerror(status));
-      status = clReleaseMemObject(dS);                                                                                         assert(status == CL_SUCCESS, "opencl_diamonds_noconflicts " ~ cl_strerror(status));
-      status = clReleaseMemObject(dF);                                                                                         assert(status == CL_SUCCESS, "opencl_diamonds_noconflicts " ~ cl_strerror(status));
-      status = clReleaseKernel(kernel_diamonds_noconflicts);                                                                   assert(status == CL_SUCCESS, "opencl_diamonds_noconflicts " ~ cl_strerror(status));
+      status = clEnqueueReadBuffer(runtime.queue, dF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr, 0, null, null);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_noconflicts " ~ cl_strerror(status));
+      status = clReleaseMemObject(dS);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_noconflicts " ~ cl_strerror(status));
+      status = clReleaseMemObject(dF);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_noconflicts " ~ cl_strerror(status));
+      status = clReleaseKernel(kernel_rhomboid_noconflicts);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_noconflicts " ~ cl_strerror(status));
     }
     catch(Exception e)
     {
@@ -1396,7 +1535,7 @@ class Application {
 
   /**
    */
-  double opencl_diamonds_indirectS()
+  double opencl_rhomboid_indirectS()
   {
     double result = 0.0;
     try
@@ -1404,58 +1543,79 @@ class Application {
       cl_int status;
       cl_event event;
       cl_mem_flags flags = CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR;
-      cl_mem dS = clCreateBuffer(runtime.context, flags, cl_int.sizeof * BLOSUM62.length, BLOSUM62.ptr, &status);              assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
-      cl_mem dM = clCreateBuffer(runtime.context, flags, cl_int.sizeof * M.length, M.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
-      cl_mem dN = clCreateBuffer(runtime.context, flags, cl_int.sizeof * N.length, N.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
+      cl_mem dS = clCreateBuffer(runtime.context, flags, cl_int.sizeof * BLOSUM62.length, BLOSUM62.ptr, &status);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS" ~ cl_strerror(status));
+      cl_mem dM = clCreateBuffer(runtime.context, flags, cl_int.sizeof * M.length, M.ptr, &status);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS" ~ cl_strerror(status));
+      cl_mem dN = clCreateBuffer(runtime.context, flags, cl_int.sizeof * N.length, N.ptr, &status);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS" ~ cl_strerror(status));
       flags = CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR;
-      cl_mem dF = clCreateBuffer(runtime.context, flags, cl_int.sizeof * F.length, F.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_diamonds_indirectS, 0, cl_mem.sizeof, &dS     );                                          assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_diamonds_indirectS, 1, cl_mem.sizeof, &dM     );                                          assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_diamonds_indirectS, 2, cl_mem.sizeof, &dN     );                                          assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_diamonds_indirectS, 3, cl_mem.sizeof, &dF     );                                          assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_diamonds_indirectS, 4, cl_int.sizeof, &cols   );                                          assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_diamonds_indirectS, 5, cl_int.sizeof, &penalty);                                          assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
+      cl_mem dF = clCreateBuffer(runtime.context, flags, cl_int.sizeof * F.length, F.ptr, &status);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rhomboid_indirectS, 0, cl_mem.sizeof, &dS     );
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rhomboid_indirectS, 1, cl_mem.sizeof, &dM     );
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rhomboid_indirectS, 2, cl_mem.sizeof, &dN     );
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rhomboid_indirectS, 3, cl_mem.sizeof, &dF     );
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rhomboid_indirectS, 4, cl_int.sizeof, &cols   );
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rhomboid_indirectS, 5, cl_int.sizeof, &penalty);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS" ~ cl_strerror(status));
       size_t wgroup = BLOCK_SIZE;
       foreach (i; 0 .. rows / BLOCK_SIZE - 1)
       {
         cl_int br = i;
         cl_int bc = 1;
         size_t global = ((2 * i + bc) * BLOCK_SIZE < cols - 1) ? BLOCK_SIZE * (i + 1) : (cols - 1) / 2;
-        status = clSetKernelArg(kernel_diamonds_indirectS, 6, cl_int.sizeof, &br);                                             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
-        status = clSetKernelArg(kernel_diamonds_indirectS, 7, cl_int.sizeof, &bc);                                             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
-        status = clEnqueueNDRangeKernel(runtime.queue, kernel_diamonds_indirectS, 1, null, &global, &wgroup, 0, null, &event); assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
-        status = clWaitForEvents(1, &event);                                                                                   assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_rhomboid_indirectS, 6, cl_int.sizeof, &br);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_rhomboid_indirectS, 7, cl_int.sizeof, &bc);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS" ~ cl_strerror(status));
+        status = clEnqueueNDRangeKernel(runtime.queue, kernel_rhomboid_indirectS, 1, null, &global, &wgroup, 0, null, &event);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS" ~ cl_strerror(status));
+        status = clWaitForEvents(1, &event);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS" ~ cl_strerror(status));
 
         cl_ulong start_time;
         status = clGetEventProfilingInfo (event                     , // cl_event          event
                                           CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
                                           cl_ulong.sizeof           , // size_t            param_value_size
                                           &start_time               , // void*             param_value
-                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
+                                          null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS" ~ cl_strerror(status));
         cl_ulong end_time;
         status = clGetEventProfilingInfo (event                     , // cl_event          event
                                           CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
                                           cl_ulong.sizeof           , // size_t            param_value_size
                                           &end_time                 , // void*             param_value
-                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
+                                          null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS" ~ cl_strerror(status));
         result += (end_time - start_time) / 1E9;
         bc = 2;
         global = ((2 * i + bc) * BLOCK_SIZE < cols - 1) ? BLOCK_SIZE * (i + 1) : (cols - 1) / 2 - BLOCK_SIZE;
         if (global == 0) continue;
-        status = clSetKernelArg(kernel_diamonds_indirectS, 7, cl_int.sizeof, &bc);                                             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
-        status = clEnqueueNDRangeKernel(runtime.queue, kernel_diamonds_indirectS, 1, null, &global, &wgroup, 0, null, &event); assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
-        status = clWaitForEvents(1, &event);                                                                                   assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_rhomboid_indirectS, 7, cl_int.sizeof, &bc);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS" ~ cl_strerror(status));
+        status = clEnqueueNDRangeKernel(runtime.queue, kernel_rhomboid_indirectS, 1, null, &global, &wgroup, 0, null, &event);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS" ~ cl_strerror(status));
+        status = clWaitForEvents(1, &event);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS" ~ cl_strerror(status));
 
         status = clGetEventProfilingInfo (event                     , // cl_event          event
                                           CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
                                           cl_ulong.sizeof           , // size_t            param_value_size
                                           &start_time               , // void*             param_value
-                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
+                                          null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS" ~ cl_strerror(status));
         status = clGetEventProfilingInfo (event                     , // cl_event          event
                                           CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
                                           cl_ulong.sizeof           , // size_t            param_value_size
                                           &end_time                 , // void*             param_value
-                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
+                                          null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS" ~ cl_strerror(status));
         result += (end_time - start_time) / 1E9;
       }
       foreach (i; 1 .. cols / BLOCK_SIZE)
@@ -1463,31 +1623,43 @@ class Application {
         cl_int br = rows / BLOCK_SIZE - 1;
         cl_int bc = i;
         size_t global = BLOCK_SIZE * (((cols - 1) / BLOCK_SIZE - bc + 1) / 2);
-        status = clSetKernelArg(kernel_diamonds_indirectS, 6, cl_int.sizeof, &br);                                             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
-        status = clSetKernelArg(kernel_diamonds_indirectS, 7, cl_int.sizeof, &bc);                                             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
-        status = clEnqueueNDRangeKernel(runtime.queue, kernel_diamonds_indirectS, 1, null, &global, &wgroup, 0, null, &event); assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
-        status = clWaitForEvents(1, &event);                                                                                   assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_rhomboid_indirectS, 6, cl_int.sizeof, &br);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_rhomboid_indirectS, 7, cl_int.sizeof, &bc);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS" ~ cl_strerror(status));
+        status = clEnqueueNDRangeKernel(runtime.queue, kernel_rhomboid_indirectS, 1, null, &global, &wgroup, 0, null, &event);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS" ~ cl_strerror(status));
+        status = clWaitForEvents(1, &event);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS" ~ cl_strerror(status));
 
         cl_ulong start_time;
         status = clGetEventProfilingInfo (event                     , // cl_event          event
                                           CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
                                           cl_ulong.sizeof           , // size_t            param_value_size
                                           &start_time               , // void*             param_value
-                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
+                                          null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS" ~ cl_strerror(status));
         cl_ulong end_time;
         status = clGetEventProfilingInfo (event                     , // cl_event          event
                                           CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
                                           cl_ulong.sizeof           , // size_t            param_value_size
                                           &end_time                 , // void*             param_value
-                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
+                                          null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS" ~ cl_strerror(status));
         result += (end_time - start_time) / 1E9;
       }
-      status = clEnqueueReadBuffer(runtime.queue, dF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr, 0, null, null);             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
-      status = clReleaseMemObject(dF);                                                                                         assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
-      status = clReleaseMemObject(dN);                                                                                         assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
-      status = clReleaseMemObject(dM);                                                                                         assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
-      status = clReleaseMemObject(dS);                                                                                         assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
-      status = clReleaseKernel(kernel_diamonds_indirectS);                                                                     assert(status == CL_SUCCESS, "opencl_diamonds_indirectS" ~ cl_strerror(status));
+      status = clEnqueueReadBuffer(runtime.queue, dF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr, 0, null, null);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS" ~ cl_strerror(status));
+      status = clReleaseMemObject(dF);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS" ~ cl_strerror(status));
+      status = clReleaseMemObject(dN);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS" ~ cl_strerror(status));
+      status = clReleaseMemObject(dM);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS" ~ cl_strerror(status));
+      status = clReleaseMemObject(dS);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS" ~ cl_strerror(status));
+      status = clReleaseKernel(kernel_rhomboid_indirectS);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS" ~ cl_strerror(status));
     }
     catch(Exception e)
     {
@@ -1499,7 +1671,7 @@ class Application {
 
   /**
    */
-  double opencl_diamonds_indirectS_noconflicts()
+  double opencl_rhomboid_indirectS_noconflicts()
   {
     double result = 0.0;
     try
@@ -1507,58 +1679,79 @@ class Application {
       cl_int status;
       cl_event event;
       cl_mem_flags flags = CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR;
-      cl_mem dS = clCreateBuffer(runtime.context, flags, cl_int.sizeof * BLOSUM62.length, BLOSUM62.ptr, &status);              assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_noconflicts" ~ cl_strerror(status));
-      cl_mem dM = clCreateBuffer(runtime.context, flags, cl_int.sizeof * M.length, M.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_noconflicts" ~ cl_strerror(status));
-      cl_mem dN = clCreateBuffer(runtime.context, flags, cl_int.sizeof * N.length, N.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_noconflicts" ~ cl_strerror(status));
+      cl_mem dS = clCreateBuffer(runtime.context, flags, cl_int.sizeof * BLOSUM62.length, BLOSUM62.ptr, &status);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_noconflicts" ~ cl_strerror(status));
+      cl_mem dM = clCreateBuffer(runtime.context, flags, cl_int.sizeof * M.length, M.ptr, &status);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_noconflicts" ~ cl_strerror(status));
+      cl_mem dN = clCreateBuffer(runtime.context, flags, cl_int.sizeof * N.length, N.ptr, &status);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_noconflicts" ~ cl_strerror(status));
       flags = CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR;
-      cl_mem dF = clCreateBuffer(runtime.context, flags, cl_int.sizeof * F.length, F.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_noconflicts" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_diamonds_indirectS_noconflicts, 0, cl_mem.sizeof, &dS     );                              assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_noconflicts" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_diamonds_indirectS_noconflicts, 1, cl_mem.sizeof, &dM     );                              assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_noconflicts" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_diamonds_indirectS_noconflicts, 2, cl_mem.sizeof, &dN     );                              assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_noconflicts" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_diamonds_indirectS_noconflicts, 3, cl_mem.sizeof, &dF     );                              assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_noconflicts" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_diamonds_indirectS_noconflicts, 4, cl_int.sizeof, &cols   );                              assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_noconflicts" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_diamonds_indirectS_noconflicts, 5, cl_int.sizeof, &penalty);                              assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_noconflicts" ~ cl_strerror(status));
+      cl_mem dF = clCreateBuffer(runtime.context, flags, cl_int.sizeof * F.length, F.ptr, &status);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_noconflicts" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rhomboid_indirectS_noconflicts, 0, cl_mem.sizeof, &dS     );
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_noconflicts" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rhomboid_indirectS_noconflicts, 1, cl_mem.sizeof, &dM     );
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_noconflicts" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rhomboid_indirectS_noconflicts, 2, cl_mem.sizeof, &dN     );
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_noconflicts" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rhomboid_indirectS_noconflicts, 3, cl_mem.sizeof, &dF     );
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_noconflicts" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rhomboid_indirectS_noconflicts, 4, cl_int.sizeof, &cols   );
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_noconflicts" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rhomboid_indirectS_noconflicts, 5, cl_int.sizeof, &penalty);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_noconflicts" ~ cl_strerror(status));
       size_t wgroup = BLOCK_SIZE;
       foreach (i; 0 .. rows / BLOCK_SIZE - 1)
       {
         cl_int br = i;
         cl_int bc = 1;
         size_t global = ((2 * i + bc) * BLOCK_SIZE < cols - 1) ? BLOCK_SIZE * (i + 1) : (cols - 1) / 2;
-        status = clSetKernelArg(kernel_diamonds_indirectS_noconflicts, 6, cl_int.sizeof, &br);                                 assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_noconflicts" ~ cl_strerror(status));
-        status = clSetKernelArg(kernel_diamonds_indirectS_noconflicts, 7, cl_int.sizeof, &bc);                                 assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_noconflicts" ~ cl_strerror(status));
-        status = clEnqueueNDRangeKernel(runtime.queue, kernel_diamonds_indirectS_noconflicts, 1, null, &global, &wgroup, 0, null, &event); assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_noconflicts" ~ cl_strerror(status));
-        status = clWaitForEvents(1, &event);                                                                                   assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_noconflicts" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_rhomboid_indirectS_noconflicts, 6, cl_int.sizeof, &br);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_noconflicts" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_rhomboid_indirectS_noconflicts, 7, cl_int.sizeof, &bc);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_noconflicts" ~ cl_strerror(status));
+        status = clEnqueueNDRangeKernel(runtime.queue, kernel_rhomboid_indirectS_noconflicts, 1, null, &global, &wgroup, 0, null, &event);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_noconflicts" ~ cl_strerror(status));
+        status = clWaitForEvents(1, &event);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_noconflicts" ~ cl_strerror(status));
 
         cl_ulong start_time;
         status = clGetEventProfilingInfo (event                     , // cl_event          event
                                           CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
                                           cl_ulong.sizeof           , // size_t            param_value_size
                                           &start_time               , // void*             param_value
-                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_noconflicts" ~ cl_strerror(status));
+                                          null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_noconflicts" ~ cl_strerror(status));
         cl_ulong end_time;
         status = clGetEventProfilingInfo (event                     , // cl_event          event
                                           CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
                                           cl_ulong.sizeof           , // size_t            param_value_size
                                           &end_time                 , // void*             param_value
-                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_noconflicts" ~ cl_strerror(status));
+                                          null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_noconflicts" ~ cl_strerror(status));
         result += (end_time - start_time) / 1E9;
         bc = 2;
         global = ((2 * i + bc) * BLOCK_SIZE < cols - 1) ? BLOCK_SIZE * (i + 1) : (cols - 1) / 2 - BLOCK_SIZE;
         if (global == 0) continue;
-        status = clSetKernelArg(kernel_diamonds_indirectS_noconflicts, 7, cl_int.sizeof, &bc);                                 assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_noconflicts" ~ cl_strerror(status));
-        status = clEnqueueNDRangeKernel(runtime.queue, kernel_diamonds_indirectS_noconflicts, 1, null, &global, &wgroup, 0, null, &event); assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_noconflicts" ~ cl_strerror(status));
-        status = clWaitForEvents(1, &event);                                                                                   assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_noconflicts" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_rhomboid_indirectS_noconflicts, 7, cl_int.sizeof, &bc);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_noconflicts" ~ cl_strerror(status));
+        status = clEnqueueNDRangeKernel(runtime.queue, kernel_rhomboid_indirectS_noconflicts, 1, null, &global, &wgroup, 0, null, &event);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_noconflicts" ~ cl_strerror(status));
+        status = clWaitForEvents(1, &event);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_noconflicts" ~ cl_strerror(status));
 
         status = clGetEventProfilingInfo (event                     , // cl_event          event
                                           CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
                                           cl_ulong.sizeof           , // size_t            param_value_size
                                           &start_time               , // void*             param_value
-                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_noconflicts" ~ cl_strerror(status));
+                                          null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_noconflicts" ~ cl_strerror(status));
         status = clGetEventProfilingInfo (event                     , // cl_event          event
                                           CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
                                           cl_ulong.sizeof           , // size_t            param_value_size
                                           &end_time                 , // void*             param_value
-                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_noconflicts" ~ cl_strerror(status));
+                                          null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_noconflicts" ~ cl_strerror(status));
         result += (end_time - start_time) / 1E9;
       }
       foreach (i; 1 .. cols / BLOCK_SIZE)
@@ -1566,31 +1759,43 @@ class Application {
         cl_int br = rows / BLOCK_SIZE - 1;
         cl_int bc = i;
         size_t global = BLOCK_SIZE * (((cols - 1) / BLOCK_SIZE - bc + 1) / 2);
-        status = clSetKernelArg(kernel_diamonds_indirectS_noconflicts, 6, cl_int.sizeof, &br);                                 assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_noconflicts" ~ cl_strerror(status));
-        status = clSetKernelArg(kernel_diamonds_indirectS_noconflicts, 7, cl_int.sizeof, &bc);                                 assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_noconflicts" ~ cl_strerror(status));
-        status = clEnqueueNDRangeKernel(runtime.queue, kernel_diamonds_indirectS_noconflicts, 1, null, &global, &wgroup, 0, null, &event); assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_noconflicts" ~ cl_strerror(status));
-        status = clWaitForEvents(1, &event);                                                                                   assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_noconflicts" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_rhomboid_indirectS_noconflicts, 6, cl_int.sizeof, &br);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_noconflicts" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_rhomboid_indirectS_noconflicts, 7, cl_int.sizeof, &bc);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_noconflicts" ~ cl_strerror(status));
+        status = clEnqueueNDRangeKernel(runtime.queue, kernel_rhomboid_indirectS_noconflicts, 1, null, &global, &wgroup, 0, null, &event);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_noconflicts" ~ cl_strerror(status));
+        status = clWaitForEvents(1, &event);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_noconflicts" ~ cl_strerror(status));
 
         cl_ulong start_time;
         status = clGetEventProfilingInfo (event                     , // cl_event          event
                                           CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
                                           cl_ulong.sizeof           , // size_t            param_value_size
                                           &start_time               , // void*             param_value
-                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_noconflicts" ~ cl_strerror(status));
+                                          null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_noconflicts" ~ cl_strerror(status));
         cl_ulong end_time;
         status = clGetEventProfilingInfo (event                     , // cl_event          event
                                           CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
                                           cl_ulong.sizeof           , // size_t            param_value_size
                                           &end_time                 , // void*             param_value
-                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_noconflicts" ~ cl_strerror(status));
+                                          null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_noconflicts" ~ cl_strerror(status));
         result += (end_time - start_time) / 1E9;
       }
-      status = clEnqueueReadBuffer(runtime.queue, dF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr, 0, null, null);             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_noconflicts" ~ cl_strerror(status));
-      status = clReleaseMemObject(dF);                                                                                         assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_noconflicts" ~ cl_strerror(status));
-      status = clReleaseMemObject(dN);                                                                                         assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_noconflicts" ~ cl_strerror(status));
-      status = clReleaseMemObject(dM);                                                                                         assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_noconflicts" ~ cl_strerror(status));
-      status = clReleaseMemObject(dS);                                                                                         assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_noconflicts" ~ cl_strerror(status));
-      status = clReleaseKernel(kernel_diamonds_indirectS_noconflicts);                                                         assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_noconflicts" ~ cl_strerror(status));
+      status = clEnqueueReadBuffer(runtime.queue, dF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr, 0, null, null);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_noconflicts" ~ cl_strerror(status));
+      status = clReleaseMemObject(dF);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_noconflicts" ~ cl_strerror(status));
+      status = clReleaseMemObject(dN);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_noconflicts" ~ cl_strerror(status));
+      status = clReleaseMemObject(dM);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_noconflicts" ~ cl_strerror(status));
+      status = clReleaseMemObject(dS);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_noconflicts" ~ cl_strerror(status));
+      status = clReleaseKernel(kernel_rhomboid_indirectS_noconflicts);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_noconflicts" ~ cl_strerror(status));
     }
     catch(Exception e)
     {
@@ -1602,7 +1807,7 @@ class Application {
 
   /**
    */
-  double opencl_diamonds_indirectS_prefetch()
+  double opencl_rhomboid_indirectS_prefetch()
   {
     double result = 0.0;
     try
@@ -1610,58 +1815,79 @@ class Application {
       cl_int status;
       cl_event event;
       cl_mem_flags flags = CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR;
-      cl_mem dS = clCreateBuffer(runtime.context, flags, cl_int.sizeof * BLOSUM62.length, BLOSUM62.ptr, &status);              assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
-      cl_mem dM = clCreateBuffer(runtime.context, flags, cl_int.sizeof * M.length, M.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
-      cl_mem dN = clCreateBuffer(runtime.context, flags, cl_int.sizeof * N.length, N.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+      cl_mem dS = clCreateBuffer(runtime.context, flags, cl_int.sizeof * BLOSUM62.length, BLOSUM62.ptr, &status);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch" ~ cl_strerror(status));
+      cl_mem dM = clCreateBuffer(runtime.context, flags, cl_int.sizeof * M.length, M.ptr, &status);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch" ~ cl_strerror(status));
+      cl_mem dN = clCreateBuffer(runtime.context, flags, cl_int.sizeof * N.length, N.ptr, &status);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch" ~ cl_strerror(status));
       flags = CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR;
-      cl_mem dF = clCreateBuffer(runtime.context, flags, cl_int.sizeof * F.length, F.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_diamonds_indirectS_prefetch, 0, cl_mem.sizeof, &dS     );                                          assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_diamonds_indirectS_prefetch, 1, cl_mem.sizeof, &dM     );                                          assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_diamonds_indirectS_prefetch, 2, cl_mem.sizeof, &dN     );                                          assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_diamonds_indirectS_prefetch, 3, cl_mem.sizeof, &dF     );                                          assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_diamonds_indirectS_prefetch, 4, cl_int.sizeof, &cols   );                                          assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_diamonds_indirectS_prefetch, 5, cl_int.sizeof, &penalty);                                          assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+      cl_mem dF = clCreateBuffer(runtime.context, flags, cl_int.sizeof * F.length, F.ptr, &status);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rhomboid_indirectS_prefetch, 0, cl_mem.sizeof, &dS     );
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rhomboid_indirectS_prefetch, 1, cl_mem.sizeof, &dM     );
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rhomboid_indirectS_prefetch, 2, cl_mem.sizeof, &dN     );
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rhomboid_indirectS_prefetch, 3, cl_mem.sizeof, &dF     );
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rhomboid_indirectS_prefetch, 4, cl_int.sizeof, &cols   );
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rhomboid_indirectS_prefetch, 5, cl_int.sizeof, &penalty);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch" ~ cl_strerror(status));
       size_t wgroup = BLOCK_SIZE;
       foreach (i; 0 .. rows / BLOCK_SIZE - 1)
       {
         cl_int br = i;
         cl_int bc = 1;
         size_t global = ((2 * i + bc) * BLOCK_SIZE < cols - 1) ? BLOCK_SIZE * (i + 1) : (cols - 1) / 2;
-        status = clSetKernelArg(kernel_diamonds_indirectS_prefetch, 6, cl_int.sizeof, &br);                                             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
-        status = clSetKernelArg(kernel_diamonds_indirectS_prefetch, 7, cl_int.sizeof, &bc);                                             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
-        status = clEnqueueNDRangeKernel(runtime.queue, kernel_diamonds_indirectS_prefetch, 1, null, &global, &wgroup, 0, null, &event); assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
-        status = clWaitForEvents(1, &event);                                                                                   assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_rhomboid_indirectS_prefetch, 6, cl_int.sizeof, &br);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_rhomboid_indirectS_prefetch, 7, cl_int.sizeof, &bc);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch" ~ cl_strerror(status));
+        status = clEnqueueNDRangeKernel(runtime.queue, kernel_rhomboid_indirectS_prefetch, 1, null, &global, &wgroup, 0, null, &event);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch" ~ cl_strerror(status));
+        status = clWaitForEvents(1, &event);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch" ~ cl_strerror(status));
 
         cl_ulong start_time;
         status = clGetEventProfilingInfo (event                     , // cl_event          event
                                           CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
                                           cl_ulong.sizeof           , // size_t            param_value_size
                                           &start_time               , // void*             param_value
-                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+                                          null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch" ~ cl_strerror(status));
         cl_ulong end_time;
         status = clGetEventProfilingInfo (event                     , // cl_event          event
                                           CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
                                           cl_ulong.sizeof           , // size_t            param_value_size
                                           &end_time                 , // void*             param_value
-                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+                                          null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch" ~ cl_strerror(status));
         result += (end_time - start_time) / 1E9;
         bc = 2;
         global = ((2 * i + bc) * BLOCK_SIZE < cols - 1) ? BLOCK_SIZE * (i + 1) : (cols - 1) / 2 - BLOCK_SIZE;
         if (global == 0) continue;
-        status = clSetKernelArg(kernel_diamonds_indirectS_prefetch, 7, cl_int.sizeof, &bc);                                             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
-        status = clEnqueueNDRangeKernel(runtime.queue, kernel_diamonds_indirectS_prefetch, 1, null, &global, &wgroup, 0, null, &event); assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
-        status = clWaitForEvents(1, &event);                                                                                   assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_rhomboid_indirectS_prefetch, 7, cl_int.sizeof, &bc);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch" ~ cl_strerror(status));
+        status = clEnqueueNDRangeKernel(runtime.queue, kernel_rhomboid_indirectS_prefetch, 1, null, &global, &wgroup, 0, null, &event);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch" ~ cl_strerror(status));
+        status = clWaitForEvents(1, &event);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch" ~ cl_strerror(status));
 
         status = clGetEventProfilingInfo (event                     , // cl_event          event
                                           CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
                                           cl_ulong.sizeof           , // size_t            param_value_size
                                           &start_time               , // void*             param_value
-                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+                                          null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch" ~ cl_strerror(status));
         status = clGetEventProfilingInfo (event                     , // cl_event          event
                                           CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
                                           cl_ulong.sizeof           , // size_t            param_value_size
                                           &end_time                 , // void*             param_value
-                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+                                          null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch" ~ cl_strerror(status));
         result += (end_time - start_time) / 1E9;
       }
       foreach (i; 1 .. cols / BLOCK_SIZE)
@@ -1669,31 +1895,43 @@ class Application {
         cl_int br = rows / BLOCK_SIZE - 1;
         cl_int bc = i;
         size_t global = BLOCK_SIZE * (((cols - 1) / BLOCK_SIZE - bc + 1) / 2);
-        status = clSetKernelArg(kernel_diamonds_indirectS_prefetch, 6, cl_int.sizeof, &br);                                             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
-        status = clSetKernelArg(kernel_diamonds_indirectS_prefetch, 7, cl_int.sizeof, &bc);                                             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
-        status = clEnqueueNDRangeKernel(runtime.queue, kernel_diamonds_indirectS_prefetch, 1, null, &global, &wgroup, 0, null, &event); assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
-        status = clWaitForEvents(1, &event);                                                                                   assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_rhomboid_indirectS_prefetch, 6, cl_int.sizeof, &br);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_rhomboid_indirectS_prefetch, 7, cl_int.sizeof, &bc);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch" ~ cl_strerror(status));
+        status = clEnqueueNDRangeKernel(runtime.queue, kernel_rhomboid_indirectS_prefetch, 1, null, &global, &wgroup, 0, null, &event);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch" ~ cl_strerror(status));
+        status = clWaitForEvents(1, &event);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch" ~ cl_strerror(status));
 
         cl_ulong start_time;
         status = clGetEventProfilingInfo (event                     , // cl_event          event
                                           CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
                                           cl_ulong.sizeof           , // size_t            param_value_size
                                           &start_time               , // void*             param_value
-                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+                                          null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch" ~ cl_strerror(status));
         cl_ulong end_time;
         status = clGetEventProfilingInfo (event                     , // cl_event          event
                                           CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
                                           cl_ulong.sizeof           , // size_t            param_value_size
                                           &end_time                 , // void*             param_value
-                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+                                          null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch" ~ cl_strerror(status));
         result += (end_time - start_time) / 1E9;
       }
-      status = clEnqueueReadBuffer(runtime.queue, dF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr, 0, null, null);             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
-      status = clReleaseMemObject(dF);                                                                                         assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
-      status = clReleaseMemObject(dN);                                                                                         assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
-      status = clReleaseMemObject(dM);                                                                                         assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
-      status = clReleaseMemObject(dS);                                                                                         assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
-      status = clReleaseKernel(kernel_diamonds_indirectS_prefetch);                                                                     assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch" ~ cl_strerror(status));
+      status = clEnqueueReadBuffer(runtime.queue, dF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr, 0, null, null);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch" ~ cl_strerror(status));
+      status = clReleaseMemObject(dF);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch" ~ cl_strerror(status));
+      status = clReleaseMemObject(dN);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch" ~ cl_strerror(status));
+      status = clReleaseMemObject(dM);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch" ~ cl_strerror(status));
+      status = clReleaseMemObject(dS);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch" ~ cl_strerror(status));
+      status = clReleaseKernel(kernel_rhomboid_indirectS_prefetch);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch" ~ cl_strerror(status));
     }
     catch(Exception e)
     {
@@ -1705,7 +1943,7 @@ class Application {
 
   /**
    */
-  double opencl_diamonds_indirectS_prefetch_noconflicts()
+  double opencl_rhomboid_indirectS_prefetch_noconflicts()
   {
     double result = 0.0;
     try
@@ -1713,58 +1951,79 @@ class Application {
       cl_int status;
       cl_event event;
       cl_mem_flags flags = CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR;
-      cl_mem dS = clCreateBuffer(runtime.context, flags, cl_int.sizeof * BLOSUM62.length, BLOSUM62.ptr, &status);              assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
-      cl_mem dM = clCreateBuffer(runtime.context, flags, cl_int.sizeof * M.length, M.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
-      cl_mem dN = clCreateBuffer(runtime.context, flags, cl_int.sizeof * N.length, N.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
+      cl_mem dS = clCreateBuffer(runtime.context, flags, cl_int.sizeof * BLOSUM62.length, BLOSUM62.ptr, &status);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
+      cl_mem dM = clCreateBuffer(runtime.context, flags, cl_int.sizeof * M.length, M.ptr, &status);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
+      cl_mem dN = clCreateBuffer(runtime.context, flags, cl_int.sizeof * N.length, N.ptr, &status);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
       flags = CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR;
-      cl_mem dF = clCreateBuffer(runtime.context, flags, cl_int.sizeof * F.length, F.ptr, &status);                            assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_diamonds_indirectS_prefetch_noconflicts, 0, cl_mem.sizeof, &dS     );                                          assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_diamonds_indirectS_prefetch_noconflicts, 1, cl_mem.sizeof, &dM     );                                          assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_diamonds_indirectS_prefetch_noconflicts, 2, cl_mem.sizeof, &dN     );                                          assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_diamonds_indirectS_prefetch_noconflicts, 3, cl_mem.sizeof, &dF     );                                          assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_diamonds_indirectS_prefetch_noconflicts, 4, cl_int.sizeof, &cols   );                                          assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
-      status = clSetKernelArg(kernel_diamonds_indirectS_prefetch_noconflicts, 5, cl_int.sizeof, &penalty);                                          assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
+      cl_mem dF = clCreateBuffer(runtime.context, flags, cl_int.sizeof * F.length, F.ptr, &status);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rhomboid_indirectS_prefetch_noconflicts, 0, cl_mem.sizeof, &dS     );
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rhomboid_indirectS_prefetch_noconflicts, 1, cl_mem.sizeof, &dM     );
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rhomboid_indirectS_prefetch_noconflicts, 2, cl_mem.sizeof, &dN     );
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rhomboid_indirectS_prefetch_noconflicts, 3, cl_mem.sizeof, &dF     );
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rhomboid_indirectS_prefetch_noconflicts, 4, cl_int.sizeof, &cols   );
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_rhomboid_indirectS_prefetch_noconflicts, 5, cl_int.sizeof, &penalty);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
       size_t wgroup = BLOCK_SIZE;
       foreach (i; 0 .. rows / BLOCK_SIZE - 1)
       {
         cl_int br = i;
         cl_int bc = 1;
         size_t global = ((2 * i + bc) * BLOCK_SIZE < cols - 1) ? BLOCK_SIZE * (i + 1) : (cols - 1) / 2;
-        status = clSetKernelArg(kernel_diamonds_indirectS_prefetch_noconflicts, 6, cl_int.sizeof, &br);                                             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
-        status = clSetKernelArg(kernel_diamonds_indirectS_prefetch_noconflicts, 7, cl_int.sizeof, &bc);                                             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
-        status = clEnqueueNDRangeKernel(runtime.queue, kernel_diamonds_indirectS_prefetch_noconflicts, 1, null, &global, &wgroup, 0, null, &event); assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
-        status = clWaitForEvents(1, &event);                                                                                   assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_rhomboid_indirectS_prefetch_noconflicts, 6, cl_int.sizeof, &br);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_rhomboid_indirectS_prefetch_noconflicts, 7, cl_int.sizeof, &bc);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
+        status = clEnqueueNDRangeKernel(runtime.queue, kernel_rhomboid_indirectS_prefetch_noconflicts, 1, null, &global, &wgroup, 0, null, &event);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
+        status = clWaitForEvents(1, &event);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
 
         cl_ulong start_time;
         status = clGetEventProfilingInfo (event                     , // cl_event          event
                                           CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
                                           cl_ulong.sizeof           , // size_t            param_value_size
                                           &start_time               , // void*             param_value
-                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
+                                          null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
         cl_ulong end_time;
         status = clGetEventProfilingInfo (event                     , // cl_event          event
                                           CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
                                           cl_ulong.sizeof           , // size_t            param_value_size
                                           &end_time                 , // void*             param_value
-                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
+                                          null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
         result += (end_time - start_time) / 1E9;
         bc = 2;
         global = ((2 * i + bc) * BLOCK_SIZE < cols - 1) ? BLOCK_SIZE * (i + 1) : (cols - 1) / 2 - BLOCK_SIZE;
         if (global == 0) continue;
-        status = clSetKernelArg(kernel_diamonds_indirectS_prefetch_noconflicts, 7, cl_int.sizeof, &bc);                                             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
-        status = clEnqueueNDRangeKernel(runtime.queue, kernel_diamonds_indirectS_prefetch_noconflicts, 1, null, &global, &wgroup, 0, null, &event); assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
-        status = clWaitForEvents(1, &event);                                                                                   assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_rhomboid_indirectS_prefetch_noconflicts, 7, cl_int.sizeof, &bc);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
+        status = clEnqueueNDRangeKernel(runtime.queue, kernel_rhomboid_indirectS_prefetch_noconflicts, 1, null, &global, &wgroup, 0, null, &event);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
+        status = clWaitForEvents(1, &event);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
 
         status = clGetEventProfilingInfo (event                     , // cl_event          event
                                           CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
                                           cl_ulong.sizeof           , // size_t            param_value_size
                                           &start_time               , // void*             param_value
-                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
+                                          null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
         status = clGetEventProfilingInfo (event                     , // cl_event          event
                                           CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
                                           cl_ulong.sizeof           , // size_t            param_value_size
                                           &end_time                 , // void*             param_value
-                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
+                                          null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
         result += (end_time - start_time) / 1E9;
       }
       foreach (i; 1 .. cols / BLOCK_SIZE)
@@ -1772,34 +2031,45 @@ class Application {
         cl_int br = rows / BLOCK_SIZE - 1;
         cl_int bc = i;
         size_t global = BLOCK_SIZE * (((cols - 1) / BLOCK_SIZE - bc + 1) / 2);
-        status = clSetKernelArg(kernel_diamonds_indirectS_prefetch_noconflicts, 6, cl_int.sizeof, &br);                                             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
-        status = clSetKernelArg(kernel_diamonds_indirectS_prefetch_noconflicts, 7, cl_int.sizeof, &bc);                                             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
-        status = clEnqueueNDRangeKernel(runtime.queue, kernel_diamonds_indirectS_prefetch_noconflicts, 1, null, &global, &wgroup, 0, null, &event); assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
-        status = clWaitForEvents(1, &event);                                                                                   assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_rhomboid_indirectS_prefetch_noconflicts, 6, cl_int.sizeof, &br);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
+        status = clSetKernelArg(kernel_rhomboid_indirectS_prefetch_noconflicts, 7, cl_int.sizeof, &bc);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
+        status = clEnqueueNDRangeKernel(runtime.queue, kernel_rhomboid_indirectS_prefetch_noconflicts, 1, null, &global, &wgroup, 0, null, &event);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
+        status = clWaitForEvents(1, &event);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
 
         cl_ulong start_time;
         status = clGetEventProfilingInfo (event                     , // cl_event          event
                                           CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
                                           cl_ulong.sizeof           , // size_t            param_value_size
                                           &start_time               , // void*             param_value
-                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
+                                          null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
         cl_ulong end_time;
         status = clGetEventProfilingInfo (event                     , // cl_event          event
                                           CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
                                           cl_ulong.sizeof           , // size_t            param_value_size
                                           &end_time                 , // void*             param_value
-                                          null                     ); /* size_t*           param_value_size_ret */             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
+                                          null                     ); /* size_t*           param_value_size_ret */
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
         result += (end_time - start_time) / 1E9;
       }
-      status = clEnqueueReadBuffer(runtime.queue, dF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr, 0, null, null);             assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
-      status = clReleaseMemObject(dF);                                                                                         assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
-      status = clReleaseMemObject(dN);                                                                                         assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
-      status = clReleaseMemObject(dM);                                                                                         assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
-      status = clReleaseMemObject(dS);                                                                                         assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
+      status = clEnqueueReadBuffer(runtime.queue, dF, CL_TRUE, 0, cl_int.sizeof * F.length, F.ptr, 0, null, null);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
+      status = clReleaseMemObject(dF);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
+      status = clReleaseMemObject(dN);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
+      status = clReleaseMemObject(dM);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
+      status = clReleaseMemObject(dS);
+      assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
       if (!do_multirun)
       {
-        status = clReleaseKernel(kernel_diamonds_indirectS_prefetch_noconflicts);
-        assert(status == CL_SUCCESS, "opencl_diamonds_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
+        status = clReleaseKernel(kernel_rhomboid_indirectS_prefetch_noconflicts);
+        assert(status == CL_SUCCESS, "opencl_rhomboid_indirectS_prefetch_noconflicts" ~ cl_strerror(status));
       }
     }
     catch(Exception e)
@@ -1883,14 +2153,14 @@ class Application {
     if (do_animate)
     {
       reset();
-      rectangles();
-      writefln("%2.0f MI RECTANGLES", (rows - 1) * (cols - 1) / (1024.0 * 1024.0));
+      rectangle();
+      writefln("%2.0f MI RECTANGLE", (rows - 1) * (cols - 1) / (1024.0 * 1024.0));
       history.save_animation();
       validate();
 
       reset();
-      diamonds();
-      writefln("%2.0f MI DIAMONDS", (rows - 1) * (cols - 1) / (1024.0 * 1024.0));
+      rhomboid();
+      writefln("%2.0f MI RHOMBOID", (rows - 1) * (cols - 1) / (1024.0 * 1024.0));
       history.save_animation();
       validate();
       run_once = false;
@@ -1924,7 +2194,7 @@ class Application {
     reset();
     timer.reset();
     timer.start();
-    time = opencl_rectangles();
+    time = opencl_rectangle();
     timer.stop();
     ticks = timer.peek();
     writefln("%2.0f MI CL SQUARES  %5.3f (%5.3f) [s], %7.2f MI/s",
@@ -1936,7 +2206,7 @@ class Application {
     reset();
     timer.reset();
     timer.start();
-    time = opencl_rectangles_indirectS();
+    time = opencl_rectangle_indirectS();
     timer.stop();
     ticks = timer.peek();
     writefln("%2.0f MI CL SQ INDI  %5.3f (%5.3f) [s], %7.2f MI/s",
@@ -1948,10 +2218,10 @@ class Application {
     reset();
     timer.reset();
     timer.start();
-    time = opencl_diamonds();
+    time = opencl_rhomboid();
     timer.stop();
     ticks = timer.peek();
-    writefln("%2.0f MI CL DIAMONDS %5.3f (%5.3f) [s], %7.2f MI/s",
+    writefln("%2.0f MI CL RHOMBOID %5.3f (%5.3f) [s], %7.2f MI/s",
               (rows - 1) * (cols - 1) / (1024.0 * 1024.0),
               ticks.usecs / 1E6, time,
               (rows - 1) * (cols - 1) / (1024 * 1024 * time));
@@ -1960,7 +2230,7 @@ class Application {
     reset();
     timer.reset();
     timer.start();
-    time = opencl_diamonds_noconflicts();
+    time = opencl_rhomboid_noconflicts();
     timer.stop();
     ticks = timer.peek();
     writefln("%2.0f MI CL DIAMO NC %5.3f (%5.3f) [s], %7.2f MI/s",
@@ -1972,7 +2242,7 @@ class Application {
     reset();
     timer.reset();
     timer.start();
-    time = opencl_diamonds_indirectS();
+    time = opencl_rhomboid_indirectS();
     timer.stop();
     ticks = timer.peek();
     writefln("%2.0f MI CL DS INDI  %5.3f (%5.3f) [s], %7.2f MI/s",
@@ -1984,7 +2254,7 @@ class Application {
     reset();
     timer.reset();
     timer.start();
-    time = opencl_diamonds_indirectS_noconflicts();
+    time = opencl_rhomboid_indirectS_noconflicts();
     timer.stop();
     ticks = timer.peek();
     writefln("%2.0f MI CL DS IN NC %5.3f (%5.3f) [s], %7.2f MI/s",
@@ -1996,7 +2266,7 @@ class Application {
     reset();
     timer.reset();
     timer.start();
-    time = opencl_diamonds_indirectS_prefetch();
+    time = opencl_rhomboid_indirectS_prefetch();
     timer.stop();
     ticks = timer.peek();
     writefln("%2.0f MI CL DS IN P  %5.3f (%5.3f) [s], %7.2f MI/s",
@@ -2008,13 +2278,13 @@ class Application {
     reset();
     if (do_multirun)
     {
-      opencl_diamonds_indirectS_prefetch_noconflicts();
+      opencl_rhomboid_indirectS_prefetch_noconflicts();
       do_multirun = false;
     }
     reset();
     timer.reset();
     timer.start();
-    time = opencl_diamonds_indirectS_prefetch_noconflicts();
+    time = opencl_rhomboid_indirectS_prefetch_noconflicts();
     timer.stop();
     ticks = timer.peek();
     writefln("%2.0f MI CL DSINPNC  %5.3f (%5.3f) [s], %7.2f MI/s",
