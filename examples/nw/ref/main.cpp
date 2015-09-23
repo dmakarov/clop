@@ -88,7 +88,7 @@ class Application {
 
 public:
 
-  Application(int argc, char** argv) : setup{"Kernels.cl", {"nw1", "nw2", "rhombus"}}
+  Application(int argc, char** argv) : setup{"Kernels.cl", {"nw1", "nw2", "rhombus", "rhomboid"}}
   {
     cl_uint platform = 0;
     cl_uint device = 0;
@@ -145,7 +145,11 @@ public:
     compute_scores_serial();
     compute_scores_device();
     validate_results();
+    reset();
     compute_scores_device_rhombus();
+    validate_results();
+    reset();
+    compute_scores_device_rhomboid();
     validate_results();
   }
 
@@ -201,6 +205,13 @@ private:
       cerr << "DIFFS " << diffs << endl;
   }
 
+  void reset()
+  {
+    for (int ii = 1; ii < rows; ++ii)
+      for (int jj = 1; jj < cols; ++jj)
+        F[I(ii, jj)] = 0;
+  }
+
   void compute_scores_device()
   {
     auto t1 = setup.gettime();
@@ -212,27 +223,25 @@ private:
     int offset_r = 0, offset_c = 0; // these two parameters are for extension use, don't worry about it.
     int block_width = worksize / BLOCK ;
 
-    clSetKernelArg(kernels[0],  0, sizeof(cl_mem)                            , &S_d        );
-    clSetKernelArg(kernels[0],  1, sizeof(cl_mem)                            , &F_d        );
-    clSetKernelArg(kernels[0],  2, sizeof(cl_int)                            , &cols       );
-    clSetKernelArg(kernels[0],  3, sizeof(cl_int)                            , &penalty    );
-    clSetKernelArg(kernels[0],  5, sizeof(cl_int)                            , &block_width);
-    clSetKernelArg(kernels[0],  6, sizeof(cl_int)                            , &worksize   );
-    clSetKernelArg(kernels[0],  7, sizeof(cl_int)                            , &offset_r   );
-    clSetKernelArg(kernels[0],  8, sizeof(cl_int)                            , &offset_c   );
-    clSetKernelArg(kernels[0],  9, sizeof(cl_int) * (BLOCK + 1) * (BLOCK + 1), nullptr);
-    clSetKernelArg(kernels[0], 10, sizeof(cl_int) * (BLOCK    ) * (BLOCK    ), nullptr);
+    clSetKernelArg(kernels[0], 0, sizeof(cl_mem)                            , &S_d        );
+    clSetKernelArg(kernels[0], 1, sizeof(cl_mem)                            , &F_d        );
+    clSetKernelArg(kernels[0], 2, sizeof(cl_int)                            , &cols       );
+    clSetKernelArg(kernels[0], 3, sizeof(cl_int)                            , &penalty    );
+    clSetKernelArg(kernels[0], 5, sizeof(cl_int)                            , &block_width);
+    clSetKernelArg(kernels[0], 6, sizeof(cl_int)                            , &offset_r   );
+    clSetKernelArg(kernels[0], 7, sizeof(cl_int)                            , &offset_c   );
+    clSetKernelArg(kernels[0], 8, sizeof(cl_int) * (BLOCK + 1) * (BLOCK + 1), nullptr);
+    clSetKernelArg(kernels[0], 9, sizeof(cl_int) * (BLOCK    ) * (BLOCK    ), nullptr);
 
-    clSetKernelArg(kernels[1],  0, sizeof(cl_mem)                            , &S_d        );
-    clSetKernelArg(kernels[1],  1, sizeof(cl_mem)                            , &F_d        );
-    clSetKernelArg(kernels[1],  2, sizeof(cl_int)                            , &cols       );
-    clSetKernelArg(kernels[1],  3, sizeof(cl_int)                            , &penalty    );
-    clSetKernelArg(kernels[1],  5, sizeof(cl_int)                            , &block_width);
-    clSetKernelArg(kernels[1],  6, sizeof(cl_int)                            , &worksize   );
-    clSetKernelArg(kernels[1],  7, sizeof(cl_int)                            , &offset_r   );
-    clSetKernelArg(kernels[1],  8, sizeof(cl_int)                            , &offset_c   );
-    clSetKernelArg(kernels[1],  9, sizeof(cl_int) * (BLOCK + 1) * (BLOCK + 1), nullptr);
-    clSetKernelArg(kernels[1], 10, sizeof(cl_int) * (BLOCK    ) * (BLOCK    ), nullptr);
+    clSetKernelArg(kernels[1], 0, sizeof(cl_mem)                            , &S_d        );
+    clSetKernelArg(kernels[1], 1, sizeof(cl_mem)                            , &F_d        );
+    clSetKernelArg(kernels[1], 2, sizeof(cl_int)                            , &cols       );
+    clSetKernelArg(kernels[1], 3, sizeof(cl_int)                            , &penalty    );
+    clSetKernelArg(kernels[1], 5, sizeof(cl_int)                            , &block_width);
+    clSetKernelArg(kernels[1], 6, sizeof(cl_int)                            , &offset_r   );
+    clSetKernelArg(kernels[1], 7, sizeof(cl_int)                            , &offset_c   );
+    clSetKernelArg(kernels[1], 8, sizeof(cl_int) * (BLOCK + 1) * (BLOCK + 1), nullptr);
+    clSetKernelArg(kernels[1], 9, sizeof(cl_int) * (BLOCK    ) * (BLOCK    ), nullptr);
 
     size_t local_work  = BLOCK;
     for(int blk = 1 ; blk <= worksize / BLOCK; ++blk)
@@ -301,6 +310,39 @@ private:
     clReleaseMemObject(N_d);
     auto t2 = setup.gettime();
     cout << "DIAMONDS " << t2 - t1 << " s" << endl;
+  }
+
+  void compute_scores_device_rhomboid()
+  {
+    auto t1 = setup.gettime();
+    auto F_d = clCreateBuffer(context, CL_MEM_READ_WRITE, cols * rows * sizeof(int), nullptr, nullptr);
+    auto S_d = clCreateBuffer(context, CL_MEM_READ_ONLY, cols * rows * sizeof(int), nullptr, nullptr);
+    clEnqueueWriteBuffer(queue, F_d, CL_TRUE, 0, cols * rows * sizeof(int), F.get(), 0, nullptr, nullptr);
+    clEnqueueWriteBuffer(queue, S_d, CL_TRUE, 0, cols * rows * sizeof(int), S.get(), 0, nullptr, nullptr);
+    clSetKernelArg(kernels[3], 0, sizeof(cl_mem), &S_d);
+    clSetKernelArg(kernels[3], 1, sizeof(cl_mem), &F_d);
+    clSetKernelArg(kernels[3], 2, sizeof(cl_int), &cols);
+    clSetKernelArg(kernels[3], 3, sizeof(cl_int), &penalty);
+    size_t max_blocks = (cols - 1) / (2 * BLOCK) + 1;
+    size_t local_work = BLOCK;
+    for (int i = 0; i < (2 * (rows - 1) + (cols - 1)) / BLOCK - 1; ++i)
+    {
+      size_t num_blocks = i / 2 + 1;
+      if (num_blocks >= max_blocks)
+      {
+        auto start = max(0, 1 + (i - 2 * (cols - 1) / BLOCK + 1) * BLOCK);
+        num_blocks = start ? (cols - start + BLOCK) / (2 * BLOCK)
+                           : (cols - 1 + (2 - (i & 1)) * BLOCK) / (2 * BLOCK);
+      }
+      size_t global_work = num_blocks * BLOCK;
+      clSetKernelArg(kernels[3], 4, sizeof(cl_int), &i);
+      clEnqueueNDRangeKernel(queue, kernels[3], 1, nullptr, &global_work, &local_work, 0, nullptr, nullptr);
+    }
+    clEnqueueReadBuffer(queue, F_d, CL_TRUE, 0, cols * rows * sizeof(int), F.get(), 0, nullptr, nullptr);
+    clReleaseMemObject(S_d);
+    clReleaseMemObject(F_d);
+    auto t2 = setup.gettime();
+    cout << "RHOMBOID " << t2 - t1 << " s" << endl;
   }
 };
 
