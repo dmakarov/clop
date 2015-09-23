@@ -95,7 +95,7 @@ struct Program
   string suffix;           ///
 
   string indent = "            ";
-  string block_size = "16"; ///
+  string block_size = "32"; ///
   bool use_shadow = false; ///
   string kernel_parameter_list_code;
   string kernel_set_args_code;
@@ -194,10 +194,8 @@ struct Program
     auto bx = CLOP.decimateTree(CLOP.Declaration(format("int bx = get_group_id(0);")));
     auto bs = CLOP.decimateTree(CLOP.Declaration(format("int bsz = get_local_size(0);")));
     auto nb = CLOP.decimateTree(CLOP.Declaration(format("int nbs = (%s) / bsz;", interval_height)));
-    auto d0 = CLOP.decimateTree(CLOP.Declaration(format("int %s0 = (diagonal < nbs ? diagonal - bx : nbs - bx - %s) * bsz + %s;",
-                                                        range.symbols[0], range.intervals[1].get_min(), range.intervals[1].get_min())));
-    auto d1 = CLOP.decimateTree(CLOP.Declaration(format("int %s0 = (diagonal < nbs ? bx : diagonal - nbs + bx + %s) * bsz + %s;",
-                                                        range.symbols[1], range.intervals[1].get_min(), range.intervals[1].get_min())));
+    auto d0 = CLOP.decimateTree(CLOP.Declaration(format("int %s0 = (diagonal < nbs ? diagonal - bx : nbs - bx - %s) * bsz + %s;", range.symbols[0], range.intervals[1].get_min(), range.intervals[1].get_min())));
+    auto d1 = CLOP.decimateTree(CLOP.Declaration(format("int %s0 = (diagonal < nbs ? bx : diagonal - nbs + bx + %s) * bsz + %s;", range.symbols[1], range.intervals[1].get_min(), range.intervals[1].get_min())));
     auto s = CLOP.decimateTree(CLOP.Statement(format(q{
             for (int i = 0; i < 2 * bsz - 1; ++i)
             {
@@ -205,13 +203,14 @@ struct Program
               {
                 %s = i < bsz ? %s0 + i - tx : %s0     + bsz - 1 - tx;
                 %s = i < bsz ? %s0     + tx : %s0 + i - bsz + 1 + tx;
-                // fill in the index computations
               }
               barrier(CLK_LOCAL_MEM_FENCE);
             }}, range.symbols[0], range.symbols[0], range.symbols[0],
                   range.symbols[1], range.symbols[1], range.symbols[1])));
-    //loop stmt   for stmt    stmt        compound    stmt list   stmt        if stmt     stmt        comp stmt   stmt list
-    s.children[0].children[0].children[4].children[0].children[0].children[0].children[0].children[1].children[0].children[0].children ~= t.children[0].children[$ - 1];
+    auto loop_body = s.children[0].children[0].children[4];
+    auto stmt_one = loop_body.children[0].children[0].children[0];
+    auto then_part = stmt_one.children[0].children[1];
+    then_part.children[0].children[0].children ~= t.children[0].children[$ - 1];
     t.children[0].children = t.children[0].children[0 .. $ - 1] ~ [tx, bx, bs, nb, d0, d1, s];
     return t;
   }
@@ -226,30 +225,42 @@ struct Program
     }
     auto interval_height= format("(%s) - (%s)", range.intervals[0].get_max(), range.intervals[0].get_min());
     auto interval_width = format("(%s) - (%s)", range.intervals[1].get_max(), range.intervals[1].get_min());
-    range_finish = format("((%s) + (%s)) / (%s) - 1", interval_height, interval_width, block_size);
+    range_finish = format("(2 * (%s) + (%s)) / (%s) - 1", interval_height, interval_width, block_size);
     local_work_size = format("(%s)", block_size);
-    global_work_size= format("(%s) * (i + 1) < (%s) ? (%s) * (i + 1) : (%s) + (%s) - (%s) * (i + 1)",
-                             block_size, interval_height, block_size, interval_height, interval_width, block_size);
-    additional_arguments = format("clSetKernelArg(%s, %s, cl_int.sizeof, &i);", kernel_object, parameters[$ - 1].number);
+    global_work_size= format("(%s)", block_size);
+    auto num_blocks = format(q{
+        size_t max_blocks = (%s) / (2 * (%s)) + 1;
+        size_t num_blocks = i / 2 + 1;
+        if (num_blocks >= max_blocks)
+        {
+          auto start = max(0, (%s) + (i - 2 * (%s) / (%s) + 1) * (%s));
+          num_blocks = start ? ((%s) - start + (%s)) / (2 * (%s))
+                             : ((%s) + (2 - (i & 1)) * (%s)) / (2 * (%s));
+        }
+        global_work_size *= num_blocks;
+      }, interval_width, block_size,
+         range.intervals[0].get_min(), interval_width, block_size, block_size,
+         range.intervals[0].get_max(), block_size, block_size,
+         interval_width, block_size, block_size);
+    additional_arguments = format("%sclSetKernelArg(%s, %s, cl_int.sizeof, &i);", num_blocks, kernel_object, parameters[$ - 1].number);
     auto tx = CLOP.decimateTree(CLOP.Statement(format("tx = get_local_id(0);")));
     auto bx = CLOP.decimateTree(CLOP.Declaration(format("int bx = get_group_id(0);")));
     auto bs = CLOP.decimateTree(CLOP.Declaration(format("int bsz = get_local_size(0);")));
-    auto nb = CLOP.decimateTree(CLOP.Declaration(format("int nbs = (%s) / bsz;", interval_height)));
-    auto d0 = CLOP.decimateTree(CLOP.Declaration(format("int %s0 = (diagonal < nbs ? diagonal - bx : nbs - bx - %s) * bsz + %s;",
-                                                        range.symbols[0], range.intervals[1].get_min(), range.intervals[1].get_min())));
-    auto d1 = CLOP.decimateTree(CLOP.Declaration(format("int %s0 = (diagonal < nbs ? bx : diagonal - nbs + bx + %s) * bsz + %s;",
-                                                        range.symbols[1], range.intervals[1].get_min(), range.intervals[1].get_min())));
+    auto nb = CLOP.decimateTree(CLOP.Declaration(format("int nbs = 2 * (%s) / bsz;", interval_height)));
+    auto d0 = CLOP.decimateTree(CLOP.Declaration(format("int %s0 = diagonal < nbs ? (%s) - 1 + bsz * (1 - bx + diagonal / 2) - tx : (%s) - bsz * bx - tx;", range.symbols[0], range.intervals[1].get_min(), interval_height)));
+    auto d1 = CLOP.decimateTree(CLOP.Declaration(format("int %s0 = diagonal < nbs ? (%s) - ((diagonal + 1) & 1) * bsz + 2 * bx * bsz : (%s) + (diagonal + 1 - 2 * (%s) / bsz) * bsz + 2 * bx * bsz;", range.symbols[1], range.intervals[1].get_min(), range.intervals[1].get_min(), interval_width)));
     auto s = CLOP.decimateTree(CLOP.Statement(format(q{
-            for (int i = 0; i < 2 * bsz - 1; ++i)
-              if ((i < bsz && tx <= i) || (i >= bsz && tx < 2 * bsz - 1 - i))
-              {
-                %s = i < bsz ? %s0 + i - tx : %s0     + bsz - 1 - tx;
-                %s = i < bsz ? %s0     + tx : %s0 + i - bsz + 1 + tx;
-                // fill in the index computations
-              }}, range.symbols[0], range.symbols[0], range.symbols[0],
-                  range.symbols[1], range.symbols[1], range.symbols[1])));
-    //loop stmt   for stmt    stmt        if stmt     stmt        comp stmt
-    s.children[0].children[0].children[4].children[0].children[1].children[0].children[0].children ~= t.children[0].children[$ - 1];
+            for (int i = 0; i < bsz; ++i)
+            {
+              %s = %s0;
+              %s = %s0 + i;
+              if (0 < %s && %s < (%s)) {}
+              barrier(CLK_LOCAL_MEM_FENCE);
+            }}, range.symbols[0], range.symbols[0], range.symbols[1], range.symbols[1], range.symbols[1], range.symbols[1], range.intervals[1].get_max())));
+    auto loop_body = s.children[0].children[0].children[4];
+    auto if_statem = loop_body.children[0].children[0].children[2];
+    auto then_part = if_statem.children[0].children[1];
+    then_part.children[0] = t.children[0].children[$ - 1];
     t.children[0].children = t.children[0].children[0 .. $ - 1] ~ [tx, bx, bs, nb, d0, d1, s];
     return t;
   }
