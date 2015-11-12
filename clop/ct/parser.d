@@ -113,7 +113,7 @@ CLOP:
 # CLOP_Term:
  IdentifierList         <  Identifier (',' Identifier)*
  Identifier             <~ !Keyword [a-zA-Z_] [a-zA-Z0-9_]*
- Keyword                <- "NDRange" / "apply"
+ Keyword                <- "NDRange" / "apply" / "popen" / "pclose" / "pipe"
                          / "auto" / "break" / "case" / "char" / "const" / "continue"
                          / "default" / "double" / "do" / "else" / "enum" / "extern"
                          / "float" / "for" / "goto" / "if" / "inline" / "int" / "long"
@@ -139,7 +139,7 @@ CLOP:
  Sign                   <- "-" / "+"
 
 # Local Variables:
-# mode: bison
+# mode: Fundamental
 # End:
 
 
@@ -2743,7 +2743,7 @@ struct GenericCLOP(TParseTree)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.keywords!("NDRange", "apply", "auto", "break", "case", "char", "const", "continue", "default", "double", "do", "else", "enum", "extern", "float", "for", "goto", "if", "inline", "int", "long", "register", "restrict", "return", "short", "signed", "sizeof", "static", "struct", "switch", "typedef", "union", "unsigned", "void", "volatile", "while"), "CLOP.Keyword")(p);
+            return         pegged.peg.defined!(pegged.peg.keywords!("NDRange", "apply", "popen", "pclose", "pipe", "auto", "break", "case", "char", "const", "continue", "default", "double", "do", "else", "enum", "extern", "float", "for", "goto", "if", "inline", "int", "long", "register", "restrict", "return", "short", "signed", "sizeof", "static", "struct", "switch", "typedef", "union", "unsigned", "void", "volatile", "while"), "CLOP.Keyword")(p);
         }
         else
         {
@@ -2751,7 +2751,7 @@ struct GenericCLOP(TParseTree)
                 return *m;
             else
             {
-                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.keywords!("NDRange", "apply", "auto", "break", "case", "char", "const", "continue", "default", "double", "do", "else", "enum", "extern", "float", "for", "goto", "if", "inline", "int", "long", "register", "restrict", "return", "short", "signed", "sizeof", "static", "struct", "switch", "typedef", "union", "unsigned", "void", "volatile", "while"), "CLOP.Keyword"), "Keyword")(p);
+                TParseTree result = hooked!(pegged.peg.defined!(pegged.peg.keywords!("NDRange", "apply", "popen", "pclose", "pipe", "auto", "break", "case", "char", "const", "continue", "default", "double", "do", "else", "enum", "extern", "float", "for", "goto", "if", "inline", "int", "long", "register", "restrict", "return", "short", "signed", "sizeof", "static", "struct", "switch", "typedef", "union", "unsigned", "void", "volatile", "while"), "CLOP.Keyword"), "Keyword")(p);
                 memo[tuple(`Keyword`,p.end)] = result;
                 return result;
             }
@@ -2762,12 +2762,12 @@ struct GenericCLOP(TParseTree)
     {
         if(__ctfe)
         {
-            return         pegged.peg.defined!(pegged.peg.keywords!("NDRange", "apply", "auto", "break", "case", "char", "const", "continue", "default", "double", "do", "else", "enum", "extern", "float", "for", "goto", "if", "inline", "int", "long", "register", "restrict", "return", "short", "signed", "sizeof", "static", "struct", "switch", "typedef", "union", "unsigned", "void", "volatile", "while"), "CLOP.Keyword")(TParseTree("", false,[], s));
+            return         pegged.peg.defined!(pegged.peg.keywords!("NDRange", "apply", "popen", "pclose", "pipe", "auto", "break", "case", "char", "const", "continue", "default", "double", "do", "else", "enum", "extern", "float", "for", "goto", "if", "inline", "int", "long", "register", "restrict", "return", "short", "signed", "sizeof", "static", "struct", "switch", "typedef", "union", "unsigned", "void", "volatile", "while"), "CLOP.Keyword")(TParseTree("", false,[], s));
         }
         else
         {
             memo = null;
-            return hooked!(pegged.peg.defined!(pegged.peg.keywords!("NDRange", "apply", "auto", "break", "case", "char", "const", "continue", "default", "double", "do", "else", "enum", "extern", "float", "for", "goto", "if", "inline", "int", "long", "register", "restrict", "return", "short", "signed", "sizeof", "static", "struct", "switch", "typedef", "union", "unsigned", "void", "volatile", "while"), "CLOP.Keyword"), "Keyword")(TParseTree("", false,[], s));
+            return hooked!(pegged.peg.defined!(pegged.peg.keywords!("NDRange", "apply", "popen", "pclose", "pipe", "auto", "break", "case", "char", "const", "continue", "default", "double", "do", "else", "enum", "extern", "float", "for", "goto", "if", "inline", "int", "long", "register", "restrict", "return", "short", "signed", "sizeof", "static", "struct", "switch", "typedef", "union", "unsigned", "void", "volatile", "while"), "CLOP.Keyword"), "Keyword")(TParseTree("", false,[], s));
         }
     }
     static string Keyword(GetName g)

@@ -155,7 +155,7 @@ scope Symbols; // entire file is a scope
  *  Remember: the goal is to avoid backtrack like the plague
  *  because it makes debugging, actions, and errors harder.
  *
- *  Note that k=1 results in a much smaller predictor for the 
+ *  Note that k=1 results in a much smaller predictor for the
  *  fixed lookahead; k=2 made a few extra thousand lines. ;)
  *  I'll have to optimize that in the future.
  */
@@ -663,10 +663,7 @@ LINE_COMMENT
     ;
 
 // ignore #line info for now
-LINE_COMMAND 
+LINE_COMMAND
     : '#' ~('\n'|'\r')* '\r'? '\n' {$channel=HIDDEN;}
     ;
-
-
-
 +/

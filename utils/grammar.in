@@ -110,7 +110,7 @@ CLOP:
 # CLOP_Term:
  IdentifierList         <  Identifier (',' Identifier)*
  Identifier             <~ !Keyword [a-zA-Z_] [a-zA-Z0-9_]*
- Keyword                <- "NDRange" / "apply"
+ Keyword                <- "NDRange" / "apply" / "popen" / "pclose" / "pipe"
                          / "auto" / "break" / "case" / "char" / "const" / "continue"
                          / "default" / "double" / "do" / "else" / "enum" / "extern"
                          / "float" / "for" / "goto" / "if" / "inline" / "int" / "long"
@@ -136,5 +136,5 @@ CLOP:
  Sign                   <- "-" / "+"
 
 # Local Variables:
-# mode: bison
+# mode: Fundamental
 # End:
