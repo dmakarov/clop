@@ -131,6 +131,11 @@ public:
 #endif
   }
 
+  cl_device_id get_device()
+  {
+    return device;
+  }
+
   cl_context get_context()
   {
     return context;

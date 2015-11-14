@@ -1,9 +1,10 @@
-// Other header files.
+#include <cassert>
 #include <algorithm>
-#include <assert.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <exception>
+#include <iostream>
+#include <memory>
+#include <random>
+#include <string>
 #include <unistd.h>
 
 #include "common.hpp"
@@ -17,51 +18,41 @@ class Application {
 
 public:
 
-  Application(int argc, char** argv) : outfile( NULL )
-                                     , rows( 100 )
-                                     , cols( 100000 )
-                                     , height( 200 )
+  Application(int argc, char** argv) : rows(100), cols(100000), height(200), setup{"Kernels.cl", {"pathfinder"}}
   {
+    cl_uint platform = 0;
+    cl_uint device = 0;
     int ch;
-    while ( ( ch = getopt( argc, argv, "d:o:p:" ) ) != -1 )
+    while ((ch = getopt(argc, argv, "d:p:")) != -1)
     {
-      switch ( ch )
+      switch (ch)
       {
-      case 'd': sscanf( optarg, "%d", device );   break;
-      case 'p': sscanf( optarg, "%d", platform ); break;
-      case 'o': cfg->outfile = optarg;            break;
-      default:  usage( argv );
+      case 'd': sscanf(optarg, "%d", &device);   break;
+      case 'p': sscanf(optarg, "%d", &platform); break;
+      default:  usage(argv[0]);
       }
     }
     argc -= optind;
     argv += optind;
-    if ( argc < 3 ) usage( argv );
-    cfg->cols   = atoi( argv[0] );
-    cfg->rows   = atoi( argv[1] );
-    cfg->height = atoi( argv[2] );
+    if (argc < 3) usage(argv[0]);
+    rows   = atoi(argv[0]);
+    cols   = atoi(argv[1]);
+    height = atoi(argv[2]);
 
-    data = (int*) malloc( rows * cols * sizeof(int) );
-    wall = (int**) malloc( rows * sizeof(int*) );
-    result = (int*) malloc( cols * sizeof(int) );
-    srandom( SEED );
-    for ( int ii = 0; ii < rows; ++ii )
-    { // wall[n] is set to be the nth row of the data array.
-      wall[ii] = data + cols * ii;
-      for ( int jj = 0; jj < cols; ++jj )
-        wall[ii][jj] = random() % 10;
+    data.reset(new int[rows * cols]);
+    result.reset(new int[cols]);
+    uniform_int_distribution<unsigned> u(0, 10);
+    default_random_engine e;
+    for (int ii = 0; ii < rows; ++ii)
+    {
+      auto p = data.get() + cols * ii;
+      for (int jj = 0; jj < cols; ++jj)
+        p[jj] = u(e);
     }
-  }
-
-  string summary()
-  {
-    ss << "\"SEED='"   << SEED
-       << "',HALO='"   << HALO
-       << "',rows='"   << rows
-       << "',cols='"   << cols
-       << "',height='" << height
-       << "',Output='" << ( outfile ? outfile : "(null)" )
-       << "'\"";
-    return ss.str();
+    setup.reset(platform, device, "");
+    kernels = setup.get_kernels();
+    context = setup.get_context();
+    queue = setup.get_queue();
   }
 
   /**
@@ -69,49 +60,54 @@ public:
    **/
   void run()
   {
-    double t1 = gettime();
-    size_t gwsize = cfg->rows * cfg->cols;
-    size_t lwsize = cl->getWorkGroupSize( 0 );
-    if ( lwsize == 0 )
+    auto t1 = setup.gettime();
+    size_t gwsize = rows * cols;
+    size_t lwsize;
+    clGetKernelWorkGroupInfo(kernels[0], setup.get_device(), CL_KERNEL_WORK_GROUP_SIZE,
+                             sizeof(size_t), &lwsize, nullptr);
+    if (lwsize == 0)
     {
-      fprintf( stderr, "ERROR: max work group size is zero!\n" );
+      cerr << "ERROR: max work group size is zero!\n";
       abort();
     }
-    if ( lwsize > gwsize ) lwsize = gwsize;
+    if (lwsize > gwsize)
+    {
+      lwsize = gwsize;
+    }
     else
     {
-      size_t nthreads = lwsize;
-      for ( nthreads = lwsize; gwsize % nthreads != 0; --nthreads );    
+      auto nthreads = lwsize;
+      for (nthreads = lwsize; gwsize % nthreads != 0; --nthreads);
       lwsize = nthreads;
     }
-    double t2 = gettime();
-    *prep += t2 - t1;
     cl_mem result_d[2];
-    cl_mem wall_d = cl->createBuffer( CL_MEM_READ_ONLY  | CL_MEM_COPY_HOST_PTR, sizeof(int) * (gwsize - cfg->cols), cfg->data + cfg->cols );
-    result_d[0]   = cl->createBuffer( CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, sizeof(int) * cfg->cols           , cfg->data             );
-    result_d[1]   = cl->createBuffer( CL_MEM_READ_WRITE                       , sizeof(int) * cfg->cols           , NULL                  );
+    auto wall_d = clCreateBuffer(context, CL_MEM_READ_ONLY  | CL_MEM_COPY_HOST_PTR,
+                                 sizeof(int) * (gwsize - cols), data.get() + cols, nullptr);
+    result_d[0] = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
+                                 sizeof(int) * cols, data.get(), nullptr);
+    result_d[1] = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(int) * cols, nullptr, nullptr);
 
-    int src = 0;
-    for ( int height = 0 ; height < cfg->rows - 1; height += cfg->height )
+    auto src = 0;
+    for (auto h = 0; h < rows - 1; h += height)
     {
-      int iteration = min( cfg->height, cfg->rows - height - 1 );
-      int border = cfg->height * Config::HALO;
-      int halo = Config::HALO;
-      int dst = 1 - src;
+      auto iteration = min(height, rows - height - 1);
+      auto border = height * HALO;
+      auto halo = HALO;
+      auto dst = 1 - src;
 
-      cl->setKernelArg( 0,  0, sizeof(int)   , &iteration );
-      cl->setKernelArg( 0,  1, sizeof(cl_mem), &wall_d );
-      cl->setKernelArg( 0,  2, sizeof(cl_mem), &result_d[src] );
-      cl->setKernelArg( 0,  3, sizeof(cl_mem), &result_d[dst] );
-      cl->setKernelArg( 0,  4, sizeof(int)   , &cfg->cols );
-      cl->setKernelArg( 0,  5, sizeof(int)   , &cfg->rows );
-      cl->setKernelArg( 0,  6, sizeof(int)   , &height );
-      cl->setKernelArg( 0,  7, sizeof(int)   , &border );
-      cl->setKernelArg( 0,  8, sizeof(int)   , &halo );
-      cl->setKernelArg( 0,  9, sizeof(int) * lwsize, NULL );
-      cl->setKernelArg( 0, 10, sizeof(int) * lwsize, NULL );
+      clSetKernelArg(kernels[0],  0, sizeof(int)   , &iteration);
+      clSetKernelArg(kernels[0],  1, sizeof(cl_mem), &wall_d);
+      clSetKernelArg(kernels[0],  2, sizeof(cl_mem), &result_d[src]);
+      clSetKernelArg(kernels[0],  3, sizeof(cl_mem), &result_d[dst]);
+      clSetKernelArg(kernels[0],  4, sizeof(int)   , &cols);
+      clSetKernelArg(kernels[0],  5, sizeof(int)   , &rows);
+      clSetKernelArg(kernels[0],  6, sizeof(int)   , &height);
+      clSetKernelArg(kernels[0],  7, sizeof(int)   , &border);
+      clSetKernelArg(kernels[0],  8, sizeof(int)   , &halo);
+      clSetKernelArg(kernels[0],  9, sizeof(int) * lwsize, nullptr);
+      clSetKernelArg(kernels[0], 10, sizeof(int) * lwsize, nullptr);
 
-      cl->enqueueNDRangeKernel( 0, 1, NULL, &gwsize, &lwsize, 0, NULL, NULL );
+      clEnqueueNDRangeKernel(queue, kernels[0], 1, nullptr, &gwsize, &lwsize, 0, nullptr, nullptr);
 
       src = dst;
     }
@@ -126,36 +122,33 @@ public:
     // 0                     - number of events in wait list
     // NULL                  - event wait list
     // &event                - event object for profiling data access
-    cl->enqueueReadBuffer( result_d[src], CL_TRUE, 0, sizeof(int) * cfg->cols, cfg->result, 0, NULL, NULL );
+    clEnqueueReadBuffer(queue, result_d[src], CL_TRUE, 0, sizeof(int) * cols, result.get(), 0, nullptr, nullptr);
 
-    cl->releaseMemObject( wall_d );
-    cl->releaseMemObject( result_d[0] );
-    cl->releaseMemObject( result_d[1] );
-
-    t1 = gettime();
-    if ( NULL != cfg->outfile )
-    {
-      FILE *fp = fopen( cfg->outfile, "w" );
-      for ( int t = 0; t < cfg->cols; ++t )
-        fprintf( fp, "%d %d\n", cfg->data[t], cfg->result[t] );
-      fclose( fp );
-    }
-    t2 = gettime();
-    *prep += t2 - t1;
+    clReleaseMemObject(wall_d);
+    clReleaseMemObject(result_d[0]);
+    clReleaseMemObject(result_d[1]);
+    auto t2 = setup.gettime();
+    cout << "TIME " << t2 - t1 << endl;
   }
 
 private:
 
-  int **wall, *data, *result;
+  unique_ptr<int[]> data;
+  unique_ptr<int[]> result;
   int rows, cols, height;
-  stringstream ss;
+
+  cl_context context;
+  cl_command_queue queue;
+  vector<cl_kernel> kernels;
+  clop_examples_common setup;
 
   void usage(const char* name)
   {
-    cout << "Usage: " << name << " [-p <platform>] [-d <device>] [-o <outfile>] columns rows height\n"
-         << "  columns:  minimum number of centers allowed\n"
+    cout << "Usage: " << name << " [-p <platform>] [-d <device>] rows columns height\n"
          << "  rows:     maximum number of centers allowed\n"
+         << "  columns:  minimum number of centers allowed\n"
          << "  height:   dimension of each data point\n";
+    exit(EXIT_FAILURE);
   }
 
 };

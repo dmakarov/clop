@@ -97,8 +97,8 @@ public:
     {
       switch (ch)
       {
-      case 'p': sscanf(optarg, "%d", &platform); break;
       case 'd': sscanf(optarg, "%d", &device);   break;
+      case 'p': sscanf(optarg, "%d", &platform); break;
       default:  usage(argv);
       }
     }
