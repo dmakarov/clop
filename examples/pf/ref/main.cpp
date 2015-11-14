@@ -11,6 +11,15 @@
 
 using namespace std;
 
+/**
+ * run:
+ *  100 100000 20
+ *  200 100000 20
+ *  400 100000 20
+ *  800 100000 20
+ * 1600 100000 20
+ */
+
 class Application {
 
   static const unsigned SEED = 1;
@@ -18,7 +27,7 @@ class Application {
 
 public:
 
-  Application(int argc, char** argv) : rows(100), cols(100000), height(200), setup{"Kernels.cl", {"pathfinder"}}
+  Application(int argc, char** argv) : rows(100), cols(100000), height(20), setup{"Kernels.cl", {"pathfinder"}}
   {
     cl_uint platform = 0;
     cl_uint device = 0;
