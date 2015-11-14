@@ -26,7 +26,8 @@ class Application {
 
 public:
 
-  Application(int argc, char** argv) : rows(100), cols(100000), height(20), setup{"Kernels.cl", {"pathfinder"}}
+  Application(int argc, char** argv) : rows(100), cols(100000), height(20),
+                                       setup{"Kernels.cl", {"pathfinder"}}
   {
     cl_uint platform = 0;
     cl_uint device = 0;
