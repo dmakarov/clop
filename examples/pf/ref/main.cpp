@@ -12,18 +12,17 @@
 using namespace std;
 
 /**
- * run:
- *  100 100000 20
- *  200 100000 20
- *  400 100000 20
- *  800 100000 20
- * 1600 100000 20
+ *  possible command line options
+ *   100 100000 20
+ *   200 100000 20
+ *   400 100000 20
+ *   800 100000 20
+ *  1600 100000 20
  */
 
 class Application {
 
-  static const unsigned SEED = 1;
-  static const unsigned HALO = 3;  // halo width along one direction when advancing to the next iteration
+  static const unsigned HALO = 3; // halo width along one direction when advancing to the next iteration
 
 public:
 
@@ -41,9 +40,9 @@ public:
       default:  usage(argv[0]);
       }
     }
-    argc -= optind;
-    argv += optind;
-    if (argc < 3) usage(argv[0]);
+    if (argc - optind < 3)
+      usage(argv[0]);
+    argv  += optind;
     rows   = atoi(argv[0]);
     cols   = atoi(argv[1]);
     height = atoi(argv[2]);
@@ -52,10 +51,10 @@ public:
     result.reset(new int[cols]);
     uniform_int_distribution<unsigned> u(0, 10);
     default_random_engine e;
-    for (int ii = 0; ii < rows; ++ii)
+    for (auto ii = 0; ii < rows; ++ii)
     {
       auto p = data.get() + cols * ii;
-      for (int jj = 0; jj < cols; ++jj)
+      for (auto jj = 0; jj < cols; ++jj)
         p[jj] = u(e);
     }
     setup.reset(platform, device, "");
@@ -64,9 +63,6 @@ public:
     queue = setup.get_queue();
   }
 
-  /**
-   *
-   **/
   void run()
   {
     auto t1 = setup.gettime();
@@ -89,28 +85,28 @@ public:
       for (nthreads = lwsize; gwsize % nthreads != 0; --nthreads);
       lwsize = nthreads;
     }
-    cl_mem result_d[2];
-    auto wall_d = clCreateBuffer(context, CL_MEM_READ_ONLY  | CL_MEM_COPY_HOST_PTR,
+    cl_mem d_result[2];
+    auto d_wall = clCreateBuffer(context, CL_MEM_READ_ONLY  | CL_MEM_COPY_HOST_PTR,
                                  sizeof(int) * (gwsize - cols), data.get() + cols, nullptr);
-    result_d[0] = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
+    d_result[0] = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
                                  sizeof(int) * cols, data.get(), nullptr);
-    result_d[1] = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(int) * cols, nullptr, nullptr);
+    d_result[1] = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(int) * cols, nullptr, nullptr);
 
+    auto border = height * HALO;
+    auto halo = HALO;
     auto src = 0;
     for (auto h = 0; h < rows - 1; h += height)
     {
-      auto iteration = min(height, rows - height - 1);
-      auto border = height * HALO;
-      auto halo = HALO;
+      auto iteration = min(height, rows - h - 1);
       auto dst = 1 - src;
 
       clSetKernelArg(kernels[0],  0, sizeof(int)   , &iteration);
-      clSetKernelArg(kernels[0],  1, sizeof(cl_mem), &wall_d);
-      clSetKernelArg(kernels[0],  2, sizeof(cl_mem), &result_d[src]);
-      clSetKernelArg(kernels[0],  3, sizeof(cl_mem), &result_d[dst]);
+      clSetKernelArg(kernels[0],  1, sizeof(cl_mem), &d_wall);
+      clSetKernelArg(kernels[0],  2, sizeof(cl_mem), &d_result[src]);
+      clSetKernelArg(kernels[0],  3, sizeof(cl_mem), &d_result[dst]);
       clSetKernelArg(kernels[0],  4, sizeof(int)   , &cols);
       clSetKernelArg(kernels[0],  5, sizeof(int)   , &rows);
-      clSetKernelArg(kernels[0],  6, sizeof(int)   , &height);
+      clSetKernelArg(kernels[0],  6, sizeof(int)   , &h);
       clSetKernelArg(kernels[0],  7, sizeof(int)   , &border);
       clSetKernelArg(kernels[0],  8, sizeof(int)   , &halo);
       clSetKernelArg(kernels[0],  9, sizeof(int) * lwsize, nullptr);
@@ -131,11 +127,11 @@ public:
     // 0                     - number of events in wait list
     // NULL                  - event wait list
     // &event                - event object for profiling data access
-    clEnqueueReadBuffer(queue, result_d[src], CL_TRUE, 0, sizeof(int) * cols, result.get(), 0, nullptr, nullptr);
+    clEnqueueReadBuffer(queue, d_result[src], CL_TRUE, 0, sizeof(int) * cols, result.get(), 0, nullptr, nullptr);
 
-    clReleaseMemObject(wall_d);
-    clReleaseMemObject(result_d[0]);
-    clReleaseMemObject(result_d[1]);
+    clReleaseMemObject(d_wall);
+    clReleaseMemObject(d_result[0]);
+    clReleaseMemObject(d_result[1]);
     auto t2 = setup.gettime();
     cout << "TIME " << t2 - t1 << endl;
   }
