@@ -53,3 +53,7 @@ iso_ref_2space_1time_var_nosym( const int shape[3],
     }
   }
 }
+
+// Local Variables:
+// company-c-headers-path-user: ("../../include")
+// End:

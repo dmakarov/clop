@@ -360,3 +360,7 @@ int main(int argc, char** argv)
   }
   return EXIT_SUCCESS;
 }
+
+// Local Variables:
+// company-c-headers-path-user: ("../../include")
+// End:

@@ -429,3 +429,7 @@ int main(int argc, char* argv[])
   std::cout << "Done.\n";
   return 0;
 }
+
+// Local Variables:
+// company-c-headers-path-user: ("../../include")
+// End:

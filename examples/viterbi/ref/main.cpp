@@ -196,3 +196,7 @@ int main(int argc, char* argv[])
   return 0;
 }
 
+
+// Local Variables:
+// company-c-headers-path-user: ("../../include")
+// End:

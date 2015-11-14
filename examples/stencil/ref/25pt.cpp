@@ -59,3 +59,7 @@ iso_ref_8space_1time_var_axsym( const int shape[3],
     }
   }
 }
+
+// Local Variables:
+// company-c-headers-path-user: ("../../include")
+// End:

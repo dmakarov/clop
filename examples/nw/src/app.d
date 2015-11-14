@@ -579,6 +579,7 @@ class Application {
       } /* nw_rhomboid_indirectS_noconflicts */
 
       /**
+       *
        */
       __kernel void
       nw_rhomboid_indirectS_prefetch(__global const int* S      , //
@@ -634,8 +635,7 @@ class Application {
         for (int k = 0; k < BLOCK_SIZE; ++k)
         {
           int nextX = N[cc - tx + k + 1];
-          t[y0 + k + 2] = max3(t[y1 + k] + s[y * CHARS + x],
-                               t[y1 + k + 1] - penalty, t[y0 + k + 1] - penalty);
+          t[y0 + k + 2] = max3(t[y1 + k] + s[y * CHARS + x], t[y1 + k + 1] - penalty, t[y0 + k + 1] - penalty);
           x = nextX;
           barrier(CLK_LOCAL_MEM_FENCE);
         }

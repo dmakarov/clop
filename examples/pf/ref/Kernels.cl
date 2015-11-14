@@ -1,3 +1,14 @@
+/***********************************************************************
+ * PathFinder uses dynamic programming to find a path on a 2-D grid from
+ * the bottom row to the top row with the smallest accumulated weights,
+ * where each step of the path moves straight ahead or diagonally ahead.
+ * It iterates row by row, each node picks a neighboring node in the
+ * previous row that has the smallest accumulated weight, and adds its
+ * own weight to the sum.
+ *
+ * This kernel uses the technique of ghost zone optimization
+ ***********************************************************************/
+
 #define IN_RANGE(x, min, max) ( (min) <= (x) && (x) <= (max) )
 
 __kernel void
