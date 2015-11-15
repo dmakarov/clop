@@ -26,7 +26,6 @@ module clop.examples.nw;
 
 import std.conv;
 import std.datetime;
-import std.getopt;
 import std.random;
 import std.stdio;
 
@@ -52,39 +51,35 @@ import clop.compiler;
  **/
 class Application {
   static immutable int HALO       =  2;
-  static immutable int SEED       =  1;
   static immutable int BLOCK_SIZE = 128;
 
   int[] data;
   int[] move;
   int[] sums;
   int[] gold;
-  int rows;
-  int cols;
+  uint rows;
+  uint cols;
   int height;
-  string outfile;
 
   cl_kernel kernel_noblocks;
   cl_kernel kernel_ghost_zone;
 
-  this( string[] args )
+  this(string[] args)
   {
-    getopt( args, "output|o", &outfile );
-    if ( args.length != 4 )
+    if (args.length != 4)
     {
-      throw new Exception( "ERROR: invalid args # " ~ to!(string)(args.length - 1) );
+      throw new Exception("ERROR: invalid arguments # " ~ to!(string)(args.length - 1));
     }
-    rows   = to!(int)( args[1] );
-    cols   = to!(int)( args[2] );
-    height = to!(int)( args[3] );
+    rows   = clp2(to!(uint)(args[1]));
+    cols   = clp2(to!(uint)(args[2]));
+    height = to!(int)(args[3]);
     data   = new int[rows * cols]; assert( null != data, "Can't allocate memory for data" );
     move   = new int[rows * cols]; assert( null != data, "Can't allocate memory for move" );
     sums   = new int[cols];        assert( null != sums, "Can't allocate memory for sums" );
     gold   = new int[cols];        assert( null != gold, "Can't allocate memory for gold" );
-    Mt19937 gen;
-    gen.seed( SEED );
-    foreach ( ref item; data )
-      item = uniform( 0, 10, gen );
+    Random gen;
+    foreach (ref item; data)
+      item = uniform(0, 10, gen);
 
     /**
      *
@@ -181,6 +176,20 @@ class Application {
   }
 
   /**
+   *  Round up to the next power of 2.
+   */
+  uint clp2(uint x)
+  {
+    x = x - 1;
+    x = x | (x >>  1);
+    x = x | (x >>  2);
+    x = x | (x >>  4);
+    x = x | (x >>  8);
+    x = x | (x >> 16);
+    return x + 1;
+  }
+
+  /**
    */
   void validate()
   {
@@ -199,30 +208,23 @@ class Application {
     sums[] = 0;
   }
 
-  void dump_data()
+  void dump()
   {
-    writeln( "-----------------------------------" );
-    foreach ( r; 0 .. rows )
+    auto of = File("pf.out", "w");
+    foreach (r; 0 .. rows)
     {
-      writef( "%2d:", r );
-      foreach ( c; 0 .. cols )
-        writef( " %1d", data[r * cols + c] );
-      writeln();
+      foreach (c; 0 .. cols)
+        of.write(data[r * cols + c]);
+      of.writeln();
     }
-    writeln( "-----------------------------------" );
-  }
-
-  void dump_move()
-  {
-    writeln( "---------------------------------------------------" );
-    foreach ( r; 0 .. rows - 1 )
+    of.write("  ", gold[0]);
+    foreach (c; 1 .. cols)
     {
-      writef( "%2d:", r + 1 );
-      foreach ( c; 0 .. cols )
-        writef( " %2d", move[r * cols + c] );
-      writeln();
+      of.writef(" %3d", gold[c]);
+      if (c % 16 == 15 && c + 1 != cols)
+        of.write("\n ");
     }
-    writeln( "---------------------------------------------------" );
+    of.writeln();
   }
 
   bool IN_RANGE( int x, int min, int max )
@@ -256,23 +258,24 @@ class Application {
     int[][2] results;
     results[0] = new int[cols];
     results[1] = new int[cols];
-    foreach ( c; 0 .. cols )
+    foreach (c; 0 .. cols)
       results[0][c] = data[c];
     int src = 0;
-    foreach ( r; 1 .. rows )
+    foreach (r; 1 .. rows)
     {
       auto dst = 1 - src;
-      foreach ( c; 0 .. cols )
+      foreach (c; 0 .. cols)
       {
         auto s = results[src][c];
-        auto w = ( c > 0        ) ? results[src][c - 1] : int.max;
-        auto e = ( c < cols - 1 ) ? results[src][c + 1] : int.max;
-        results[dst][c] = data[r * cols + c] + min3( w, s, e );
-        move[r * cols + c] = mov3( w, s, e );
+        auto w = (c > 0       ) ? results[src][c - 1] : int.max;
+        auto e = (c < cols - 1) ? results[src][c + 1] : int.max;
+        results[dst][c] = data[r * cols + c] + min3(w, s, e);
+        move[r * cols + c] = mov3(w, s, e);
       }
       src = dst;
     }
     gold[] = results[src][];
+    dump();
   }
 
   void ghost_zone_blocks()
@@ -281,34 +284,34 @@ class Application {
     results[0] = new int[BLOCK_SIZE + 2 * height];
     results[1] = new int[BLOCK_SIZE + 2 * height];
     int[] temp = new int[cols];
-    foreach ( c; 0 .. cols )
+    foreach (c; 0 .. cols)
       sums[c] = data[c];
-    for ( int r = 1; r < rows; r += height )
+    for (int r = 1; r < rows; r += height)
     {
-      for ( int block = 0; block < cols; block += BLOCK_SIZE )
+      for (int block = 0; block < cols; block += BLOCK_SIZE)
       {
-        foreach( k; -height .. BLOCK_SIZE + height )
-          if ( -1 < block + k && block + k < cols )
+        foreach (k; -height .. BLOCK_SIZE + height)
+          if (-1 < block + k && block + k < cols)
             results[0][height + k] = sums[block + k];
         int src = 0;
         int border = height - 1;
-        foreach ( step; r .. min( r + height, rows ) )
+        foreach (step; r .. min(r + height, rows))
         {
           auto dst = 1 - src;
-          foreach ( k; -border .. BLOCK_SIZE + border )
-            if ( -1 < block + k && block + k < cols )
+          foreach (k; -border .. BLOCK_SIZE + border)
+            if (-1 < block + k && block + k < cols)
             {
               auto c = block + k;
               auto s = results[src][height + k];
-              auto w = ( c > 0        ) ? results[src][height + k - 1] : int.max;
-              auto e = ( c < cols - 1 ) ? results[src][height + k + 1] : int.max;
-              results[dst][height + k] = data[step * cols + c] + min3( w, s, e );
-              move[step * cols + c] = mov3( w, s, e );
+              auto w = (c > 0       ) ? results[src][height + k - 1] : int.max;
+              auto e = (c < cols - 1) ? results[src][height + k + 1] : int.max;
+              results[dst][height + k] = data[step * cols + c] + min3(w, s, e);
+              move[step * cols + c] = mov3(w, s, e);
             }
           border -= 1;
           src = dst;
         }
-        foreach ( k; 0 .. BLOCK_SIZE )
+        foreach (k; 0 .. BLOCK_SIZE)
           temp[block + k] = results[src][height + k];
       }
       sums[] = temp[];
@@ -327,7 +330,7 @@ class Application {
     cl_mem ddata = clCreateBuffer( runtime.context, flags, cl_int.sizeof * data.length, data.ptr, &status );                assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
     flags = CL_MEM_WRITE_ONLY;
     cl_mem dmove = clCreateBuffer( runtime.context, flags, cl_int.sizeof * move.length, null, &status );                    assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
-    cl_mem dsums[2];
+    cl_mem[2] dsums;
     flags = CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR;
     dsums[0] = clCreateBuffer( runtime.context, flags, cl_int.sizeof * cols, sums.ptr, &status );                           assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
     flags = CL_MEM_READ_WRITE;
@@ -437,7 +440,7 @@ class Application {
     cl_mem ddata = clCreateBuffer( runtime.context, flags, cl_int.sizeof * data.length, data.ptr, &status );                assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
     flags = CL_MEM_WRITE_ONLY;
     cl_mem dmove = clCreateBuffer( runtime.context, flags, cl_int.sizeof * move.length, null, &status );                    assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
-    cl_mem dsums[2];
+    cl_mem[2] dsums;
     flags = CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR;
     dsums[0]  = clCreateBuffer( runtime.context, flags, cl_int.sizeof * cols, sums.ptr, &status );                          assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
     flags = CL_MEM_READ_WRITE;
@@ -638,25 +641,24 @@ class Application {
   }
 }
 
-int
-main( string[] args )
+int main(string[] args)
 {
   uint[] platforms = runtime.get_platforms();
-  for ( uint p = 0; p < platforms.length; ++p )
-    foreach ( d; 0 .. platforms[p] )
+  for (uint p = 0; p < platforms.length; ++p)
+    foreach (d; 1 .. platforms[p])
     {
       try
       {
-        runtime.init( p, d );
-        writeln( "==================================================" );
-        auto app = new Application( args );
+        runtime.init(p, d);
+        writeln("==================================================");
+        auto app = new Application(args);
         app.run();
-        writeln( "==================================================" );
+        writeln("==================================================");
         runtime.shutdown();
       }
-      catch ( Exception msg )
+      catch (Exception msg)
       {
-        writeln( "PF: ", msg );
+        writeln("PF: ", msg);
         return -1;
       }
     }

@@ -151,6 +151,15 @@ public:
     return kernels;
   }
 
+  size_t get_kernel_work_group_size(int index)
+  {
+    size_t size;
+    clGetKernelWorkGroupInfo(kernels[index], device,
+                             CL_KERNEL_WORK_GROUP_SIZE,
+                             sizeof(size_t), &size, nullptr);
+    return size;
+  }
+
   double gettime()
   {
 #ifdef __MACH__
@@ -302,5 +311,19 @@ private:
   }
 
 }; // clop_examples_common class
+
+/**
+ *  Round up to the next power of 2.
+ */
+static inline unsigned clp2(unsigned x)
+{
+  x = x - 1;
+  x = x | (x >>  1);
+  x = x | (x >>  2);
+  x = x | (x >>  4);
+  x = x | (x >>  8);
+  x = x | (x >> 16);
+  return x + 1;
+}
 
 #endif // CLOP_EXAMPLES_COMMON_HPP
