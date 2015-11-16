@@ -1,6 +1,7 @@
 #include <cassert>
 #include <algorithm>
 #include <exception>
+#include <iomanip>
 #include <iostream>
 #include <fstream>
 #include <memory>
@@ -51,7 +52,8 @@ public:
 
     data.reset(new int[rows * cols]);
     results.reset(new int[cols]);
-    default_random_engine e;
+    mt19937 e;
+    e.seed(1);
     uniform_int_distribution<unsigned> u(0, 9);
     for (auto ii = 0; ii < rows; ++ii)
     {
@@ -59,6 +61,7 @@ public:
       for (auto jj = 0; jj < cols; ++jj)
         p[jj] = u(e);
     }
+    copy_n(data.get(), cols, results.get());
     setup.reset(platform, device, "");
     kernels = setup.get_kernels();
     context = setup.get_context();
@@ -67,7 +70,6 @@ public:
 
   void run()
   {
-    auto t1 = setup.gettime();
     size_t gwsize = rows * cols;
     auto lwsize = setup.get_kernel_work_group_size(0);
     if (lwsize == 0)
@@ -85,32 +87,30 @@ public:
       for (nthreads = lwsize; gwsize % nthreads != 0; --nthreads);
       lwsize = nthreads;
     }
+    auto t1 = setup.gettime();
     cl_mem d_results[2];
-    auto d_wall = clCreateBuffer(context, CL_MEM_READ_ONLY  | CL_MEM_COPY_HOST_PTR,
-                                 sizeof(int) * (gwsize - cols), data.get() + cols, nullptr);
-    d_results[0] = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
-                                  sizeof(int) * cols, data.get(), nullptr);
+    auto flags = CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR;
+    auto d_data = clCreateBuffer(context, flags, sizeof(int) * rows * cols, data.get(), nullptr);
+    flags = CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR;
+    d_results[0] = clCreateBuffer(context, flags, sizeof(int) * cols, results.get(), nullptr);
     d_results[1] = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(int) * cols, nullptr, nullptr);
 
-    auto border = height * HALO;
-    auto halo = HALO;
     auto src = 0;
-    for (auto h = 0; h < rows - 1; h += height)
+    for (auto r = 1; r < rows; r += height)
     {
-      auto iteration = min(height, rows - h - 1);
+      auto steps = min(height, rows - r);
       auto dst = 1 - src;
 
-      clSetKernelArg(kernels[0],  0, sizeof(int)   , &iteration);
-      clSetKernelArg(kernels[0],  1, sizeof(cl_mem), &d_wall);
-      clSetKernelArg(kernels[0],  2, sizeof(cl_mem), &d_results[src]);
-      clSetKernelArg(kernels[0],  3, sizeof(cl_mem), &d_results[dst]);
-      clSetKernelArg(kernels[0],  4, sizeof(int)   , &cols);
-      clSetKernelArg(kernels[0],  5, sizeof(int)   , &rows);
-      clSetKernelArg(kernels[0],  6, sizeof(int)   , &h);
-      clSetKernelArg(kernels[0],  7, sizeof(int)   , &border);
-      clSetKernelArg(kernels[0],  8, sizeof(int)   , &halo);
-      clSetKernelArg(kernels[0],  9, sizeof(int) * lwsize, nullptr);
-      clSetKernelArg(kernels[0], 10, sizeof(int) * lwsize, nullptr);
+      clSetKernelArg(kernels[0], 0, sizeof(cl_mem), &d_data);
+      clSetKernelArg(kernels[0], 1, sizeof(cl_mem), &d_results[src]);
+      clSetKernelArg(kernels[0], 2, sizeof(cl_mem), &d_results[dst]);
+      clSetKernelArg(kernels[0], 3, sizeof(int)   , &rows);
+      clSetKernelArg(kernels[0], 4, sizeof(int)   , &cols);
+      clSetKernelArg(kernels[0], 5, sizeof(int)   , &height);
+      clSetKernelArg(kernels[0], 6, sizeof(int)   , &r);
+      clSetKernelArg(kernels[0], 7, sizeof(int)   , &steps);
+      clSetKernelArg(kernels[0], 8, sizeof(int) * (lwsize + 2), nullptr);
+      clSetKernelArg(kernels[0], 9, sizeof(int) * (lwsize + 2), nullptr);
 
       clEnqueueNDRangeKernel(queue, kernels[0], 1, nullptr, &gwsize, &lwsize, 0, nullptr, nullptr);
 
@@ -120,12 +120,11 @@ public:
     clEnqueueReadBuffer(queue, d_results[src], CL_TRUE, 0, sizeof(int) * cols,
                         results.get(), 0, nullptr, nullptr);
 
-    clReleaseMemObject(d_wall);
-    clReleaseMemObject(d_results[0]);
     clReleaseMemObject(d_results[1]);
+    clReleaseMemObject(d_results[0]);
+    clReleaseMemObject(d_data);
     auto t2 = setup.gettime();
     cout << "TIME " << t2 - t1 << endl;
-    dump();
   }
 
 private:
@@ -160,11 +159,11 @@ private:
           out << p[c];
         out << endl;
       }
-      out << "  " << results[0];
+      out << "  " << setw(3) << results[0];
       for (auto c = 1; c < cols; ++c)
       {
-        out << " " << results[c];
-        if (c % 32 == 31 && c + 1 != cols)
+        out << " " << setw(3) << results[c];
+        if (c % 16 == 15 && c + 1 != cols)
           out << endl << " ";
       }
       out << endl;

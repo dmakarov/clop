@@ -9,53 +9,59 @@
  * This kernel uses the technique of ghost zone optimization
  ***********************************************************************/
 
-#define IN_RANGE(x, min, max) ( (min) <= (x) && (x) <= (max) )
+#define MIN3(a, b, c) (((a) < (b)) ? ((a) < (c) ? (a) : (c)) : ((b) < (c) ? (b) : (c)))
 
 __kernel void
-pathfinder( int iteration, __global int *wall, __global int *src, __global int *dst, int cols, int rows, int step, int border, int HALO, __local int *prev, __local int *result )
+pathfinder(__global int* data  , //
+           __global int* src   , //
+           __global int* dst   , //
+                    int  rows  , //
+                    int  cols  , //
+                    int  height, //
+                    int  start , //
+                    int  steps , //
+           __local  int* prev  , //
+           __local  int* sums  ) //
 {
-  const int BLOCK_SIZE = get_local_size( 0 );
-  const int tx = get_local_id( 0 );
-  /**
-   * Each block finally computes result for a small block after N iterations.
-   * It is the non-overlapping small blocks that cover all the input data
-   **/
-  // calculate the small block size.
-  int small_block_cols = BLOCK_SIZE - ( iteration * HALO * 2 );
-  // calculate the boundary for the block according to the boundary of its small block
-  int blkX = ( small_block_cols * get_group_id( 0 ) ) - border;
-  int blkXmax = blkX + BLOCK_SIZE - 1;
-  // calculate the global thread coordination
-  int xidx = blkX + tx;
-  // effective range within this block that falls within
-  // the valid range of the input data
-  // used to rule out computation outside the boundary.
-  int validXmin = ( blkX < 0 ) ? -blkX : 0;
-  int validXmax = ( blkXmax > cols - 1 ) ? BLOCK_SIZE - 1 - ( blkXmax - cols + 1 ) : BLOCK_SIZE - 1;
-  int W = ( tx - 1 < validXmin ) ? validXmin : tx - 1;
-  int E = ( tx + 1 > validXmax ) ? validXmax : tx + 1;
-  bool isValid = IN_RANGE( tx, validXmin, validXmax );
-  if ( IN_RANGE( xidx, 0, cols - 1 ) ) prev[tx] = src[xidx];
+  const int BLOCK_SIZE = get_local_size(0) - 2 * (height - 1);
+  const int tx = get_local_id(0);
+  const int bx = get_group_id(0);
+  int block  = bx * BLOCK_SIZE;
+  /* Thread ids run from 0 to get_local_size(0).
+     The first height - 1 ids are outside the left side of
+     the block and the last height - 1 ids are outside the
+     right side of the block.  Thus k == block when tx == height - 1. */
+  int k = block + tx - (height - 1);
+  int n = get_local_size(0) + 1; // the last index in prev and sums
+  int m = block + BLOCK_SIZE + height - 1; // the last index in src
+  int x = tx + 1; // elements in prev and sums shifted to the
+  // right by one relative to thread ids,
+  // because we account for the outermost elements
 
-  barrier( CLK_LOCAL_MEM_FENCE );
-
-  bool computed;
-  for ( int i = 0; i < iteration; ++i )
-  {
-    computed = false;
-    if ( IN_RANGE( tx, i + 1, BLOCK_SIZE - i - 2 ) && isValid )
-    {
-      result[tx] = min( min( prev[W], prev[tx] ), prev[E] ) + wall[cols * ( step + i ) + xidx];
-      computed   = true;
-    }
-    barrier( CLK_LOCAL_MEM_FENCE );
-    // we are on the last iteration, and thus don't need to compute for the next step.
-    if ( i == iteration - 1 ) break;
-    if ( computed ) prev[tx] = result[tx]; // assign the computation range
-    barrier( CLK_LOCAL_MEM_FENCE );
+  // we need to initialize prev from src
+  if (tx == 0)
+  { // first load two outter most elements, that no thread is mapped to
+    if (0 < k   ) prev[0] = src[k - 1];
+    if (m < cols) prev[n] = src[m];
   }
-  // update the global memory
-  // after the last iteration, only threads coordinated within the
-  // small block perform the calculation and switch on "computed"
-  if ( computed ) dst[xidx] = result[tx];
+  // now each thread loads the element below it in src
+  if (-1 < k && k < cols) prev[x] = src[k];
+  barrier(CLK_LOCAL_MEM_FENCE);
+
+  for (int r = start; r < start + steps; ++r)
+  {
+    if (-1 < k && k < cols)
+    {
+      int s = prev[x];
+      int w = (k > 0       ) ? prev[x - 1] : INT_MAX;
+      int e = (k < cols - 1) ? prev[x + 1] : INT_MAX;
+      sums[x] = data[r * cols + k] + MIN3(w, s, e);
+    }
+    barrier(CLK_GLOBAL_MEM_FENCE);
+    prev[x] = sums[x];
+    barrier(CLK_LOCAL_MEM_FENCE);
+  }
+  // now save sums to dst
+  if (height - 1 < x && x < BLOCK_SIZE + height)
+    dst[k] = sums[x];
 }

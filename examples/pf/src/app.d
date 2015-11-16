@@ -77,27 +77,28 @@ class Application {
     move   = new int[rows * cols]; assert( null != data, "Can't allocate memory for move" );
     sums   = new int[cols];        assert( null != sums, "Can't allocate memory for sums" );
     gold   = new int[cols];        assert( null != gold, "Can't allocate memory for gold" );
-    Random gen;
+    Mt19937 e;
+    e.seed(1);
     foreach (ref item; data)
-      item = uniform(0, 10, gen);
+      item = uniform(0, 10, e);
 
     /**
      *
      *
      */
     char[] code = q{
-      #define MOV3( w, s, e ) ( ((w) < (s)) ? ((w) < (e) ?  1  : -1 ) : ((s) < (e) ?  0  :  -1) )
-      #define MIN3( a, b, c ) ( ((a) < (b)) ? ((a) < (c) ? (a) : (c)) : ((b) < (c) ? (b) : (c)) )
+      #define MIN3(a, b, c) (((a) < (b)) ? ((a) < (c) ? (a) : (c)) : ((b) < (c) ? (b) : (c)))
+      #define MOV3(w, s, e) (((w) < (s)) ? ((w) < (e) ?  1  : -1 ) : ((s) < (e) ?  0  :  -1))
 
       __kernel void
-      pf_noblocks( __global int* data, __global int* src, __global int* dst, __global int* move, int cols, int step )
+      pf_noblocks(__global int* data, __global int* src, __global int* dst, __global int* move, int cols, int step)
       {
-        const int tx = get_global_id( 0 );
+        const int tx = get_global_id(0);
         int s = src[tx];
-        int w = ( tx > 0        ) ? src[tx - 1] : INT_MAX;
-        int e = ( tx < cols - 1 ) ? src[tx + 1] : INT_MAX;
-        dst[tx] = data[step * cols + tx] + MIN3( w, s, e );
-        move[step * cols + tx] = MOV3( w, s, e );
+        int w = (tx > 0       ) ? src[tx - 1] : INT_MAX;
+        int e = (tx < cols - 1) ? src[tx + 1] : INT_MAX;
+        dst[tx] = data[step * cols + tx] + MIN3(w, s, e);
+        move[step * cols + tx] = MOV3(w, s, e);
       }
 
       /**
@@ -275,7 +276,6 @@ class Application {
       src = dst;
     }
     gold[] = results[src][];
-    dump();
   }
 
   void ghost_zone_blocks()
@@ -500,35 +500,35 @@ class Application {
       src = dst;
     }
 
-    status = clEnqueueReadBuffer( runtime.queue,
-                                  dsums[src],
-                                  CL_TRUE,
-                                  0,
-                                  cl_int.sizeof * cols,
-                                  sums.ptr,
-                                  0,
-                                  null,
-                                  null );
-    assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
-    status = clEnqueueReadBuffer( runtime.queue,
-                                  dmove,
-                                  CL_TRUE,
-                                  0,
-                                  cl_int.sizeof * rows * cols,
-                                  move.ptr,
-                                  0,
-                                  null,
-                                  null );
-    assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
+    status = clEnqueueReadBuffer(runtime.queue,
+                                 dsums[src],
+                                 CL_TRUE,
+                                 0,
+                                 cl_int.sizeof * cols,
+                                 sums.ptr,
+                                 0,
+                                 null,
+                                 null);
+    assert(status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror(status));
+    status = clEnqueueReadBuffer(runtime.queue,
+                                 dmove,
+                                 CL_TRUE,
+                                 0,
+                                 cl_int.sizeof * rows * cols,
+                                 move.ptr,
+                                 0,
+                                 null,
+                                 null);
+    assert(status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror(status));
 
-    status = clReleaseMemObject( dsums[1] );                                                                                assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
-    status = clReleaseMemObject( dsums[0] );                                                                                assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
-    status = clReleaseMemObject( dmove );                                                                                   assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
-    status = clReleaseMemObject( ddata );                                                                                   assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
-    if ( cleanup )
+    status = clReleaseMemObject(dsums[1]);                                                                                assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
+    status = clReleaseMemObject(dsums[0]);                                                                                assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
+    status = clReleaseMemObject(dmove);                                                                                   assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
+    status = clReleaseMemObject(ddata);                                                                                   assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
+    if (cleanup)
     {
-      status = clReleaseKernel( kernel_ghost_zone );
-      assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
+      status = clReleaseKernel(kernel_ghost_zone);
+      assert(status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror(status));
     }
     return result;
   }
@@ -645,7 +645,7 @@ int main(string[] args)
 {
   uint[] platforms = runtime.get_platforms();
   for (uint p = 0; p < platforms.length; ++p)
-    foreach (d; 1 .. platforms[p])
+    foreach (d; 0 .. platforms[p])
     {
       try
       {
