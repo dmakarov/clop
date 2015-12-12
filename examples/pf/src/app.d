@@ -50,9 +50,7 @@ import clop.compiler;
  * Here we use one matrix and overwrite it for each iteration of k.
  **/
 class Application {
-  static immutable int HALO       =  2;
   static immutable int BLOCK_SIZE = 128;
-
   int[] data;
   int[] move;
   int[] sums;
@@ -68,11 +66,21 @@ class Application {
   {
     if (args.length != 4)
     {
-      throw new Exception("ERROR: invalid arguments # " ~ to!(string)(args.length - 1));
+      throw new Exception("ERROR: invalid arguments # " ~ to!string(args.length - 1));
     }
     rows   = clp2(to!(uint)(args[1]));
     cols   = clp2(to!(uint)(args[2]));
     height = to!(int)(args[3]);
+    if (cols % BLOCK_SIZE != 0)
+    {
+      throw new Exception("ERROR: number of columns " ~ to!string(cols) ~
+                          " must be multiple of " ~ to!string(BLOCK_SIZE));
+    }
+    if (cols % height != 0)
+    {
+      throw new Exception("ERROR: number of columns " ~ to!string(cols) ~
+                          " must be divisible by height " ~ to!string(height));
+    }
     data   = new int[rows * cols]; assert( null != data, "Can't allocate memory for data" );
     move   = new int[rows * cols]; assert( null != data, "Can't allocate memory for move" );
     sums   = new int[cols];        assert( null != sums, "Can't allocate memory for sums" );

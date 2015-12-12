@@ -9,7 +9,7 @@
  * This kernel uses the technique of ghost zone optimization
  ***********************************************************************/
 
-#define MIN3(a, b, c) (((a) < (b)) ? ((a) < (c) ? (a) : (c)) : ((b) < (c) ? (b) : (c)))
+#define MIN3(a, b, c) (((b) < (a)) ? ((c) < (b) ? (c) : (b)) : ((c) < (a) ? (c) : (a)))
 
 __kernel void
 pathfinder(__global int* data  , //
