@@ -20,19 +20,19 @@
   arguments =32 10=, which means that the length of sequences to align is 32
   characters and the penalty value is 10.
 
-  All example applications can be built with verbose build type, e.g.
+  All example applications can be built with ~verbose~ build type, e.g.
 
 #+BEGIN_SRC sh
   $ dub run --build=verbose :nw -- 32 10
 #+END_SRC
 
-  With verbose build an application dumps the generated host- and device-side
+  With ~verbose~ build an application dumps the generated host- and device-side
   code.
 
   The example applications are
-  - [[file:examples/algebra/README.org][algebra]] :: simple linear algebra operations on vectors and matrices;
-  - [[file:examples/bp/README.org][bp]] :: back propagation step of a neural network;
-  - [[file:examples/lu/README.org][lu]] :: LU decomposition implementation;
-  - [[file:examples/nw/README.org][nw]] :: Needleman-Wunsch algorithm implementation;
-  - [[file:examples/pf/README.org][pf]] :: Path finder algorithm implementation;
-  - [[file:examples/stencil/README.org][stencil]] :: simple stencil computations.
+  - [[file:examples/algebra/README.org][algebra]] -- simple linear algebra operations on vectors and matrices;
+  - [[file:examples/bp/README.org][bp]] -- back propagation step of a neural network;
+  - [[file:examples/lu/README.org][lu]] -- LU decomposition implementation;
+  - [[file:examples/nw/README.org][nw]] -- Needleman-Wunsch algorithm implementation;
+  - [[file:examples/pf/README.org][pf]] -- Path finder algorithm implementation;
+  - [[file:examples/stencil/README.org][stencil]] -- simple stencil computations.
