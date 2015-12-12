@@ -1,11 +1,41 @@
-PathFinder uses dynamic programming to find a path on a 2-D grid from
-the bottom row to the top row with the smallest accumulated weights,
-where each step of the path moves straight ahead or diagonally ahead.
-It iterates row by row, each node picks a neighboring node in the
-previous row that has the smallest accumulated weight, and adds its
-own weight to the sum.
+* Description
 
-This kernel uses the technique of ghost zone optimization.
+  PathFinder uses dynamic programming to find a path on a 2-D grid from
+  the bottom row to the top row with the smallest accumulated weights,
+  where each step of the path moves straight ahead or diagonally ahead.
+  It iterates row by row, each node picks a neighboring node in the
+  previous row that has the smallest accumulated weight, and adds its
+  own weight to the sum.
+
+  The optimized implementation uses the ghost zone technique.  With ghost zone
+  the data elements located in the border zone of each block computed more than
+  once because kernel instances that compute elements in adjacent blocks must
+  compute the data from outside their blocks, thus overlapping with the
+  computations performed by the kernels that own the blocks.
+
+* Input description
+
+  Input is the number of rows and columns of the matrix that represents the cost
+  values for path finder.  The rows and columns are integer values.  In
+  addition, for the optimized implementation, height is the number of rows in a
+  block.  The number of rows must be divisible by height.
+
+* Output description
+
+* Invocation
+
+  #+BEGIN_SRC sh
+    $ ./pf <number of rows> <number of columns> <height of blocks>
+  #+END_SRC
+
+  The command line parameters for the application are three integer values that
+  define the size of the problem.  The number of rows is the length of the path to
+  be computed.  The number of columns is the number of paths that are computed
+  simultaneously.  The height of blocks is the number of path steps that are
+  computed in each kernel instance by the optimized algorithm that uses the
+  ghost-zone approach.
+
+* Discussion
 
 * Kernels
 ** =pathfinder=
