@@ -34,26 +34,23 @@ import derelict.opencl.cl;
 
 import clop.compiler;
 
-/++
- + The class examplifies the basic arithmetic operations on vectors
- + and matrices.
- +/
+/**
+ * The class examplifies the basic arithmetic operations on vectors
+ * and matrices.
+ */
 class Application {
-
-  static immutable int SEED = 1;
 
   NDArray!cl_float A, B, C;
   NDArray!cl_float M, N, R;
   size_t size;
 
-  /++
-   + The Application constructor allocates and initializes the vectors
-   + and matrices with random numbers in the interval [0,1].
-   + @param args an array of command-line arguments passed to the
-   +        application by the user. The only accepted argument is an
-   +        integer positive value N -- the lentgh of a vector, and
-   +        the size N x N of a matrix.
-   +/
+  /**
+   * The Application constructor allocates and initializes the vectors
+   * and matrices with random numbers in the interval [0,1].
+   * @param args an array of the application command-line arguments.
+   *        The single accepted argument is a positive integer value N
+   *        -- the lentgh of a vector, and the size N x N of a matrix.
+   */
   this(string[] args)
   {
     if (args.length != 2)
@@ -69,7 +66,7 @@ class Application {
     R = new NDArray!cl_float(size, size); assert(R !is null, "Can't allocate array R");
 
     Mt19937 gen;
-    gen.seed(SEED);
+    gen.seed(1);
     foreach (i; 0 .. size)
     {
       A[i] = uniform(0f, 1f, gen);
@@ -82,25 +79,25 @@ class Application {
     }
   } // this
 
-  /++
-   + Compute the sum of two vectors using CLOP.
-   +/
+  /**
+   * Compute the sum of two vectors using CLOP.
+   */
   void clop_add_vectors()
   {
     mixin (compile(q{ NDRange(i : 0 .. size) { C[i] = A[i] + B[i]; } }));
   }
 
-  /++
-   + Compute the sum of two matrices using CLOP.
-   +/
+  /**
+   * Compute the sum of two matrices using CLOP.
+   */
   void clop_add_matrices()
   {
     mixin (compile(q{ NDRange(i : 0 .. size, j : 0 .. size) { R[i, j] = M[i, j] + N[i, j]; } }));
   }
 
-  /++
-   + Compute the product of two matrices using CLOP.
-   +/
+  /**
+   * Compute the product of two matrices using CLOP.
+   */
   void clop_mul_matrices()
   {
     mixin (compile(q{
@@ -114,9 +111,9 @@ class Application {
         }));
   }
 
-  /++
-   + Compute the sum of two vectors using OpenCL directly.
-   +/
+  /**
+   * Compute the sum of two vectors using OpenCL directly.
+   */
   void opencl_add_vectors()
   {
     try
@@ -186,8 +183,8 @@ class Application {
     }
   }
 
-  /++
-   +/
+  /**
+   */
   void run()
   {
     StopWatch timer;
@@ -211,15 +208,15 @@ class Application {
   }
 } // Application class
 
-/++
- + Validate that an is a result of applying an operation to two other
- + arrays element-wise.
- + @param fun template parameter is a binary operation
- + @param T template parameter deduced from the actual parameters to
- +          validate
- + @param R the result of applying fun to A and B
- + @param A, B input arrays
- +/
+/**
+ * Validate that an is a result of applying an operation to two other
+ * arrays element-wise.
+ * @param fun template parameter is a binary operation
+ * @param T template parameter deduced from the actual parameters to
+ *          validate
+ * @param R the result of applying fun to A and B
+ * @param A, B input arrays
+ */
 template validate(alias fun)
 {
   void validate(T)(NDArray!T R, NDArray!T A, NDArray!T B)

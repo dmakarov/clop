@@ -51,9 +51,9 @@ template Backend(TList...)
   import std.typetuple;
   alias TT = TypeTuple!(TList[0 .. $]);
 
-  /++
-   +  The CLOP compiler backend.
-   +/
+  /**
+   *  The CLOP compiler backend.
+   */
   struct Backend
   {
     Box range;                /// box of intervals for this piece
@@ -79,9 +79,9 @@ template Backend(TList...)
     uint depth            = 0;
     uint temporary_index  = 0;
 
-    /++
-     +
-     +/
+    /**
+     *
+     */
     this(ParseTree t, string file, size_t line, immutable(string[]) params)
     {
       import std.path : baseName, stripExtension;
@@ -97,9 +97,9 @@ template Backend(TList...)
         parameters ~= [Argument(p)];
     }
 
-    /++
-     +
-     +/
+    /**
+     *
+     */
     string generate_code()
     {
       analyze(AST);
@@ -134,10 +134,10 @@ template Backend(TList...)
 
   package:
 
-    /++
-     + XXX: do we need this pass?
-     + builds the symbol table
-     +/
+    /**
+     * XXX: do we need this pass?
+     * builds the symbol table
+     */
     void analyze(ParseTree t)
     {
       switch (t.name)
@@ -519,9 +519,9 @@ template Backend(TList...)
       }
     }
 
-    /++
-     +
-     +/
+    /**
+     *
+     */
     void update_parameters()
     {
       foreach (i, T; TT)
@@ -644,12 +644,12 @@ template Backend(TList...)
       }
     }
 
-    /++
-     + @FIXME this doesn't work when not entire index space is used in
-     + index expressions.  A possible work-around to assume that arrays
-     + indexes always start at 0 and if the lower bound of a computed
-     + interval is greater than 0 it should be extended to 0.
-     +/
+    /**
+     * @FIXME this doesn't work when not entire index space is used in
+     * index expressions.  A possible work-around to assume that arrays
+     * indexes always start at 0 and if the lower bound of a computed
+     * interval is greater than 0 it should be extended to 0.
+     */
     void compute_intervals()
     {
       auto number_of_parameters = parameters.length;
@@ -721,9 +721,9 @@ template Backend(TList...)
       }
     }
 
-    /++
-     +
-     +/
+    /**
+     *
+     */
     ParseTree transform_by_pattern(ParseTree t)
     {
       if (pattern is null)
@@ -759,14 +759,14 @@ template Backend(TList...)
       return t;
     }
 
-    /++
-     + Create all possible variants of optimized programs.  Different
-     + orderings of the same optimizations are considered equal.
-     + @FIXME more sophisticated logic is needed.  We want to apply one
-     + optimization of each kind, find the most beneficial, then apply
-     + one of remaining optimizations, find the most beneficial
-     + sequence, and so on.
-     +/
+    /**
+     * Create all possible variants of optimized programs.  Different
+     * orderings of the same optimizations are considered equal.
+     * @FIXME more sophisticated logic is needed.  We want to apply one
+     * optimization of each kind, find the most beneficial, then apply
+     * one of remaining optimizations, find the most beneficial
+     * sequence, and so on.
+     */
     void apply_optimizations(ParseTree t)
     {
       auto items = trans.get_items_as_array();
@@ -788,9 +788,9 @@ template Backend(TList...)
       }
     }
 
-    /++
-     +
-     +/
+    /**
+     *
+     */
     bool can_transform_index_expression(ParseTree t)
     {
       switch (t.name)
@@ -800,11 +800,11 @@ template Backend(TList...)
       }
     }
 
-    /++
-     + Transforms an AST with no synchronization pattern.
-     + Each thread computes a single item in the NDRange.
-     + @FIXME can this be generalized and templatized?
-     +/
+    /**
+     * Transforms an AST with no synchronization pattern.
+     * Each thread computes a single item in the NDRange.
+     * @FIXME can this be generalized and templatized?
+     */
     ParseTree Plain(ParseTree t)
     {
       if (t.children.length == 0 || t.name != "CLOP.CompoundStatement")
@@ -822,11 +822,11 @@ template Backend(TList...)
       return newt;
     }
 
-    /++
-     + Transforms an AST as necessary to implement antidiagonal
-     + synchronization pattern.
-     + @FIXME can this be generalized and templatized?
-     +/
+    /**
+     * Transforms an AST as necessary to implement antidiagonal
+     * synchronization pattern.
+     * @FIXME can this be generalized and templatized?
+     */
     ParseTree Antidiagonal(ParseTree t)
     {
       if (t.children.length == 0 || t.name != "CLOP.CompoundStatement")
@@ -864,13 +864,13 @@ template Backend(TList...)
       return newt;
     }
 
-    /++
-     +  XXX: can this pass be combined with analyze?
-     +
-     +  Lower the expressions that need to be evaluated to temporaries
-     +  and replaced in translation.  This pass modifies the AST in
-     +  place.
-     +/
+    /**
+     *  XXX: can this pass be combined with analyze?
+     *
+     *  Lower the expressions that need to be evaluated to temporaries
+     *  and replaced in translation.  This pass modifies the AST in
+     *  place.
+     */
     void lower(ref ParseTree t)
     {
       switch (t.name)
@@ -1022,9 +1022,9 @@ template Backend(TList...)
       }
     }
 
-    /++
-     +
-     +/
+    /**
+     *
+     */
     string infer_type(ParseTree t)
     {
       switch (t.name)
@@ -1139,9 +1139,9 @@ template Backend(TList...)
       }
     }
 
-    /++
-     +
-     +/
+    /**
+     *
+     */
     ParseTree[] lower_expression(ParseTree t)
     {
       // this is an empty list of statements
@@ -1461,9 +1461,9 @@ template Backend(TList...)
       return t;
     }
 
-    /+
-     + Methods to dump compiler's internal and debug information
-     +/
+    /*
+     * Methods to dump compiler's internal and debug information
+     */
 
     string dump_symtable()
     {
@@ -1608,7 +1608,8 @@ unittest
         }});
     alias T4 = std.typetuple.TypeTuple!(size_t, size_t, size_t, float*, A, A, A);
     auto be4 = clop.ct.stage2.Backend!T4(t4, __FILE__, __LINE__,
-                                         ["gws", "wgs", "input_n", "scratch", "input_units", "i2h_weights", "hidden_units"]);
+                                         ["gws", "wgs", "input_n", "scratch",
+                                          "input_units", "i2h_weights", "hidden_units"]);
     be4.analyze(t4);
     be4.update_parameters();
     debug (UNITTEST_DEBUG)

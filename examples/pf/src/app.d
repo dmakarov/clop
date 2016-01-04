@@ -24,13 +24,8 @@
  */
 module clop.examples.nw;
 
-import std.conv;
-import std.datetime;
-import std.random;
-import std.stdio;
-
+import std.conv, std.datetime, std.getopt, std.random, std.stdio;
 import derelict.opencl.cl;
-
 import clop.compiler;
 
 /**
@@ -81,10 +76,10 @@ class Application {
       throw new Exception("ERROR: number of columns " ~ to!string(cols) ~
                           " must be divisible by height " ~ to!string(height));
     }
-    data   = new int[rows * cols]; assert( null != data, "Can't allocate memory for data" );
-    move   = new int[rows * cols]; assert( null != data, "Can't allocate memory for move" );
-    sums   = new int[cols];        assert( null != sums, "Can't allocate memory for sums" );
-    gold   = new int[cols];        assert( null != gold, "Can't allocate memory for gold" );
+    data   = new int[rows * cols]; assert(null != data, "Can't allocate memory for data");
+    move   = new int[rows * cols]; assert(null != data, "Can't allocate memory for move");
+    sums   = new int[cols];        assert(null != sums, "Can't allocate memory for sums");
+    gold   = new int[cols];        assert(null != gold, "Can't allocate memory for gold");
     Mt19937 e;
     e.seed(1);
     foreach (ref item; data)
@@ -96,14 +91,14 @@ class Application {
      */
     char[] code = q{
       #define MIN3(a, b, c) (((a) < (b)) ? ((a) < (c) ? (a) : (c)) : ((b) < (c) ? (b) : (c)))
-      #define MOV3(w, s, e) (((w) < (s)) ? ((w) < (e) ?  1  : -1 ) : ((s) < (e) ?  0  :  -1))
+      #define MOV3(w, s, e) (((w) < (s)) ? ((w) < (e) ?  1  : -1) : ((s) < (e) ?  0  :  -1))
 
       __kernel void
       pf_noblocks(__global int* data, __global int* src, __global int* dst, __global int* move, int cols, int step)
       {
         const int tx = get_global_id(0);
         int s = src[tx];
-        int w = (tx > 0       ) ? src[tx - 1] : INT_MAX;
+        int w = (tx > 0      ) ? src[tx - 1] : INT_MAX;
         int e = (tx < cols - 1) ? src[tx + 1] : INT_MAX;
         dst[tx] = data[step * cols + tx] + MIN3(w, s, e);
         move[step * cols + tx] = MOV3(w, s, e);
@@ -127,61 +122,66 @@ class Application {
                               int  start , //
                               int  steps , //
                      __local  int* prev  , //
-                     __local  int* sums  ) //
+                     __local  int* sums ) //
       {
-        const int BLOCK_SIZE = get_local_size( 0 ) - 2 * ( height - 1 );
-        const int tx = get_local_id( 0 );
-        const int bx = get_group_id( 0 );
+        const int BLOCK_SIZE = get_local_size(0) - 2 * (height - 1);
+        const int tx = get_local_id(0);
+        const int bx = get_group_id(0);
         int block  = bx * BLOCK_SIZE;
-        /* Thread ids run from 0 to get_local_size( 0 ).
+        /* Thread ids run from 0 to get_local_size(0).
            The first height - 1 ids are outside the left side of
            the block and the last height - 1 ids are outside the
            right side of the block.  Thus k == block when tx == height - 1. */
-        int k = block + tx - ( height - 1 );
-        int n = get_local_size( 0 ) + 1; // the last index in prev and sums
+        int k = block + tx - (height - 1);
+        int n = get_local_size(0) + 1; // the last index in prev and sums
         int m = block + BLOCK_SIZE + height - 1; // the last index in src
         int x = tx + 1; // elements in prev and sums shifted to the
                         // right by one relative to thread ids,
                         // because we account for the outtermost elements
 
         // we need to initialize prev from src
-        if ( tx == 0 )
+        if (tx == 0)
         { // first load two outter most elements, that no thread is mapped to
-          if ( 0 < k    ) prev[0] = src[k - 1];
-          if ( m < cols ) prev[n] = src[m];
+          if (0 < k   ) prev[0] = src[k - 1];
+          if (m < cols) prev[n] = src[m];
         }
         // now each thread loads the element below it in src
-        if ( -1 < k && k < cols ) prev[x] = src[k];
-        barrier( CLK_LOCAL_MEM_FENCE );
+        if (-1 < k && k < cols) prev[x] = src[k];
+        barrier(CLK_LOCAL_MEM_FENCE);
 
-        for ( int r = start; r < start + steps; ++r )
+        for (int r = start; r < start + steps; ++r)
         {
-          if ( -1 < k && k < cols )
+          if (-1 < k && k < cols)
           {
             int s = prev[x];
-            int w = ( k > 0        ) ? prev[x - 1] : INT_MAX;
-            int e = ( k < cols - 1 ) ? prev[x + 1] : INT_MAX;
-            sums[x] = data[r * cols + k] + MIN3( w, s, e );
+            int w = (k > 0       ) ? prev[x - 1] : INT_MAX;
+            int e = (k < cols - 1) ? prev[x + 1] : INT_MAX;
+            sums[x] = data[r * cols + k] + MIN3(w, s, e);
             // we must update move only within the block
-            move[r * cols + k] = MOV3( w, s, e );
+            move[r * cols + k] = MOV3(w, s, e);
           }
-          barrier( CLK_GLOBAL_MEM_FENCE );
+          barrier(CLK_GLOBAL_MEM_FENCE);
           prev[x] = sums[x];
-          barrier( CLK_LOCAL_MEM_FENCE );
+          barrier(CLK_LOCAL_MEM_FENCE);
         }
         // now save sums to dst
-        if ( height - 1 < x && x < BLOCK_SIZE + height )
+        if (height - 1 < x && x < BLOCK_SIZE + height)
           dst[k] = sums[x];
       }
     }.dup;
     cl_int status;
     size_t size = code.length;
     char*[] strs = [code.ptr];
-    auto program = clCreateProgramWithSource( runtime.context, 1, strs.ptr, &size, &status ); assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
-    status = clBuildProgram( program, 1, &runtime.device, "", null, null );                   assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
-    kernel_noblocks = clCreateKernel( program, "pf_noblocks", &status );                      assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
-    kernel_ghost_zone = clCreateKernel( program, "pf_ghost_zone", &status );                  assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
-    status = clReleaseProgram( program );                                                     assert( status == CL_SUCCESS, "this " ~ cl_strerror( status ) );
+    auto program = clCreateProgramWithSource(runtime.context, 1, strs.ptr, &size, &status);
+    assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
+    status = clBuildProgram(program, 1, &runtime.device, "", null, null);
+    assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
+    kernel_noblocks = clCreateKernel(program, "pf_noblocks", &status);
+    assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
+    kernel_ghost_zone = clCreateKernel(program, "pf_ghost_zone", &status);
+    assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
+    status = clReleaseProgram(program);
+    assert(status == CL_SUCCESS, "this " ~ cl_strerror(status));
   }
 
   /**
@@ -203,11 +203,11 @@ class Application {
   void validate()
   {
     int diff = 0;
-    foreach ( ii; 0 .. cols )
-      if ( sums[ii] != gold[ii] )
+    foreach (ii; 0 .. cols)
+      if (sums[ii] != gold[ii])
         ++diff;
-    if ( diff > 0 )
-      writeln( "DIFFs ", diff );
+    if (diff > 0)
+      writeln("DIFFs ", diff);
   }
 
   /**
@@ -236,28 +236,28 @@ class Application {
     of.writeln();
   }
 
-  bool IN_RANGE( int x, int min, int max )
+  bool IN_RANGE(int x, int min, int max)
   {
-    return ( min <= x && x <= max );
+    return (min <= x && x <= max);
   }
 
-  int max( int a, int b )
+  int max(int a, int b)
   {
     return a < b ? b : a;
   }
 
-  int min( int a, int b )
+  int min(int a, int b)
   {
     return a < b ? a : b;
   }
 
-  int min3( int a, int b, int c )
+  int min3(int a, int b, int c)
   {
     auto k = a < b ? a : b;
     return k < c ? k : c;
   }
 
-  int mov3( int w, int s, int e )
+  int mov3(int w, int s, int e)
   {
     return (w < s) ? (w < e ? 1 : -1) : (s < e ? 0 : -1);
   }
@@ -276,7 +276,7 @@ class Application {
       foreach (c; 0 .. cols)
       {
         auto s = results[src][c];
-        auto w = (c > 0       ) ? results[src][c - 1] : int.max;
+        auto w = (c > 0      ) ? results[src][c - 1] : int.max;
         auto e = (c < cols - 1) ? results[src][c + 1] : int.max;
         results[dst][c] = data[r * cols + c] + min3(w, s, e);
         move[r * cols + c] = mov3(w, s, e);
@@ -311,7 +311,7 @@ class Application {
             {
               auto c = block + k;
               auto s = results[src][height + k];
-              auto w = (c > 0       ) ? results[src][height + k - 1] : int.max;
+              auto w = (c > 0      ) ? results[src][height + k - 1] : int.max;
               auto e = (c < cols - 1) ? results[src][height + k + 1] : int.max;
               results[dst][height + k] = data[step * cols + c] + min3(w, s, e);
               move[step * cols + c] = mov3(w, s, e);
@@ -326,27 +326,34 @@ class Application {
     }
   }
 
-  double opencl_noblocks( bool cleanup )
+  double opencl_noblocks(bool cleanup)
   {
     double result = 0.0;
     cl_event event;
 
-    foreach ( c; 0 .. cols )
+    foreach (c; 0 .. cols)
       sums[c] = data[c];
     cl_int status;
     cl_mem_flags flags = CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR;
-    cl_mem ddata = clCreateBuffer( runtime.context, flags, cl_int.sizeof * data.length, data.ptr, &status );                assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
+    cl_mem ddata = clCreateBuffer(runtime.context, flags, cl_int.sizeof * data.length, data.ptr, &status);
+    assert(status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror(status));
     flags = CL_MEM_WRITE_ONLY;
-    cl_mem dmove = clCreateBuffer( runtime.context, flags, cl_int.sizeof * move.length, null, &status );                    assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
+    cl_mem dmove = clCreateBuffer(runtime.context, flags, cl_int.sizeof * move.length, null, &status);
+    assert(status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror(status));
     cl_mem[2] dsums;
     flags = CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR;
-    dsums[0] = clCreateBuffer( runtime.context, flags, cl_int.sizeof * cols, sums.ptr, &status );                           assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
+    dsums[0] = clCreateBuffer(runtime.context, flags, cl_int.sizeof * cols, sums.ptr, &status);
+    assert(status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror(status));
     flags = CL_MEM_READ_WRITE;
-    dsums[1] = clCreateBuffer( runtime.context, flags, cl_int.sizeof * cols, null, &status );                               assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
+    dsums[1] = clCreateBuffer(runtime.context, flags, cl_int.sizeof * cols, null, &status);
+    assert(status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror(status));
 
-    status = clSetKernelArg( kernel_noblocks,  0, cl_mem.sizeof, &ddata );                                                assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
-    status = clSetKernelArg( kernel_noblocks,  3, cl_mem.sizeof, &dmove );                                                assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
-    status = clSetKernelArg( kernel_noblocks,  4, cl_int.sizeof, &cols );                                                 assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
+    status = clSetKernelArg(kernel_noblocks,  0, cl_mem.sizeof, &ddata);
+    assert(status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror(status));
+    status = clSetKernelArg(kernel_noblocks,  3, cl_mem.sizeof, &dmove);
+    assert(status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror(status));
+    status = clSetKernelArg(kernel_noblocks,  4, cl_int.sizeof, &cols);
+    assert(status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror(status));
 
     int src = 0;
     size_t gwsize = cols;
@@ -356,17 +363,20 @@ class Application {
     double ittime = 0.0;
     int itcount = 0;
 
-    foreach ( step; 1 .. rows )
+    foreach (step; 1 .. rows)
     {
     timer.reset();
     timer.start();
       int dst = 1 - src;
 
-      status = clSetKernelArg( kernel_noblocks,  1, cl_mem.sizeof, &dsums[src] );                                           assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_noblocks,  2, cl_mem.sizeof, &dsums[dst] );                                           assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_noblocks,  5, cl_int.sizeof, &step );                                                 assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
+      status = clSetKernelArg(kernel_noblocks,  1, cl_mem.sizeof, &dsums[src]);
+      assert(status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_noblocks,  2, cl_mem.sizeof, &dsums[dst]);
+      assert(status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_noblocks,  5, cl_int.sizeof, &step);
+      assert(status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror(status));
 
-      status = clEnqueueNDRangeKernel( runtime.queue                   ,
+      status = clEnqueueNDRangeKernel(runtime.queue                   ,
                                        kernel_noblocks                 ,
                                        1                               ,
                                        null                            ,
@@ -374,26 +384,26 @@ class Application {
                                        null                            ,
                                        0                               ,
                                        null                            ,
-                                       &event                         );
-      assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
-      status = clWaitForEvents( 1, &event );
-      assert( status == CL_SUCCESS, "opencl_stencil_25pt_shared " ~ cl_strerror( status ) );
+                                       &event                        );
+      assert(status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror(status));
+      status = clWaitForEvents(1, &event);
+      assert(status == CL_SUCCESS, "opencl_stencil_25pt_shared " ~ cl_strerror(status));
 
       cl_ulong start_time;
-      status = clGetEventProfilingInfo ( event                     , // cl_event          event
+      status = clGetEventProfilingInfo (event                     , // cl_event          event
                                          CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
                                          cl_ulong.sizeof           , // size_t            param_value_size
                                          &start_time               , // void*             param_value
-                                         null                     ); // size_t*           param_value_size_ret
-      assert( status == CL_SUCCESS, "opencl_stencil_25pt_shared " ~ cl_strerror( status ) );
+                                         null                    ); // size_t*           param_value_size_ret
+      assert(status == CL_SUCCESS, "opencl_stencil_25pt_shared " ~ cl_strerror(status));
       cl_ulong end_time;
-      status = clGetEventProfilingInfo ( event                     , // cl_event          event
+      status = clGetEventProfilingInfo (event                     , // cl_event          event
                                          CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
                                          cl_ulong.sizeof           , // size_t            param_value_size
                                          &end_time                 , // void*             param_value
-                                         null                     ); // size_t*           param_value_size_ret
-      assert( status == CL_SUCCESS, "opencl_stencil_25pt_shared " ~ cl_strerror( status ) );
-      result += ( end_time - start_time ) / 1E9;
+                                         null                    ); // size_t*           param_value_size_ret
+      assert(status == CL_SUCCESS, "opencl_stencil_25pt_shared " ~ cl_strerror(status));
+      result += (end_time - start_time) / 1E9;
 
       src = dst;
     timer.stop();
@@ -401,9 +411,9 @@ class Application {
     ittime += ticks.usecs / 1E6;
     itcount += 1;
     }
-    writefln( "%d iterations in %f s, average iteration time %f", itcount, ittime, ittime / itcount );
+    writefln("%d iterations in %f s, average iteration time %f", itcount, ittime, ittime / itcount);
 
-    status = clEnqueueReadBuffer( runtime.queue              ,
+    status = clEnqueueReadBuffer(runtime.queue              ,
                                   dsums[src]                 ,
                                   CL_TRUE                    ,
                                   0                          ,
@@ -411,9 +421,9 @@ class Application {
                                   sums.ptr                   ,
                                   0                          ,
                                   null                       ,
-                                  null                      );
-    assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
-    status = clEnqueueReadBuffer( runtime.queue              ,
+                                  null                     );
+    assert(status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror(status));
+    status = clEnqueueReadBuffer(runtime.queue              ,
                                   dmove                      ,
                                   CL_TRUE                    ,
                                   0                          ,
@@ -421,62 +431,81 @@ class Application {
                                   move.ptr                   ,
                                   0                          ,
                                   null                       ,
-                                  null                      );
-    assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
+                                  null                     );
+    assert(status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror(status));
 
-    status = clReleaseMemObject( dsums[1] );                                                                                assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
-    status = clReleaseMemObject( dsums[0] );                                                                                assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
-    status = clReleaseMemObject( dmove );                                                                                   assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
-    status = clReleaseMemObject( ddata );                                                                                   assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
-    if ( cleanup )
+    status = clReleaseMemObject(dsums[1]);
+    assert(status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror(status));
+    status = clReleaseMemObject(dsums[0]);
+    assert(status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror(status));
+    status = clReleaseMemObject(dmove);
+    assert(status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror(status));
+    status = clReleaseMemObject(ddata);
+    assert(status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror(status));
+    if (cleanup)
     {
-      status = clReleaseKernel( kernel_noblocks );
-      assert( status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror( status ) );
+      status = clReleaseKernel(kernel_noblocks);
+      assert(status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror(status));
     }
     return result;
   }
 
-  double opencl_ghost_zone( bool cleanup )
+  double opencl_ghost_zone(bool cleanup)
   {
     double result = 0.0;
     cl_event event;
 
-    foreach ( c; 0 .. cols )
+    foreach (c; 0 .. cols)
       sums[c] = data[c];
     cl_int status;
     cl_mem_flags flags = CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR;
-    cl_mem ddata = clCreateBuffer( runtime.context, flags, cl_int.sizeof * data.length, data.ptr, &status );                assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
+    cl_mem ddata = clCreateBuffer(runtime.context, flags, cl_int.sizeof * data.length, data.ptr, &status);
+    assert(status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror(status));
     flags = CL_MEM_WRITE_ONLY;
-    cl_mem dmove = clCreateBuffer( runtime.context, flags, cl_int.sizeof * move.length, null, &status );                    assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
+    cl_mem dmove = clCreateBuffer(runtime.context, flags, cl_int.sizeof * move.length, null, &status);
+    assert(status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror(status));
     cl_mem[2] dsums;
     flags = CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR;
-    dsums[0]  = clCreateBuffer( runtime.context, flags, cl_int.sizeof * cols, sums.ptr, &status );                          assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
+    dsums[0]  = clCreateBuffer(runtime.context, flags, cl_int.sizeof * cols, sums.ptr, &status);
+    assert(status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror(status));
     flags = CL_MEM_READ_WRITE;
-    dsums[1]  = clCreateBuffer( runtime.context, flags, cl_int.sizeof * cols, null, &status );                              assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
+    dsums[1]  = clCreateBuffer(runtime.context, flags, cl_int.sizeof * cols, null, &status);
+    assert(status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror(status));
 
     size_t blocks = cols / BLOCK_SIZE;
-    size_t lwsize = BLOCK_SIZE + 2 * ( height - 1 );
+    size_t lwsize = BLOCK_SIZE + 2 * (height - 1);
     size_t gwsize = blocks * lwsize;
     int src = 0;
 
-    for ( int r = 1; r < rows; r += height )
+    for (int r = 1; r < rows; r += height)
     {
-      int steps = min( height, rows - r );
+      int steps = min(height, rows - r);
       int dst = 1 - src;
 
-      status = clSetKernelArg( kernel_ghost_zone,  0, cl_mem.sizeof, &ddata );                                              assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_ghost_zone,  1, cl_mem.sizeof, &dsums[src] );                                         assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_ghost_zone,  2, cl_mem.sizeof, &dsums[dst] );                                         assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_ghost_zone,  3, cl_mem.sizeof, &dmove );                                              assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_ghost_zone,  4, cl_int.sizeof, &rows );                                               assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_ghost_zone,  5, cl_int.sizeof, &cols );                                               assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_ghost_zone,  6, cl_int.sizeof, &height );                                             assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_ghost_zone,  7, cl_int.sizeof, &r );                                                  assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_ghost_zone,  8, cl_int.sizeof, &steps );                                              assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_ghost_zone,  9, cl_int.sizeof * ( lwsize + 2 ), null );                               assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
-      status = clSetKernelArg( kernel_ghost_zone, 10, cl_int.sizeof * ( lwsize + 2 ), null );                               assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
+      status = clSetKernelArg(kernel_ghost_zone,  0, cl_mem.sizeof, &ddata);
+      assert(status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_ghost_zone,  1, cl_mem.sizeof, &dsums[src]);
+      assert(status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_ghost_zone,  2, cl_mem.sizeof, &dsums[dst]);
+      assert(status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_ghost_zone,  3, cl_mem.sizeof, &dmove);
+      assert(status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_ghost_zone,  4, cl_int.sizeof, &rows);
+      assert(status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_ghost_zone,  5, cl_int.sizeof, &cols);
+      assert(status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_ghost_zone,  6, cl_int.sizeof, &height);
+      assert(status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_ghost_zone,  7, cl_int.sizeof, &r);
+      assert(status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_ghost_zone,  8, cl_int.sizeof, &steps);
+      assert(status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_ghost_zone,  9, cl_int.sizeof * (lwsize + 2), null);
+      assert(status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror(status));
+      status = clSetKernelArg(kernel_ghost_zone, 10, cl_int.sizeof * (lwsize + 2), null);
+      assert(status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror(status));
 
-      status = clEnqueueNDRangeKernel( runtime.queue,
+      status = clEnqueueNDRangeKernel(runtime.queue,
                                        kernel_ghost_zone,
                                        1,
                                        null,
@@ -484,26 +513,26 @@ class Application {
                                        &lwsize,
                                        0,
                                        null,
-                                       &event );
-      assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
-      status = clWaitForEvents( 1, &event );
-      assert( status == CL_SUCCESS, "opencl_stencil_25pt_shared " ~ cl_strerror( status ) );
+                                       &event);
+      assert(status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror(status));
+      status = clWaitForEvents(1, &event);
+      assert(status == CL_SUCCESS, "opencl_stencil_25pt_shared " ~ cl_strerror(status));
 
       cl_ulong start_time;
-      status = clGetEventProfilingInfo ( event                     , // cl_event          event
+      status = clGetEventProfilingInfo (event                     , // cl_event          event
                                          CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
                                          cl_ulong.sizeof           , // size_t            param_value_size
                                          &start_time               , // void*             param_value
-                                         null                     ); // size_t*           param_value_size_ret
-      assert( status == CL_SUCCESS, "opencl_stencil_25pt_shared " ~ cl_strerror( status ) );
+                                         null                    ); // size_t*           param_value_size_ret
+      assert(status == CL_SUCCESS, "opencl_stencil_25pt_shared " ~ cl_strerror(status));
       cl_ulong end_time;
-      status = clGetEventProfilingInfo ( event                     , // cl_event          event
+      status = clGetEventProfilingInfo (event                     , // cl_event          event
                                          CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
                                          cl_ulong.sizeof           , // size_t            param_value_size
                                          &end_time                 , // void*             param_value
-                                         null                     ); // size_t*           param_value_size_ret
-      assert( status == CL_SUCCESS, "opencl_stencil_25pt_shared " ~ cl_strerror( status ) );
-      result += ( end_time - start_time ) / 1E9;
+                                         null                    ); // size_t*           param_value_size_ret
+      assert(status == CL_SUCCESS, "opencl_stencil_25pt_shared " ~ cl_strerror(status));
+      result += (end_time - start_time) / 1E9;
 
       src = dst;
     }
@@ -529,10 +558,14 @@ class Application {
                                  null);
     assert(status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror(status));
 
-    status = clReleaseMemObject(dsums[1]);                                                                                assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
-    status = clReleaseMemObject(dsums[0]);                                                                                assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
-    status = clReleaseMemObject(dmove);                                                                                   assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
-    status = clReleaseMemObject(ddata);                                                                                   assert( status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror( status ) );
+    status = clReleaseMemObject(dsums[1]);
+    assert(status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror(status));
+    status = clReleaseMemObject(dsums[0]);
+    assert(status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror(status));
+    status = clReleaseMemObject(dmove);
+    assert(status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror(status));
+    status = clReleaseMemObject(ddata);
+    assert(status == CL_SUCCESS, "opencl_ghost_zone " ~ cl_strerror(status));
     if (cleanup)
     {
       status = clReleaseKernel(kernel_ghost_zone);
@@ -541,109 +574,110 @@ class Application {
     return result;
   }
 
+/+
   /**
+   *
    */
-/*
   void clop_dsl()
   {
     try
     {
-      mixin( compile(
+      mixin(compile(
       q{
-        int min3( int a, int b, int c )
+        int min3(int a, int b, int c)
         {
           int k = a < b ? a : b;
           return k < c ? k : c;
         }
 
-        int mov3( int w, int s, int e )
+        int mov3(int w, int s, int e)
         {
           return (w < s) ? (w < e ? 1 : -1) : (s < e ? 0 : -1);
         }
 
         int src = 0;
         int dst = 1 - src;
-        NDRange( r ; 1 .. rows, c ; 0 .. cols );
+        NDRange(r ; 1 .. rows, c ; 0 .. cols);
         weigths[0][c] = data[c];
         {
           int s = weight[src][c];
-          int w = ( c > 0        ) ? weights[src][c - 1] : INT_MAX;
-          int e = ( c < cols - 1 ) ? weights[src][c + 1] : INT_MAX;
-          weights[dst][c] = data[r * cols + c] + min3( w, s, e );
-          move[r * cols + c] = mov3( w, s, e );
+          int w = (c > 0       ) ? weights[src][c - 1] : INT_MAX;
+          int e = (c < cols - 1) ? weights[src][c + 1] : INT_MAX;
+          weights[dst][c] = data[r * cols + c] + min3(w, s, e);
+          move[r * cols + c] = mov3(w, s, e);
         }
         src = dst;
-      } ) );
+      }));
     }
-    catch( Exception e )
+    catch(Exception e)
     {
-      writeln( e );
+      writeln(e);
     }
   }
-*/
++/
   void run()
   {
     size_t size;
     StopWatch timer;
     TickDuration ticks;
-    double benchmark = runtime.benchmark( rows * cols );
+    double benchmark = runtime.benchmark(rows * cols);
     double rate;
 
     timer.start();
     baseline();
     timer.stop();
     ticks = timer.peek();
-    writefln( "%2d MI SEQUENTIAL %5.3f [s],         %7.2f MI/s",
-              rows * cols / ( 1024 * 1024 ),
+    writefln("%2d MI SEQUENTIAL %5.3f [s],         %7.2f MI/s",
+              rows * cols / (1024 * 1024),
               ticks.usecs / 1E6,
-              rows * cols * 1E6 / ( 1024 * 1024 * ticks.usecs ) );
+              rows * cols * 1E6 / (1024 * 1024 * ticks.usecs));
 
     timer.reset();
     timer.start();
     ghost_zone_blocks();
     timer.stop();
     ticks = timer.peek();
-    writefln( "%2d MI GHOST ZONE %5.3f [s],         %7.2f MI/s",
-              rows * cols / ( 1024 * 1024 ),
+    writefln("%2d MI GHOST ZONE %5.3f [s],         %7.2f MI/s",
+              rows * cols / (1024 * 1024),
               ticks.usecs / 1E6,
-              rows * cols * 1E6 / ( 1024 * 1024 * ticks.usecs ) );
+              rows * cols * 1E6 / (1024 * 1024 * ticks.usecs));
     validate();
 
     reset();
-    rate = opencl_noblocks( false );
+    rate = opencl_noblocks(false);
     reset();
     timer.reset();
     timer.start();
-    rate = opencl_noblocks( true );
+    rate = opencl_noblocks(true);
     timer.stop();
     ticks = timer.peek();
-    writefln( "%2d MI CL NOBLOCK %5.3f (%5.3f) [s], %7.2f MI/s, estimated %7.2f MI/s",
-              rows * cols / ( 1024 * 1024 ),
+    writefln("%2d MI CL NOBLOCK %5.3f (%5.3f) [s], %7.2f MI/s, estimated %7.2f MI/s",
+              rows * cols / (1024 * 1024),
               ticks.usecs / 1E6, rate,
-              (rows - 1) * cols / ( 1024 * 1024 * rate ),
-              2 * benchmark / 6 );
+              (rows - 1) * cols / (1024 * 1024 * rate),
+              2 * benchmark / 6);
     validate();
 
-    clGetKernelWorkGroupInfo( kernel_ghost_zone,
+    clGetKernelWorkGroupInfo(kernel_ghost_zone,
                               runtime.device,
                               CL_KERNEL_WORK_GROUP_SIZE,
                               size.sizeof,
                               &size,
-                              null );
-    if ( size >= BLOCK_SIZE + 2 * ( height - 1 ) )
+                              null);
+    if (size >= BLOCK_SIZE + 2 * (height - 1))
     {
       reset();
-      rate = opencl_ghost_zone( false );
+      rate = opencl_ghost_zone(false);
       reset();
       timer.reset();
       timer.start();
-      rate = opencl_ghost_zone( true );
+      rate = opencl_ghost_zone(true);
       timer.stop();
       ticks = timer.peek();
-      writefln( "%2d MI CL GHOST Z %5.3f (%5.3f) [s], %7.2f MI/s",
-                rows * cols / ( 1024 * 1024 ),
+      writefln("%2d MI CL GHOST Z %5.3f (%5.3f) [s], %7.2f MI/s",
+                rows * cols / (1024 * 1024),
                 ticks.usecs / 1E6, rate,
-                (rows - 1) * cols / ( 1024 * 1024 * rate ) );
+                (rows - 1) * cols / (1024 * 1024 * rate));
       validate();
     }
   }
@@ -651,24 +685,45 @@ class Application {
 
 int main(string[] args)
 {
+  uint platform = uint.max, device = uint.max;
+  auto gor = getopt(args, std.getopt.config.passThrough, "device|d", &device, "platform|p", &platform);
+  if (gor.helpWanted)
+  {
+    writefln("Usage: %s [-a -b <block size> -d device -m -p platform -v] <rows> <columns> <height>", args[0]);
+    return 0;
+  }
+  if (platform == uint.max && device != uint.max)
+  {
+    platform = 0;
+  }
+  bool selected_device = platform != uint.max && device != uint.max;
   uint[] platforms = runtime.get_platforms();
   for (uint p = 0; p < platforms.length; ++p)
     foreach (d; 0 .. platforms[p])
     {
+      if (selected_device && (p != platform || d != device))
+        continue;
       try
       {
         runtime.init(p, d);
-        writeln("==================================================");
+        writeln("--------------------------------------------------");
         auto app = new Application(args);
         app.run();
-        writeln("==================================================");
-        runtime.shutdown();
       }
       catch (Exception msg)
       {
         writeln("PF: ", msg);
         return -1;
       }
+      finally
+      {
+        runtime.shutdown();
+      }
+      writeln("==================================================");
     }
   return 0;
 }
+
+// Local Variables:
+// compile-command: "dub run --build=verbose :pf -- 64 128 4"
+// End:

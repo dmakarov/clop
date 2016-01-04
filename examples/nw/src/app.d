@@ -24,14 +24,7 @@
  */
 module clop.examples.nw;
 
-import std.conv;
-import std.datetime;
-import std.format;
-import std.getopt;
-import std.random;
-import std.stdio;
-import std.string;
-
+import std.conv, std.datetime, std.format, std.getopt, std.random, std.stdio, std.string;
 import derelict.opencl.cl;
 import clop.compiler;
 
@@ -2318,7 +2311,7 @@ int main(string[] args)
   bool selected_device = platform != uint.max && device != uint.max;
   auto platforms = runtime.get_platforms();
   foreach (p; 0 .. platforms.length)
-    foreach (d; 0 .. platforms[p])
+    foreach (d; 1 .. platforms[p])
     {
       if (selected_device && (p != platform || d != device))
         continue;
