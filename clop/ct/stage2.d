@@ -865,6 +865,26 @@ template Backend(TList...)
     }
 
     /**
+     * Transforms an AST as necessary to implement horizontal
+     * synchronization pattern.
+     * @FIXME can this be generalized and templatized?
+     */
+    ParseTree Horizontal(ParseTree t)
+    {
+      if (t.children.length == 0 || t.name != "CLOP.CompoundStatement")
+      {
+        return t;
+      }
+      ParseTree newt = CLOP.decimateTree(CLOP.CompoundStatement("{}"));
+      newt.children = [ParseTree("CLOP.StatementList", true, [], "", 0, 0, [])];
+      parameters ~= [Argument(range.symbols[0], `"int "`, "", "", "", true)];
+      ParseTree[] decl;
+      decl ~= CLOP.decimateTree(CLOP.Declaration(format("int %s = get_global_id(0);", range.symbols[1])));
+      newt.children[0].children = decl ~ t.dup;
+      return newt;
+    }
+
+    /**
      *  XXX: can this pass be combined with analyze?
      *
      *  Lower the expressions that need to be evaluated to temporaries
@@ -1524,6 +1544,7 @@ template Backend(TList...)
 unittest
 {
   alias A = NDArray!float;
+  alias Ia = NDArray!int;
 
   // test 1
   version (DISABLED)
@@ -1586,6 +1607,7 @@ unittest
   }
 
   // test 4
+  version (DISABLED)
   {
     auto t4 = clop.ct.parser.CLOP(q{
         NDRange(tid : 0 .. gws $ wgs)
@@ -1619,6 +1641,40 @@ unittest
     }
     be4.lower(t4);
     debug (UNITTEST_DEBUG) writeln(t4.toString());
+  }
+
+  // test pathfinder
+  version (DISABLED)
+  {
+    auto source_code_pathfinder = clop.ct.parser.CLOP(q{
+      int min3(int a, int b, int c)
+      {
+        return a < b ? (c < a ? c : a) : (c < b ? c : b);
+      }
+      int mov3(int w, int s, int e)
+      {
+        return w < s ? (e < w ? -1 : 1) : (e < s ? -1 : 0);
+      }
+      Horizontal NDRange(r : 1 .. rows, c : 0 .. cols) {
+        int s = dsums[r - 1, c];
+        int w = (c > 0       ) ? dsums[r - 1, c - 1] : INT_MAX;
+        int e = (c < cols - 1) ? dsums[r - 1, c + 1] : INT_MAX;
+        dsums[r, c] = data[r, c] + min3(w, s, e);
+        move[r, c] = mov3(w, s, e);
+      }
+    });
+    alias kernel_param_types_pathfinder = std.typetuple.TypeTuple!(size_t, size_t, Ia, Ia);
+    immutable auto kernel_param_names_pathfinder = ["rows", "cols", "dsums", "data"];
+    auto backend_pathfinder = clop.ct.stage2.Backend!kernel_param_types_pathfinder(source_code_pathfinder, __FILE__, __LINE__, kernel_param_names_pathfinder);
+    backend_pathfinder.analyze(source_code_pathfinder);
+    backend_pathfinder.update_parameters();
+    debug (UNITTEST_DEBUG)
+    {
+      writefln("%s", backend_pathfinder.dump_symtable());
+      writeln(backend_pathfinder.dump_parameters());
+    }
+    backend_pathfinder.lower(source_code_pathfinder);
+    debug (UNITTEST_DEBUG) writeln(source_code_pathfinder.toString());
   }
 }
 
