@@ -51,6 +51,7 @@ struct Frontend
     suffix = format("%s_%s", baseName(stripExtension(file)), line);
     errors = "";
     AST = t;
+    symtable["INT_MAX"] = Symbol("INT_MAX", "int", ParseTree(), null, null, null, null, null, true, false, false);
   }
 
   /++
