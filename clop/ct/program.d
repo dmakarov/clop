@@ -37,18 +37,18 @@ import clop.ct.analysis;
 import clop.ct.parser;
 import clop.ct.structs;
 import clop.ct.symbol;
-static import clop.ct.templates;
 import clop.ct.transform;
+static import clop.ct.templates;
 
-/++
- +  The container of all information related to a specific variant
- +  a CLOP program fragment.
- +/
+/**
+ *  The container of all information related to a specific variant
+ *  a CLOP program fragment.
+ */
 struct Program
 {
-  /++
-   + Return the string that is this program's kernel source code.
-   +/
+  /**
+   * Return the string that is this program's kernel source code.
+   */
   string generate_code()
   {
     auto t = optimize(AST); // apply the optimizing transformations on the AST
@@ -107,6 +107,8 @@ struct Program
   string range_finish = "1";
   string kernel_object;
   string instance_object;
+  ParseTree[] loops;
+  ParseTree[] prefs;
 
   struct translation_result
   {
@@ -114,9 +116,9 @@ struct Program
     string value;
   }
 
-  /++
-   +
-   +/
+  /**
+   *
+   */
   ParseTree optimize(ParseTree t)
   {
     instance_object = "instance_" ~ suffix;
@@ -268,258 +270,15 @@ struct Program
   auto apply_prefetching(ParseTree t)
   {
     debug (UNITTEST_DEBUG) writefln("APPLY_PREFETCHING");
+    // find loops, in loop body if an array is accessed load elements
+    // from next iteration into local variable at the end of the
+    // iteration and use the local variable in the current iteration.
+    find_loops(t);
+    foreach (n; loops)
+    {
+      add_prefetching_to_for_loop(n);
+    }
     return t;
-  }
-
-  string generate_antidiagonal_range(ParseTree t)
-  {
-    auto s = "";
-    auto num_dimensions = t.children.length;
-    auto range_arg = new string[num_dimensions];
-    auto shadowed = SList!string();
-
-    foreach (v; symtable)
-      if (v.is_array && v.shadow != null)
-        shadowed.insert(v.name);
-
-    auto r = Box([], []);
-    auto g = Box([], []);
-    string[3] bix;
-    foreach (c, u; t.children)
-    {
-      auto v = u.matches[0];              // variable name in NDRange specification
-      r.symbols ~= [v];
-      r.s2i[v] = c;
-      auto n = "0";
-      auto x = block_size;
-      r.intervals ~= [
-                      Interval(
-                               ParseTree("CLOP.IntegerLiteral", true, [n], "", 0, 0, []),
-                               ParseTree("CLOP.IntegerLiteral", true, [x], "", 0, 0, [])
-                              )
-                      ];
-      // n = range.intervals[c].min + b%d * block_size;
-      // x = n + block_size;
-      bix[c] = format("b%d", c);
-      auto y = ParseTree("CLOP.Identifier", true, [bix[c]], "", 0, 0, []);
-      auto w = ParseTree("CLOP.IntegerLiteral", true, [x], "", 0, 0, []);
-      auto f = create_mul_expr(y, w, "*");
-      auto a = create_add_expr(range.intervals[c].min, f, "+");
-      g.intervals ~= [Interval(a, create_add_expr(a, w, "+"))];
-      g.symbols ~= [v];
-      g.s2i[v] = c;
-    }
-
-    if (true /*trans.contains("rectangular_blocking")*/)
-    {
-      auto iv = "iv";
-      // block or work group id
-      auto bid0 = "bid0";
-      // thread or work item id
-      auto tid0 = "tid0";
-      // local index variables
-      auto li0 = "li0";
-      auto li1 = "li1";
-      // size of local index space
-      auto lsz0 = block_size;
-      auto lsz1 = block_size;
-
-      s ~= format("  int %s = get_group_id(0);\n", bid0);
-      s ~= format("  int %s = get_local_id(0);\n", tid0);
-      auto factor = false;
-      foreach (c, u; t.children)
-      {
-        auto v = u.matches[0];        // variable name in NDRange specification
-        auto o = factor ? "-" : "+";  // arithmetic operation
-        factor = !factor;
-        range_arg[c] = v;
-        auto n = format("b%s0", v); // generated variable to pass the block index.
-        s ~= format("  int b%d = %s %s %s;\n", c, n, o, bid0);
-        parameters ~= [Argument(n, `"int "`, "", "", "", true)];
-      }
-
-      auto recalculations = "";
-      auto safeguards = "";
-
-      foreach (v; shadowed)
-      {
-        auto uses = symtable[v].uses;
-        Interval[3] local_box;
-        Interval[3] global_box;
-        foreach (i, c; uses[0].children)
-        {
-          local_box[i] = interval_apply(c, r);
-          global_box[i] = interval_apply(c, g);
-        }
-        for (auto ii = 1; ii < uses.length; ++ii)
-        {
-          foreach (i, c; uses[ii].children)
-          {
-            local_box[i] = interval_union(local_box[i], interval_apply(c, r));
-            global_box[i] = interval_union(global_box[i], interval_apply(c, g));
-          }
-        }
-        // size of current array block
-        auto bsz0 = local_box[0].get_size();
-        auto bsz1 = local_box[1].get_size();
-        // global index of current array
-        auto gi0 = format("(%s) + (%s)", global_box[0].get_min(), li0);
-        auto gi1 = format("(%s) + (%s)", global_box[1].get_min(), li1);
-        // size of current global array
-        auto gsz0 = symtable[v].box[0].get_max();
-        // global memory array name
-        auto gma = v;
-        // shared memory array name
-        auto sma = generate_shared_memory_variable(v);
-        parameters ~= Argument(sma, "", "__local", format("(%s) * (%s)", bsz0, bsz1), gma);
-        s ~= format(clop.ct.templates.template_shared_memory_data_init,
-                     li1, li1, bsz1, li1,
-                     li0, li0, bsz0, li0, lsz0,
-                     li0, tid0, bsz0,
-                     sma, li1, bsz0, li0, tid0,
-                     gma, gi1, gsz0, gi0, tid0);
-
-        // margin size
-        auto msz0 = bsz0 ~ "-" ~ lsz0;
-        auto msz1 = bsz1 ~ "-" ~ lsz1;
-
-        auto iv0 = v ~ "_" ~ generate_shared_memory_variable(range_arg[0]);
-        auto iv1 = v ~ "_" ~ generate_shared_memory_variable(range_arg[1]);
-        recalculations ~= format(clop.ct.templates.template_shared_index_recalculation, iv0, msz0, tid0, iv, lsz0, iv, lsz0,  iv1, msz1, tid0, iv, lsz1, iv, lsz1);
-        if (safeguards != "") safeguards ~= " && ";
-        safeguards ~= format("(%s) < (%s) && (%s) >= (%s)", iv0, bsz0, iv1, msz1);
-      }
-      s ~= format(clop.ct.templates.template_antidiagonal_loop_prefix, iv, iv, lsz1, lsz0, iv);
-      s ~= format("    int %s = (%s) + tid0 + ((%s) < (%s) ?   0  : (%s) - (%s) + 1);\n", t.children[0].matches[0], g.intervals[0].get_min(), iv, lsz0, iv, lsz0);
-      s ~= format("    int %s = (%s) - tid0 + ((%s) < (%s) ? (%s) : (%s)        - 1);\n", t.children[1].matches[0], g.intervals[1].get_min(), iv, lsz1, iv, lsz1);
-      s ~= recalculations;
-      s ~= format("\n    if (%s)\n", safeguards);
-    }
-    else
-    {
-      s ~= "  int tid0 = get_global_id(0);\n";
-      auto internal = false;
-      for (auto c = 0; c < t.children.length; ++c)
-      {
-        ParseTree u = t.children[c];
-        s ~= (internal)
-             ? "  int " ~ u.matches[0] ~ " = c0 + tid0;\n"
-             : "  int " ~ u.matches[0] ~ " = r0 - tid1;\n";
-        internal = true;
-      }
-    }
-    return s;
-  }
-
-  string finish_antidiagonal_range(ParseTree t)
-  {
-    auto s = "";
-    auto shadowed = SList!string();
-
-    foreach (v; symtable)
-      if (v.is_array && v.shadow != null)
-      {
-        auto defs = v.defs;
-        if (defs.length > 0)
-          shadowed.insert(v.name);
-      }
-
-    if (true /*trans.contains("rectangular_blocking")*/)
-    {
-      s ~= clop.ct.templates.template_antidiagonal_loop_suffix;
-      string[3] bix;
-      auto r = Box([], []);
-      foreach (c, u; range.symbols)
-      {
-        bix[c] = format("b%d", c);
-        r.symbols ~= [u];
-        r.s2i[u] = c;
-        auto n = "0";
-        auto x = block_size;
-        r.intervals ~= [
-                        Interval(ParseTree("CLOP.IntegerLiteral", true, [n], "", 0, 0, []), ParseTree("CLOP.IntegerLiteral", true, [x], "", 0, 0, []))];
-      }
-      foreach (v; shadowed)
-      {
-        auto uses = symtable[v].uses;
-        Interval[3] local_box;
-        foreach (i, c; uses[0].children)
-        {
-          local_box[i] = interval_apply(c, r);
-        }
-        for (auto ii = 1; ii < uses.length; ++ii)
-          foreach (i, c; uses[ii].children)
-          {
-            local_box[i] = interval_union(local_box[i], interval_apply(c, r));
-          }
-        // thread or work item id
-        auto tid0 = "tid0";
-        // local index variables
-        auto li0 = "li0";
-        auto li1 = "li1";
-        // size of local index space
-        auto lsz0 = block_size;
-        auto lsz1 = block_size;
-        // size of current array block
-        auto bsz0 = local_box[0].get_size();
-        auto bsz1 = local_box[1].get_size();
-        // global index of current array
-        auto gi0 = format("(%s) * (%s) + (%s)", bix[0], lsz0, li0);
-        auto gi1 = format("(%s) * (%s) + (%s)", bix[1], lsz1, li1);
-        // size of current global array
-        auto gsz0 = symtable[v].box[0].get_max();
-        // global memory array name
-        auto gma = v;
-        // shared memory array name
-        auto sma = generate_shared_memory_variable(v);
-        s ~= format(clop.ct.templates.template_shared_memory_fini,
-                     li1, li1, bsz1, li1,
-                     li0, li0, bsz0, li0, lsz0,
-                     li0, tid0, bsz0,
-                     gma, gi1, gsz0, gi0, tid0,
-                     sma, li1, bsz0, li0, tid0);
-      }
-    }
-    return s;
-  }
-
-  auto generate_horizontal_range (ParseTree t)
-  {
-    return "";
-  }
-
-  auto finish_horizontal_range(ParseTree t)
-  {
-    return "";
-  }
-
-  auto generate_stencil_range (ParseTree t)
-  {
-    return "";
-  }
-
-  auto finish_stencil_range(ParseTree t)
-  {
-    return "";
-  }
-
-  string generate_ndrange(ParseTree t)
-  {
-    string s = "";
-    ulong n = t.children.length;
-    for (auto c = 0; c < n; ++c)
-    {
-      ParseTree u = t.children[c];
-      string name = u.matches[0];
-      symtable[name] = Symbol(name, "int", t, null, null, null, null, null, true, false, false);
-      s ~= "  int " ~ name ~ " = get_global_id(" ~ to!string(n - 1 - c) ~ ");\n";
-    }
-    return s;
-  }
-
-  string finish_ndrange(ParseTree t)
-  {
-    return "";
   }
 
   // if ( "CLOP.ArrayIndex" == t.children[1].name &&
@@ -580,12 +339,12 @@ struct Program
     return format( "[%s]", x );
   }
 
-  /++
-   + Given a string that represents a name of a variable, return a
-   + string that represents a parameter declaration that contains the
-   + type of the parameter matching the variable's type and the
-   + parameter name matching the variable's name.
-   +/
+  /**
+   * Given a string that represents a name of a variable, return a
+   * string that represents a parameter declaration that contains the
+   * type of the parameter matching the variable's type and the
+   * parameter name matching the variable's name.
+   */
   void generate_code_setting_kernel_parameters(string kernel)
   {
     auto i = 0U;
@@ -651,12 +410,12 @@ struct Program
     return result;
   }
 
-  /++
-   + Generate the host code that invokes the OpenCL kernel with proper
-   + synchronization pattern.  The code defines the parameters of
-   + the kernel's NDRange and then uses the clEnqueueNDRangeKernel
-   + call to launch the kernel.
-   +/
+  /**
+   * Generate the host code that invokes the OpenCL kernel with proper
+   * synchronization pattern.  The code defines the parameters of
+   * the kernel's NDRange and then uses the clEnqueueNDRangeKernel
+   * call to launch the kernel.
+   */
   string generate_code_to_invoke_kernel()
   {
 
@@ -680,15 +439,26 @@ struct Program
         additional_arguments = format("clSetKernelArg(%s, %s, cl_int.sizeof, &i);", kernel_object, parameters[$ - 1].number);
       }
     }
-
+    if (pattern == "Horizontal")
+    {
+      global_work_size = format("(%s) - (%s)", range.intervals[1].get_max(), range.intervals[1].get_min());
+      local_work_size = format("%s.get_work_group_size(global_work_size)", instance_object);
+      range_start = format("(%s)", range.intervals[0].get_min());
+      range_finish = format("(%s)", range.intervals[0].get_max());
+      additional_arguments = format("clSetKernelArg(%s, %s, cl_int.sizeof, &i);", kernel_object, parameters[$ - 1].number);
+    }
     return format(clop.ct.templates.template_kernel_invocation_loop,
-                  range_start, range_finish, global_work_size, local_work_size,
-                  additional_arguments, kernel_object);
+                  range_start,
+                  range_finish,
+                  global_work_size,
+                  local_work_size,
+                  additional_arguments,
+                  kernel_object);
   }
 
-  /++
-   +  For multidimensional arrays linearize the index expressions.
-   +/
+  /**
+   *  For multidimensional arrays linearize the index expressions.
+   */
   translation_result translate_index_expression(string v, ParseTree t)
   {
     string value = "", stmts = "";
@@ -713,9 +483,9 @@ struct Program
     return translation_result(stmts, value);
   }
 
-  /++
-   +
-   +/
+  /**
+   *
+   */
   Symbol create_new_temporary(string lhs)
   {
     auto n = format("clop_tmp_%s", temporary_id++);
@@ -726,9 +496,9 @@ struct Program
     return s;
   }
 
-  /++
-   +
-   +/
+  /**
+   *
+   */
   translation_result translate_expression(ParseTree t)
   {
     string stmts = "", value = "";
@@ -1044,9 +814,187 @@ struct Program
     return translation_result(stmts, value);
   }
 
-  /++
-   +
-   +/
+  /**
+   *
+   */
+  void find_loops(ParseTree t)
+  {
+    switch (t.name)
+    {
+    case "CLOP.Statement":
+      {
+        find_loops(t.children[0]);
+      }
+      break;
+    case "CLOP.CompoundStatement":
+      {
+        if (t.children.length > 0)
+          find_loops(t.children[0]);
+      }
+      break;
+    case "CLOP.StatementList":
+      {
+        foreach (c; t.children)
+          find_loops(c);
+      }
+      break;
+    case "CLOP.IfStatement":
+      {
+        find_loops(t.children[1]);
+        if (t.children.length > 2)
+          find_loops(t.children[2]);
+      }
+      break;
+    case "CLOP.IterationStatement":
+      {
+        find_loops(t.children[0]);
+      }
+      break;
+    case "CLOP.ForStatement":
+      {
+        loops ~= t;
+      }
+      break;
+    default:
+      {
+      }
+    }
+  }
+
+  /**
+   *
+   */
+  void add_prefetching_to_for_loop(ParseTree t)
+  {
+    debug (UNITTEST_DEBUG)
+    {
+      writeln("Adding prefetching in a loop...");
+    }
+    auto index_variable = get_loop_index_variable(t);
+    find_global_access_statements(get_loop_body(t));
+  }
+
+  string get_loop_index_variable(ParseTree t)
+  {
+    // FIXME: for now not implemented, just return "i";
+    return "i";
+  }
+
+  ParseTree get_loop_body(ParseTree t)
+  {
+    // FIXME: return the last child, works for for-loops.
+    return t.children[$ - 1];
+  }
+
+  void find_global_access_statements(ParseTree t)
+  {
+    switch (t.name)
+    {
+    case "CLOP.Declaration":
+      {
+        break;
+      }
+    case "CLOP.Declarator":
+      {
+        break;
+      }
+    case "CLOP.DeclarationSpecifiers":
+      {
+        break;
+      }
+    case "CLOP.StorageClassSpecifier":
+      {
+        break;
+      }
+    case "CLOP.TypeSpecifier":
+      {
+        break;
+      }
+    case "CLOP.ParameterList":
+      {
+        break;
+      }
+    case "CLOP.ParameterDeclaration":
+      {
+        break;
+      }
+    case "CLOP.StatementList":
+      {
+        foreach (c; t.children)
+          find_global_access_statements(c);
+        break;
+      }
+    case "CLOP.Statement":
+      {
+        find_global_access_statements(t.children[0]);
+        break;
+      }
+    case "CLOP.CompoundStatement":
+      {
+        if (t.children.length > 0)
+          find_global_access_statements(t.children[0]);
+        break;
+      }
+    case "CLOP.ExpressionStatement":
+      {
+        if (has_prefetching_candidates(t.children[0]))
+          prefs ~= t;
+        break;
+      }
+    case "CLOP.IfStatement":
+      {
+        break;
+      }
+    case "CLOP.IterationStatement":
+      {
+        break;
+      }
+    case "CLOP.ForStatement":
+      {
+        break;
+      }
+    case "CLOP.ReturnStatement":
+      {
+        break;
+      }
+    case "CLOP.Identifier":
+      {
+        break;
+      }
+    case "CLOP.IntegerLiteral":
+      {
+        break;
+      }
+    case "CLOP.FloatLiteral":
+      {
+        break;
+      }
+    default:
+      {
+        break;
+      }
+    }
+  }
+
+  bool has_prefetching_candidates(ParseTree t)
+  {
+    switch (t.name)
+    {
+    case "CLOP.Expression":
+      {
+        foreach (c; t.children)
+          if (has_prefetching_candidates(c))
+            return true;
+        return false;
+      }
+    default:
+      return false;
+    }
+  }
+
+  /**
+   *
+   */
   string translate(ParseTree t)
   {
     switch (t.name)
@@ -1189,7 +1137,8 @@ unittest
   static import clop.ct.stage2;
   static import clop.rt.ndarray;
 
-  alias A = clop.rt.ndarray.NDArray!float;
+  alias Fa = clop.rt.ndarray.NDArray!float;
+  alias Ia = clop.rt.ndarray.NDArray!int;
 
   // test 1
   version (disabled)
@@ -1205,7 +1154,7 @@ unittest
             hidden[i] = ONEF / (ONEF + exp(-s));
           }
         }});
-    alias T1 = std.typetuple.TypeTuple!(size_t, float*, size_t, A, A, A);
+    alias T1 = std.typetuple.TypeTuple!(size_t, float*, size_t, Fa, Fa, Fa);
     auto be1 = clop.ct.stage2.Backend!T1(t1, __FILE__, __LINE__, ["h_n", "t", "i_n", "inputs", "weights", "hidden"]);
     be1.analyze(t1);
     be1.update_parameters();
@@ -1240,7 +1189,7 @@ unittest
             hidden_units[group_index] = s;
           }
         }});
-    alias T2 = std.typetuple.TypeTuple!(size_t, size_t, size_t, float*, A, A, A);
+    alias T2 = std.typetuple.TypeTuple!(size_t, size_t, size_t, float*, Fa, Fa, Fa);
     auto be2 = clop.ct.stage2.Backend!T2(t2, __FILE__, __LINE__, ["gws", "wgs", "input_n", "scratch", "input_units", "i2h_weights", "hidden_units"]);
     be2.analyze(t2);
     be2.update_parameters();
@@ -1254,6 +1203,7 @@ unittest
   }
 
   // test 3
+  version (disabled)
   {
     auto t3 = clop.ct.parser.CLOP(q{
         int max3(int a, int b, int c) {
@@ -1264,19 +1214,57 @@ unittest
           F[r, c] = max3(F[r - 1, c - 1] + BLOSUM62[M[r] * CHARS + N[c]], F[r, c - 1] - penalty, F[r - 1, c] - penalty);
         } apply(rectangular_tiling(BLOCK_SIZE, BLOCK_SIZE))
       });
-    alias I = clop.rt.ndarray.NDArray!int;
-    alias T3 = std.typetuple.TypeTuple!(size_t, size_t, I, I, I, I, int);
+    alias T3 = std.typetuple.TypeTuple!(size_t, size_t, Ia, Ia, Ia, Ia, int);
     auto be3 = clop.ct.stage2.Backend!T3(t3, __FILE__, __LINE__, ["rows", "cols", "F", "BLOSUM62", "M", "N", "penalty"]);
     be3.analyze(t3);
     be3.update_parameters();
-    be3.lower(t3);
     be3.compute_intervals();
-    auto o3 = [Transformation("rectangular_tiling", ["BLOCK_SIZE", "BLOCK_SIZE"])];
+    auto o3 = [Transformation("rectangular_tiling", ["BLOCK_SIZE", "BLOCK_SIZE"]), Transformation("prefetching", [])];
     auto p3 = Program(be3.symtable, o3, be3.parameters, be3.KBT, be3.range, be3.lws, be3.pattern, "", "", be3.suffix);
     auto k3 = p3.translate(p3.optimize(be3.KBT));
     debug (UNITTEST_DEBUG) writefln("UT:%s k:\n%s", be3.suffix, k3);
     auto i3 = p3.generate_code_to_invoke_kernel();
     debug (UNITTEST_DEBUG) writefln("UT:%s code to invoke kernel:\n%s", be3.suffix, i3);
+  }
+
+  // test pathfinder
+  {
+    auto source_code_pathfinder = clop.ct.parser.CLOP(q{
+      int min3(int a, int b, int c)
+      {
+        return a < b ? (c < a ? c : a) : (c < b ? c : b);
+      }
+      int mov3(int w, int s, int e)
+      {
+        return w < s ? (e < w ? -1 : 1) : (e < s ? -1 : 0);
+      }
+      Horizontal NDRange(r : 1 .. rows, c : 0 .. cols) {
+        int s = dsums[r - 1, c];
+        int w = (c > 0       ) ? dsums[r - 1, c - 1] : INT_MAX;
+        int e = (c < cols - 1) ? dsums[r - 1, c + 1] : INT_MAX;
+        dsums[r, c] = data[r, c] + min3(w, s, e);
+        move[r, c] = mov3(w, s, e);
+      }
+    });
+    alias kernel_param_types_pathfinder = std.typetuple.TypeTuple!(size_t, size_t, Ia, Ia);
+    auto backend_pathfinder = clop.ct.stage2.Backend!kernel_param_types_pathfinder(source_code_pathfinder, __FILE__, __LINE__, ["rows", "cols", "dsums", "data"]);
+    backend_pathfinder.analyze(source_code_pathfinder);
+    backend_pathfinder.update_parameters();
+    backend_pathfinder.compute_intervals();
+    auto program_pathfinder = Program(backend_pathfinder.symtable,
+                                      [],
+                                      backend_pathfinder.parameters,
+                                      backend_pathfinder.KBT,
+                                      backend_pathfinder.range,
+                                      backend_pathfinder.lws,
+                                      backend_pathfinder.pattern,
+                                      "",
+                                      "",
+                                      backend_pathfinder.suffix);
+    auto kernel_pathfinder = program_pathfinder.translate(program_pathfinder.optimize(backend_pathfinder.KBT));
+    debug (UNITTEST_DEBUG) writefln("UT:%s k:\n%s", backend_pathfinder.suffix, kernel_pathfinder);
+    auto host_side_pathfinder = program_pathfinder.generate_code_to_invoke_kernel();
+    debug (UNITTEST_DEBUG) writefln("UT:%s code to invoke kernel:\n%s", backend_pathfinder.suffix, host_side_pathfinder);
   }
 }
 
