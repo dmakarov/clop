@@ -28,26 +28,10 @@ import std.conv, std.datetime, std.getopt, std.random, std.stdio;
 import derelict.opencl.cl;
 import clop.compiler;
 
-/**
- * This application implements the Floyd-Warshall algorithm for
- * finding the shortest path between any two nodes in a graph.
- *
- * Floyd-Warshall-All-Pairs-Shortest(G,w)
- *   Initialize d[i,j] ← w(i,j), ∞ if no such link
- *   Initialize path[i,j] ← ∞
- *   for k ← 1 to |V|
- *     for i ← 1 to |V|
- *       for j ← 1 to |V|
- *         if d[i,k] + d[k,j] < d[i,j] then ; update min
- *            d[i,j] ← d[i,k] + d[k,j]
- *            path[i,j] ← k                 ; store to get path
- *
- * Here we use one matrix and overwrite it for each iteration of k.
- **/
 class Application {
   static immutable int BLOCK_SIZE = 128;
-  int[] data;
-  int[] move;
+  NDArray!int data;
+  NDArray!int move;
   int[] sums;
   int[] gold;
   uint rows;
@@ -76,8 +60,8 @@ class Application {
       throw new Exception("ERROR: number of columns " ~ to!string(cols) ~
                           " must be divisible by height " ~ to!string(height));
     }
-    data   = new int[rows * cols]; assert(null != data, "Can't allocate memory for data");
-    move   = new int[rows * cols]; assert(null != data, "Can't allocate memory for move");
+    data   = new NDArray!int(rows, cols); assert(data !is null, "Can't allocate memory for data");
+    move   = new NDArray!int(rows, cols); assert(move !is null, "Can't allocate memory for move");
     sums   = new int[cols];        assert(null != sums, "Can't allocate memory for sums");
     gold   = new int[cols];        assert(null != gold, "Can't allocate memory for gold");
     Mt19937 e;
@@ -332,7 +316,9 @@ class Application {
     cl_event event;
 
     foreach (c; 0 .. cols)
+    {
       sums[c] = data[c];
+    }
     cl_int status;
     cl_mem_flags flags = CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR;
     cl_mem ddata = clCreateBuffer(runtime.context, flags, cl_int.sizeof * data.length, data.ptr, &status);
@@ -376,33 +362,33 @@ class Application {
       status = clSetKernelArg(kernel_noblocks,  5, cl_int.sizeof, &step);
       assert(status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror(status));
 
-      status = clEnqueueNDRangeKernel(runtime.queue                   ,
-                                       kernel_noblocks                 ,
-                                       1                               ,
-                                       null                            ,
-                                       &gwsize                         ,
-                                       null                            ,
-                                       0                               ,
-                                       null                            ,
-                                       &event                        );
+      status = clEnqueueNDRangeKernel(runtime.queue               ,
+                                      kernel_noblocks             ,
+                                      1                           ,
+                                      null                        ,
+                                      &gwsize                     ,
+                                      null                        ,
+                                      0                           ,
+                                      null                        ,
+                                      &event                     );
       assert(status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror(status));
       status = clWaitForEvents(1, &event);
-      assert(status == CL_SUCCESS, "opencl_stencil_25pt_shared " ~ cl_strerror(status));
+      assert(status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror(status));
 
       cl_ulong start_time;
       status = clGetEventProfilingInfo (event                     , // cl_event          event
-                                         CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
-                                         cl_ulong.sizeof           , // size_t            param_value_size
-                                         &start_time               , // void*             param_value
-                                         null                    ); // size_t*           param_value_size_ret
-      assert(status == CL_SUCCESS, "opencl_stencil_25pt_shared " ~ cl_strerror(status));
+                                        CL_PROFILING_COMMAND_START, // cl_profiling_info param_name
+                                        cl_ulong.sizeof           , // size_t            param_value_size
+                                        &start_time               , // void*             param_value
+                                        null                     ); // size_t*           param_value_size_ret
+      assert(status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror(status));
       cl_ulong end_time;
       status = clGetEventProfilingInfo (event                     , // cl_event          event
-                                         CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
-                                         cl_ulong.sizeof           , // size_t            param_value_size
-                                         &end_time                 , // void*             param_value
-                                         null                    ); // size_t*           param_value_size_ret
-      assert(status == CL_SUCCESS, "opencl_stencil_25pt_shared " ~ cl_strerror(status));
+                                        CL_PROFILING_COMMAND_END  , // cl_profiling_info param_name
+                                        cl_ulong.sizeof           , // size_t            param_value_size
+                                        &end_time                 , // void*             param_value
+                                        null                     ); // size_t*           param_value_size_ret
+      assert(status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror(status));
       result += (end_time - start_time) / 1E9;
 
       src = dst;
@@ -411,27 +397,27 @@ class Application {
     ittime += ticks.usecs / 1E6;
     itcount += 1;
     }
-    writefln("%d iterations in %f s, average iteration time %f", itcount, ittime, ittime / itcount);
+    // writefln("%d iterations in %f s, average iteration time %f", itcount, ittime, ittime / itcount);
 
     status = clEnqueueReadBuffer(runtime.queue              ,
-                                  dsums[src]                 ,
-                                  CL_TRUE                    ,
-                                  0                          ,
-                                  cl_int.sizeof * cols       ,
-                                  sums.ptr                   ,
-                                  0                          ,
-                                  null                       ,
-                                  null                     );
+                                 dsums[src]                 ,
+                                 CL_TRUE                    ,
+                                 0                          ,
+                                 cl_int.sizeof * cols       ,
+                                 sums.ptr                   ,
+                                 0                          ,
+                                 null                       ,
+                                 null                      );
     assert(status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror(status));
     status = clEnqueueReadBuffer(runtime.queue              ,
-                                  dmove                      ,
-                                  CL_TRUE                    ,
-                                  0                          ,
-                                  cl_int.sizeof * rows * cols,
-                                  move.ptr                   ,
-                                  0                          ,
-                                  null                       ,
-                                  null                     );
+                                 dmove                      ,
+                                 CL_TRUE                    ,
+                                 0                          ,
+                                 cl_int.sizeof * rows * cols,
+                                 move.ptr                   ,
+                                 0                          ,
+                                 null                       ,
+                                 null                      );
     assert(status == CL_SUCCESS, "opencl_noblocks " ~ cl_strerror(status));
 
     status = clReleaseMemObject(dsums[1]);
@@ -574,47 +560,45 @@ class Application {
     return result;
   }
 
-/+
+
   /**
-   *
+   *  Non-optimized CLOP implementation of Path Finder.
+   *  Instead of switching between two arrays for current and previous
+   *  rows, we use one large array of the same size as the data array.
+   *  We fill in the array row after row, using the CLOP compiler to
+   *  generate the host side loop with synchronization between each
+   *  row computation.
    */
   void clop_dsl()
   {
-    try
+    NDArray!int dsums = new NDArray!int(rows, cols);
+    foreach (c; 0 .. cols)
     {
-      mixin(compile(
-      q{
-        int min3(int a, int b, int c)
-        {
-          int k = a < b ? a : b;
-          return k < c ? k : c;
-        }
-
-        int mov3(int w, int s, int e)
-        {
-          return (w < s) ? (w < e ? 1 : -1) : (s < e ? 0 : -1);
-        }
-
-        int src = 0;
-        int dst = 1 - src;
-        NDRange(r ; 1 .. rows, c ; 0 .. cols);
-        weigths[0][c] = data[c];
-        {
-          int s = weight[src][c];
-          int w = (c > 0       ) ? weights[src][c - 1] : INT_MAX;
-          int e = (c < cols - 1) ? weights[src][c + 1] : INT_MAX;
-          weights[dst][c] = data[r * cols + c] + min3(w, s, e);
-          move[r * cols + c] = mov3(w, s, e);
-        }
-        src = dst;
-      }));
+      dsums[c] = data[c];
     }
-    catch(Exception e)
+    mixin(compile(q{
+      int min3(int a, int b, int c)
+      {
+        return a < b ? (c < a ? c : a) : (c < b ? c : b);
+      }
+      int mov3(int w, int s, int e)
+      {
+        return w < s ? (e < w ? -1 : 1) : (e < s ? -1 : 0);
+      }
+      Horizontal NDRange(r : 1 .. rows, c : 0 .. cols) {
+        int s = dsums[r - 1, c];
+        int w = (c > 0       ) ? dsums[r - 1, c - 1] : INT_MAX;
+        int e = (c < cols - 1) ? dsums[r - 1, c + 1] : INT_MAX;
+        dsums[r, c] = data[r, c] + min3(w, s, e);
+        move[r, c] = mov3(w, s, e);
+      }
+    }));
+    foreach (c; 0 .. cols)
     {
-      writeln(e);
+      sums[c] = dsums[rows - 1, c];
     }
   }
-+/
+
   void run()
   {
     size_t size;
@@ -628,9 +612,9 @@ class Application {
     timer.stop();
     ticks = timer.peek();
     writefln("%2d MI SEQUENTIAL %5.3f [s],         %7.2f MI/s",
-              rows * cols / (1024 * 1024),
-              ticks.usecs / 1E6,
-              rows * cols * 1E6 / (1024 * 1024 * ticks.usecs));
+             rows * cols / (1024 * 1024),
+             ticks.usecs / 1E6,
+             rows * cols * 1E6 / (1024 * 1024 * ticks.usecs));
 
     timer.reset();
     timer.start();
@@ -638,9 +622,9 @@ class Application {
     timer.stop();
     ticks = timer.peek();
     writefln("%2d MI GHOST ZONE %5.3f [s],         %7.2f MI/s",
-              rows * cols / (1024 * 1024),
-              ticks.usecs / 1E6,
-              rows * cols * 1E6 / (1024 * 1024 * ticks.usecs));
+             rows * cols / (1024 * 1024),
+             ticks.usecs / 1E6,
+             rows * cols * 1E6 / (1024 * 1024 * ticks.usecs));
     validate();
 
     reset();
@@ -652,18 +636,18 @@ class Application {
     timer.stop();
     ticks = timer.peek();
     writefln("%2d MI CL NOBLOCK %5.3f (%5.3f) [s], %7.2f MI/s, estimated %7.2f MI/s",
-              rows * cols / (1024 * 1024),
-              ticks.usecs / 1E6, rate,
-              (rows - 1) * cols / (1024 * 1024 * rate),
-              2 * benchmark / 6);
+             rows * cols / (1024 * 1024),
+             ticks.usecs / 1E6, rate,
+             (rows - 1) * cols / (1024 * 1024 * rate),
+             2 * benchmark / 6);
     validate();
 
     clGetKernelWorkGroupInfo(kernel_ghost_zone,
-                              runtime.device,
-                              CL_KERNEL_WORK_GROUP_SIZE,
-                              size.sizeof,
-                              &size,
-                              null);
+                             runtime.device,
+                             CL_KERNEL_WORK_GROUP_SIZE,
+                             size.sizeof,
+                             &size,
+                             null);
     if (size >= BLOCK_SIZE + 2 * (height - 1))
     {
       reset();
@@ -675,11 +659,23 @@ class Application {
       timer.stop();
       ticks = timer.peek();
       writefln("%2d MI CL GHOST Z %5.3f (%5.3f) [s], %7.2f MI/s",
-                rows * cols / (1024 * 1024),
-                ticks.usecs / 1E6, rate,
-                (rows - 1) * cols / (1024 * 1024 * rate));
+               rows * cols / (1024 * 1024),
+               ticks.usecs / 1E6, rate,
+               (rows - 1) * cols / (1024 * 1024 * rate));
       validate();
     }
+
+    reset();
+    timer.reset();
+    timer.start();
+    clop_dsl();
+    timer.stop();
+    ticks = timer.peek();
+    writefln("%2d MI CLOP %5.3f [s], %7.2f MI/s",
+             rows * cols / (1024 * 1024),
+             ticks.usecs / 1E6,
+             (rows - 1) * cols / to!double(ticks.usecs));
+    validate();
   }
 }
 
@@ -702,7 +698,9 @@ int main(string[] args)
     foreach (d; 0 .. platforms[p])
     {
       if (selected_device && (p != platform || d != device))
+      {
         continue;
+      }
       try
       {
         runtime.init(p, d);
