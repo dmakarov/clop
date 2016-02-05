@@ -29,6 +29,7 @@ import std.container;
 import std.conv;
 import std.string;
 import std.traits;
+import std.typetuple;
 debug (UNITTEST_DEBUG) import std.stdio;
 
 import pegged.grammar;
@@ -39,6 +40,11 @@ import clop.ct.structs;
 import clop.ct.symbol;
 import clop.ct.transform;
 static import clop.ct.templates;
+
+struct translation_result {
+  string stmts;
+  string value;
+}
 
 /**
  *  The container of all information related to a specific variant
@@ -110,12 +116,6 @@ struct Program
   ParseTree[] loops;
   ParseTree[] prefs;
 
-  struct translation_result
-  {
-    string stmts;
-    string value;
-  }
-
   /**
    *
    */
@@ -129,13 +129,37 @@ struct Program
     return r;
   }
 
+  /**
+   *
+   */
+  ParseTree apply_transformation(Transformation f, ParseTree t)
+  {
+    foreach (member; __traits (allMembers, Program))
+    {
+      if (pattern == member)
+      {
+        alias M = typeof (mixin ("this." ~ member));
+        static if (isCallable!M &&
+                   is (ReturnType!M == ParseTree) &&
+                   is (ParameterTypeTuple!M == TypeTuple!(ParseTree)))
+          return mixin ("this." ~ member ~ "(t)");
+      }
+    }
+    errors ~= "CLOP: unknown syncronization pattern " ~ pattern ~ "\n";
+    return t;
+  }
+
   ParseTree apply_trans(Transformation f, ParseTree t)
   {
     debug (UNITTEST_DEBUG) writefln("Program.apply_trans(%s)", f.name);
     switch (f.name)
     {
     case "rectangular_tiling":
-      return apply_rectangular_tiling_with_antidiagonal_pattern(t);
+      if (pattern == "Antidiagonal")
+        return apply_rectangular_tiling_with_antidiagonal_pattern(t);
+      else if (pattern == "Horizontal")
+        return apply_rectangular_tiling_with_horizontal_pattern(t);
+      return t.dup;
     case "rhomboid_tiling":
       return apply_rhomboid_tiling_with_antidiagonal_pattern(t);
     case "prefetching":
@@ -264,6 +288,46 @@ struct Program
     auto then_part = if_statem.children[0].children[1];
     then_part.children[0] = t.children[0].children[$ - 1];
     t.children[0].children = t.children[0].children[0 .. $ - 1] ~ [tx, bx, bs, nb, d0, d1, s];
+    return t;
+  }
+
+  auto apply_rectangular_tiling_with_horizontal_pattern(ParseTree t)
+  {
+    if (t.name != "CLOP.CompoundStatement")
+    {
+      debug (UNITTEST_DEBUG) writefln("Node is not a CompoundStatement");
+      return t;
+    }
+    auto height = "height";
+    if (height !in symtable)
+    {
+      symtable[height] = Symbol(height, "int");
+      parameters = parameters[0 .. $ - 1] ~ [Argument(height, `"int "`, "", "", "", true)] ~ [parameters[$ - 1]];
+      parameters[$ - 2].number = to!(uint)(parameters.length) - 2;
+    }
+    auto interval_height= format("(%s) - (%s)", range.intervals[0].get_max(), range.intervals[0].get_min());
+    auto interval_width = format("(%s) - (%s)", range.intervals[1].get_max(), range.intervals[1].get_min());
+    range_finish = format("((%s) + (%s)) / (%s) - 1", interval_height, interval_width, block_size);
+    local_work_size = format("(%s)", block_size);
+    global_work_size= format("(%s) * (i + 1) < (%s) ? (%s) * (i + 1) : (%s) + (%s) - (%s) * (i + 1)",
+                             block_size, interval_height, block_size, interval_height, interval_width, block_size);
+    additional_arguments = format("clSetKernelArg(%s, %s, cl_int.sizeof, &height);", kernel_object, parameters[$ - 2].number);
+    auto rs = CLOP.decimateTree(CLOP.Declaration(format("int start = %s;", range.symbols[0])));
+    auto bx = CLOP.decimateTree(CLOP.Declaration(format("int bx = get_group_id(0);")));
+    auto bs = CLOP.decimateTree(CLOP.Declaration(format("int bsz = get_local_size(0);")));
+    auto tx = CLOP.decimateTree(CLOP.Statement(format("%s = bx * bsz - (height - 1) + get_local_id(0);", range.symbols[1])));
+    auto s = CLOP.decimateTree(CLOP.Statement(format(q{
+            for (int %s = %s; %s < %s; ++%s)
+            {
+              if (-1 < %s && %s < (%s)) {}
+              barrier(CLK_GLOBAL_MEM_FENCE);
+            }}, range.symbols[0], "start", range.symbols[0], "start + height", range.symbols[0],
+                range.symbols[1], range.symbols[1], range.intervals[1].get_max())));
+    auto loop_body = s.children[0].children[0].children[4];
+    auto stmt_one = loop_body.children[0].children[0].children[0];
+    auto then_part = stmt_one.children[0].children[1];
+    then_part.children[0] = t.children[0].children[$ - 1];
+    t.children[0].children = t.children[0].children[0 .. $ - 1] ~ [rs, bx, bs, tx, s];
     return t;
   }
 
@@ -438,22 +502,51 @@ struct Program
         range_finish = format("(%s) + (%s) - 1", interval_height, interval_width);
         additional_arguments = format("clSetKernelArg(%s, %s, cl_int.sizeof, &i);", kernel_object, parameters[$ - 1].number);
       }
+      return format(clop.ct.templates.template_kernel_invocation_loop,
+                    range_start,
+                    range_finish,
+                    global_work_size,
+                    local_work_size,
+                    additional_arguments,
+                    kernel_object);
     }
     if (pattern == "Horizontal")
     {
       global_work_size = format("(%s) - (%s)", range.intervals[1].get_max(), range.intervals[1].get_min());
-      local_work_size = format("%s.get_work_group_size(global_work_size)", instance_object);
       range_start = format("(%s)", range.intervals[0].get_min());
       range_finish = format("(%s)", range.intervals[0].get_max());
-      additional_arguments = format("clSetKernelArg(%s, %s, cl_int.sizeof, &i);", kernel_object, parameters[$ - 1].number);
+      additional_arguments ~= format("clSetKernelArg(%s, %s, cl_int.sizeof, &i);", kernel_object, parameters[$ - 1].number);
+      bool use_loop_with_step = false;
+      foreach (t; trans)
+      {
+        if (t.name == "rectangular_tiling")
+          use_loop_with_step = true;
+      }
+      if (use_loop_with_step)
+      {
+        local_work_size = format("%s.get_work_group_size(BLOCK_SIZE)", instance_object);
+        return format(clop.ct.templates.template_kernel_invocation_loop_with_step,
+                      range_start,
+                      range_finish,
+                      "height",
+                      global_work_size,
+                      local_work_size,
+                      additional_arguments,
+                      kernel_object);
+      }
+      else
+      {
+        local_work_size = format("%s.get_work_group_size(global_work_size)", instance_object);
+        return format(clop.ct.templates.template_kernel_invocation_loop,
+                      range_start,
+                      range_finish,
+                      global_work_size,
+                      local_work_size,
+                      additional_arguments,
+                      kernel_object);
+      }
     }
-    return format(clop.ct.templates.template_kernel_invocation_loop,
-                  range_start,
-                  range_finish,
-                  global_work_size,
-                  local_work_size,
-                  additional_arguments,
-                  kernel_object);
+    return "";
   }
 
   /**

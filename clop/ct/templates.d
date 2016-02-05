@@ -62,6 +62,18 @@ template_create_opencl_kernel = q{
     }
 },
 
+template_kernel_invocation_loop_with_step = q{
+  for (uint i = (%s); i < (%s); i += (%s))
+  {
+    size_t global_work_size = %s;
+    size_t local_work_size  = %s;
+    // set additional kernel arguments if needed.
+    %s
+    runtime.status = clEnqueueNDRangeKernel(runtime.queue, %s, 1, null, &global_work_size, &local_work_size, 0, null, null);
+    assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clEnqueueNDRangeKernel"));
+  }
+},
+
 template_kernel_invocation_loop = q{
   foreach (i; (%s) .. (%s))
   {

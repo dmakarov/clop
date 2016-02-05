@@ -34,8 +34,8 @@ class Application {
   NDArray!int move;
   int[] sums;
   int[] gold;
-  uint rows;
-  uint cols;
+  int rows;
+  int cols;
   int height;
 
   cl_kernel kernel_noblocks;
@@ -47,8 +47,8 @@ class Application {
     {
       throw new Exception("ERROR: invalid arguments # " ~ to!string(args.length - 1));
     }
-    rows   = clp2(to!(uint)(args[1]));
-    cols   = clp2(to!(uint)(args[2]));
+    rows   = clp2(to!(int)(args[1]) - 1) + 1;
+    cols   = clp2(to!(int)(args[2]));
     height = to!(int)(args[3]);
     if (cols % BLOCK_SIZE != 0)
     {
@@ -106,7 +106,7 @@ class Application {
                               int  start , //
                               int  steps , //
                      __local  int* prev  , //
-                     __local  int* sums ) //
+                     __local  int* sums  ) //
       {
         const int BLOCK_SIZE = get_local_size(0) - 2 * (height - 1);
         const int tx = get_local_id(0);
@@ -560,9 +560,143 @@ class Application {
     return result;
   }
 
+  void clop_mock()
+  {
+    NDArray!int dsums = new NDArray!int(rows, cols);
+    foreach (c; 0 .. cols)
+    {
+      dsums[c] = data[c];
+    }
+
+    try
+    {
+    import std.datetime;
+    StopWatch timer;
+    timer.start();
+
+    static clop.rt.instance.Instance instance_app_579_2;
+    if (instance_app_579_2 is null)
+    {
+      instance_app_579_2 = new clop.rt.instance.Instance("app_579_2");
+      runtime.register_instance(instance_app_579_2);
+    }
+    if (!instance_app_579_2.ready)
+    {
+      // make list of kernel parameters
+      auto kernel_params = "", macros = "";
+      kernel_params ~= "" ~ "int " ~ "rows";
+      kernel_params ~= ", " ~ "int " ~ "cols";
+      kernel_params ~= ", __global " ~ typeid(*dsums.ptr).toString() ~ "* " ~ "dsums";
+      kernel_params ~= ", __global " ~ typeid(*data.ptr).toString() ~ "* " ~ "data";
+      kernel_params ~= ", __global " ~ typeid(*move.ptr).toString() ~ "* " ~ "move";
+      kernel_params ~= ", __constant " ~ "ulong* " ~ "clop_ndarray_dimensions_dsums";
+      kernel_params ~= ", __constant " ~ "ulong* " ~ "clop_ndarray_dimensions_data";
+      kernel_params ~= ", __constant " ~ "ulong* " ~ "clop_ndarray_dimensions_move";
+      kernel_params ~= ", " ~ "int " ~ "height";
+      kernel_params ~= ", " ~ "int " ~ "r";
+      kernel_params ~= ", __local " ~ "int* dsums_local";
+      instance_app_579_2.prepare_resources("clop_kernel_main_app_579_2_Horizontal_rectangular_tiling_height_BLOCK_SIZE", macros ~ q{ int min3 ( int a , int b , int c ) { return a < b ? ( c < a ? c : a ) : ( c < b ? c : b ) ; } int mov3 ( int w , int s , int e ) { return w < s ? ( e < w ? -1 : 1 ) : ( e < s ? -1 : 0 ) ; }} ~ "__kernel void clop_kernel_main_app_579_2_Horizontal_rectangular_tiling_height_BLOCK_SIZE(" ~ kernel_params ~ ")" ~ q{
+            {
+              int c = get_global_id(0);
+              int start = r;
+              int bx = get_group_id(0);
+              int bsz = get_local_size(0);
+              c = bx * bsz - (height - 1) + get_local_id(0);
+              if (-1 < c && c < (cols))
+                dsums_local[get_local_id(0)] = dsums[(r - 1) * clop_ndarray_dimensions_dsums[1] + c];
+              for (int r = start; r < start + height; ++r)
+              {
+                if (-1 < c && c < (cols))
+                {
+                  int s =                  dsums_local[(r - start) * bsz + get_local_id(0)    ];
+                  int w = (c > 0)        ? dsums_local[(r - start) * bsz + get_local_id(0) - 1] : INT_MAX;
+                  int e = (c < cols - 1) ? dsums_local[(r - start) * bsz + get_local_id(0) + 1] : INT_MAX;
+                  int clop_temp_2 = data[r * clop_ndarray_dimensions_data[1] + c];
+                  float clop_temp_3 = min3(w, s, e);
+                  dsums[(r + 1 - start) * bsz + get_local_id(0)] = clop_temp_2 + clop_temp_3;
+                  move[(r) * clop_ndarray_dimensions_move[1] + c] = mov3(w, s, e);
+                }
+                barrier(CLK_LOCAL_MEM_FENCE);
+              }
+              if (-1 < c && c < (cols))
+                dsums[(start + height - 1) * clop_ndarray_dimensions_dsums[1] + c] = dsums_local[(height - 1) * bsz + get_local_id(0)];
+            }
+          });
+    }
+    // setting up buffers and kernel arguments
+    runtime.status = clSetKernelArg(instance_app_579_2.kernel, 0, cl_int.sizeof, &rows);
+    assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clSetKernelArg: 0"));
+    runtime.status = clSetKernelArg(instance_app_579_2.kernel, 1, cl_int.sizeof, &cols);
+    assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clSetKernelArg: 1"));
+    dsums.create_buffer(runtime.context);
+    dsums.push_buffer(runtime.queue);
+    runtime.status = clSetKernelArg(instance_app_579_2.kernel, 2, cl_mem.sizeof, dsums.get_buffer);
+    assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clSetKernelArg: 2"));
+    data.create_buffer(runtime.context);
+    data.push_buffer(runtime.queue);
+    runtime.status = clSetKernelArg(instance_app_579_2.kernel, 3, cl_mem.sizeof, data.get_buffer);
+    assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clSetKernelArg: 3"));
+    move.create_buffer(runtime.context);
+    move.push_buffer(runtime.queue);
+    runtime.status = clSetKernelArg(instance_app_579_2.kernel, 4, cl_mem.sizeof, move.get_buffer);
+    assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clSetKernelArg: 4"));
+    cl_ulong[] clop_ndarray_dimensions_dsums = dsums.get_dimensions();
+    cl_mem clop_ndarray_dimensions_dsums_buffer = clCreateBuffer(runtime.context, CL_MEM_READ_ONLY, cl_ulong.sizeof * clop_ndarray_dimensions_dsums.length, null, &runtime.status);
+    assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clCreateBuffer"));
+    runtime.status = clEnqueueWriteBuffer(runtime.queue, clop_ndarray_dimensions_dsums_buffer, CL_TRUE, 0, cl_ulong.sizeof * clop_ndarray_dimensions_dsums.length, clop_ndarray_dimensions_dsums.ptr, 0, null, null);
+    assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clEnqueueWriteBuffer"));
+    runtime.status = clSetKernelArg(instance_app_579_2.kernel, 5, cl_mem.sizeof, &clop_ndarray_dimensions_dsums_buffer);
+    assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clSetKernelArg: 5"));
+    cl_ulong[] clop_ndarray_dimensions_data = data.get_dimensions();
+    cl_mem clop_ndarray_dimensions_data_buffer = clCreateBuffer(runtime.context, CL_MEM_READ_ONLY, cl_ulong.sizeof * clop_ndarray_dimensions_data.length, null, &runtime.status);
+    assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clCreateBuffer"));
+    runtime.status = clEnqueueWriteBuffer(runtime.queue, clop_ndarray_dimensions_data_buffer, CL_TRUE, 0, cl_ulong.sizeof * clop_ndarray_dimensions_data.length, clop_ndarray_dimensions_data.ptr, 0, null, null);
+    assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clEnqueueWriteBuffer"));
+    runtime.status = clSetKernelArg(instance_app_579_2.kernel, 6, cl_mem.sizeof, &clop_ndarray_dimensions_data_buffer);
+    assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clSetKernelArg: 6"));
+    cl_ulong[] clop_ndarray_dimensions_move = move.get_dimensions();
+    cl_mem clop_ndarray_dimensions_move_buffer = clCreateBuffer(runtime.context, CL_MEM_READ_ONLY, cl_ulong.sizeof * clop_ndarray_dimensions_move.length, null, &runtime.status);
+    assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clCreateBuffer"));
+    runtime.status = clEnqueueWriteBuffer(runtime.queue, clop_ndarray_dimensions_move_buffer, CL_TRUE, 0, cl_ulong.sizeof * clop_ndarray_dimensions_move.length, clop_ndarray_dimensions_move.ptr, 0, null, null);
+    assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clEnqueueWriteBuffer"));
+    runtime.status = clSetKernelArg(instance_app_579_2.kernel, 7, cl_mem.sizeof, &clop_ndarray_dimensions_move_buffer);
+    assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clSetKernelArg: 7"));
+    runtime.status = clSetKernelArg(instance_app_579_2.kernel, 10, cl_int.sizeof * (BLOCK_SIZE * (height + 1)), null);
+    assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clSetKernelArg: 10"));
+    for (uint i = 1; i < rows; i += height)
+    {
+      size_t global_work_size = cols;
+      size_t local_work_size  = instance_app_579_2.get_work_group_size(BLOCK_SIZE);
+      // set additional kernel arguments if needed.
+      clSetKernelArg(instance_app_579_2.kernel, 8, cl_int.sizeof, &height);
+      clSetKernelArg(instance_app_579_2.kernel, 9, cl_int.sizeof, &i);
+      runtime.status = clEnqueueNDRangeKernel(runtime.queue, instance_app_579_2.kernel, 1, null, &global_work_size, &local_work_size, 0, null, null);
+      assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clEnqueueNDRangeKernel"));
+    }
+    dsums.pull_buffer(runtime.queue);
+    move.pull_buffer(runtime.queue);
+    runtime.status = clReleaseMemObject(clop_ndarray_dimensions_dsums_buffer);
+    assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clReleaseMemObject"));
+    runtime.status = clReleaseMemObject(clop_ndarray_dimensions_data_buffer);
+    assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clReleaseMemObject"));
+    runtime.status = clReleaseMemObject(clop_ndarray_dimensions_move_buffer);
+    assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clReleaseMemObject"));
+    timer.stop();
+    TickDuration ticks = timer.peek();
+    writefln("CLOP app_579_2_Horizontal_rectangular_tiling_height_BLOCK_SIZE %5.3f [s]", ticks.usecs / 1E6);
+    }
+    catch (Exception e)
+    {
+      writeln(e);
+    }
+    foreach (c; 0 .. cols)
+    {
+      sums[c] = dsums[rows - 1, c];
+    }
+  }
 
   /**
-   *  Non-optimized CLOP implementation of Path Finder.
+   *  CLOP implementation of Path Finder.
    *  Instead of switching between two arrays for current and previous
    *  rows, we use one large array of the same size as the data array.
    *  We fill in the array row after row, using the CLOP compiler to
@@ -591,7 +725,7 @@ class Application {
         int e = (c < cols - 1) ? dsums[r - 1, c + 1] : INT_MAX;
         dsums[r, c] = data[r, c] + min3(w, s, e);
         move[r, c] = mov3(w, s, e);
-      }
+      } apply(rectangular_tiling(height, BLOCK_SIZE))
     }));
     foreach (c; 0 .. cols)
     {
@@ -675,6 +809,10 @@ class Application {
              rows * cols / (1024 * 1024),
              ticks.usecs / 1E6,
              (rows - 1) * cols / to!double(ticks.usecs));
+    validate();
+
+    reset();
+    clop_mock();
     validate();
   }
 }
