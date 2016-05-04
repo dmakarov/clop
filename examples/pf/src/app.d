@@ -577,7 +577,7 @@ class Application {
     static clop.rt.instance.Instance instance_app_579_2;
     if (instance_app_579_2 is null)
     {
-      instance_app_579_2 = new clop.rt.instance.Instance("app_579_2");
+      instance_app_579_2 = new clop.rt.instance.Instance("mock_579_2");
       runtime.register_instance(instance_app_579_2);
     }
     if (!instance_app_579_2.ready)
@@ -597,29 +597,49 @@ class Application {
       kernel_params ~= ", __local " ~ "int* dsums_local";
       instance_app_579_2.prepare_resources("clop_kernel_main_app_579_2_Horizontal_rectangular_tiling_height_BLOCK_SIZE", macros ~ q{ int min3 ( int a , int b , int c ) { return a < b ? ( c < a ? c : a ) : ( c < b ? c : b ) ; } int mov3 ( int w , int s , int e ) { return w < s ? ( e < w ? -1 : 1 ) : ( e < s ? -1 : 0 ) ; }} ~ "__kernel void clop_kernel_main_app_579_2_Horizontal_rectangular_tiling_height_BLOCK_SIZE(" ~ kernel_params ~ ")" ~ q{
             {
-              int c = get_global_id(0);
+              int tx = get_local_id(0);
               int start = r;
-              int bx = get_group_id(0);
-              int bsz = get_local_size(0);
-              c = bx * bsz - (height - 1) + get_local_id(0);
+              int stride = get_local_size(0) - 2 * height + 2;
+              int stride_local = get_local_size(0) + 2;
+              int c = get_group_id(0) * (stride_local - 2 * height) - height + tx + 1;
               if (-1 < c && c < (cols))
-                dsums_local[get_local_id(0)] = dsums[(r - 1) * clop_ndarray_dimensions_dsums[1] + c];
-              for (int r = start; r < start + height; ++r)
               {
+                dsums_local[tx + 1] = dsums[(r - 1) * clop_ndarray_dimensions_dsums[1] + c];
+              }
+              else
+              {
+                dsums_local[tx + 1] = INT_MAX;
+              }
+              if (tx == 0)
+              {
+                dsums_local[0] = (c > 0) ? dsums[(r - 1) * clop_ndarray_dimensions_dsums[1] + c - 1] : INT_MAX;
+              }
+              if (tx == get_local_size(0) - 1)
+              {
+                dsums_local[tx + 2] = (c < cols - 1) ? dsums[(r - 1) * clop_ndarray_dimensions_dsums[1] + c + 1] : INT_MAX;
+              }
+              int x1;
+              for (int r = 0; r < height; ++r)
+              {
+                int x = r * stride_local + tx + 1;
+                x1 = x + stride_local;
                 if (-1 < c && c < (cols))
                 {
-                  int s =                  dsums_local[(r - start) * bsz + get_local_id(0)    ];
-                  int w = (c > 0)        ? dsums_local[(r - start) * bsz + get_local_id(0) - 1] : INT_MAX;
-                  int e = (c < cols - 1) ? dsums_local[(r - start) * bsz + get_local_id(0) + 1] : INT_MAX;
-                  int clop_temp_2 = data[r * clop_ndarray_dimensions_data[1] + c];
+                  int w = dsums_local[x - 1];
+                  int s = dsums_local[x];
+                  int e = dsums_local[x + 1];
+                  int clop_temp_2 = data[(r + start) * clop_ndarray_dimensions_data[1] + c];
                   float clop_temp_3 = min3(w, s, e);
-                  dsums[(r + 1 - start) * bsz + get_local_id(0)] = clop_temp_2 + clop_temp_3;
-                  move[(r) * clop_ndarray_dimensions_move[1] + c] = mov3(w, s, e);
+                  dsums_local[x1] = clop_temp_2 + clop_temp_3;
+                  move[(r + start) * clop_ndarray_dimensions_move[1] + c] = mov3(w, s, e);
                 }
+                else dsums_local[x1] = INT_MAX;
                 barrier(CLK_LOCAL_MEM_FENCE);
               }
-              if (-1 < c && c < (cols))
-                dsums[(start + height - 1) * clop_ndarray_dimensions_dsums[1] + c] = dsums_local[(height - 1) * bsz + get_local_id(0)];
+              if (height - 2 < tx && tx < stride_local - height - 1)
+              {
+                dsums[(start + height - 1) * clop_ndarray_dimensions_dsums[1] + c] = dsums_local[x1];
+              }
             }
           });
     }
@@ -661,12 +681,12 @@ class Application {
     assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clEnqueueWriteBuffer"));
     runtime.status = clSetKernelArg(instance_app_579_2.kernel, 7, cl_mem.sizeof, &clop_ndarray_dimensions_move_buffer);
     assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clSetKernelArg: 7"));
-    runtime.status = clSetKernelArg(instance_app_579_2.kernel, 10, cl_int.sizeof * (BLOCK_SIZE * (height + 1)), null);
+    runtime.status = clSetKernelArg(instance_app_579_2.kernel, 10, cl_int.sizeof * ((BLOCK_SIZE + 2 * height) * (height + 1)), null);
     assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clSetKernelArg: 10"));
     for (uint i = 1; i < rows; i += height)
     {
-      size_t global_work_size = cols;
-      size_t local_work_size  = instance_app_579_2.get_work_group_size(BLOCK_SIZE);
+      size_t global_work_size = cols + (cols / BLOCK_SIZE) * (2 * height - 2);
+      size_t local_work_size  = BLOCK_SIZE + 2 * height - 2;
       // set additional kernel arguments if needed.
       clSetKernelArg(instance_app_579_2.kernel, 8, cl_int.sizeof, &height);
       clSetKernelArg(instance_app_579_2.kernel, 9, cl_int.sizeof, &i);
@@ -683,7 +703,7 @@ class Application {
     assert(runtime.status == CL_SUCCESS, cl_strerror(runtime.status, "clReleaseMemObject"));
     timer.stop();
     TickDuration ticks = timer.peek();
-    writefln("CLOP app_579_2_Horizontal_rectangular_tiling_height_BLOCK_SIZE %5.3f [s]", ticks.usecs / 1E6);
+    writefln("CLOP app_733_2_Horizontal_rectangular_tiling_height_BLOCK_SIZE %5.3f [s]", ticks.usecs / 1E6);
     }
     catch (Exception e)
     {

@@ -14,8 +14,8 @@
             "sourcePaths"  : ["clop"],
             "dflags"       : ["-Jutils"],
             "dependencies" : {
-                "derelict-cl" : "~>1.2.3",
-                "pegged"      : "~>0.2.1",
+                "derelict-cl" : "~>2.0.0",
+                "pegged"      : "~>0.3.1",
                 "clop:runtime": "*"
             },
             "excludedSourceFiles" : [
@@ -38,7 +38,7 @@
             "targetPath"   : "./lib",
             "importPaths"  : ["clop", "clop/rt"],
             "sourcePaths"  : ["clop/rt"],
-            "dependencies" : { "derelict-cl" : "~>1.2.2" },
+            "dependencies" : { "derelict-cl" : "~>2.0.0" },
             "buildTypes"   : {
                 "verbose"  : { "debugVersions" : ["VERBOSE"] },
                 "grammar"  : { "debugVersions" : ["GRAMMAR"] },
