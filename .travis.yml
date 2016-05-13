@@ -61,10 +61,6 @@ wget --content-disposition --trust-server-names $URLDOWN --post-data "amd_develo
 EOF
 
 
-install:
-  - sudo apt-get update -qq
-  - sudo apt-get install -qq fglrx=2:8.960-0ubuntu1 opencl-headers
-
 script:
 # examples
   - dub run --build=coverage --compiler=${DC} :algebra -- 32
