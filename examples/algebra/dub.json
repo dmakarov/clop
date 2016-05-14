@@ -5,7 +5,7 @@
     "targetType"    : "executable",
     "targetPath"    : "./bin",
     "importPaths"   : ["../../clop"],
-    "lflags-linux"  : ["-Llib", "-lOpenCL", "-lrt"],
+    "lflags-linux"  : ["-L/home/travis/AMDAPPSDK/lib/x86_64", "-Llib", "-lOpenCL", "-lrt"],
     "lflags-osx"    : ["-Llib", "-framework", "OpenCL"],
     "dependencies"  : {
         "clop:compiler": "*",
