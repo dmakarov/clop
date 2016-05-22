@@ -28,8 +28,8 @@ script:
 #  - dub run --build=coverage --compiler=${DC} :nw -- 32 10
   - dub run --build=coverage --compiler=${DC} :wrapper_example
 # unit tests run after examples to collect more coverage
-  - dub test --build=testing --compiler=${DC} :compiler
-  - dub test --build=testing --compiler=${DC} :runtime
+#  - dub test --build=testing --compiler=${DC} :compiler
+#  - dub test --build=testing --compiler=${DC} :runtime
 
 after_success:
   - dub build --build=release --compiler=${DC} :coverall
