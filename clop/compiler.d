@@ -29,21 +29,21 @@ import std.format, clop.ct.parser;
 version (LDC) import std.string;
 
 /++
- + Main entry point to the compiler.
- + The compilation proceeds in parsing and two stages of code
- + generation.  This function arranges for the parser to be invoked,
- + its result stored in a local enum constant to be passed as a
- + parameter to the code generator stages.
- +
- + \param input a string containing the source code of a CLOP fragment
- +              to be compiled into OpenCL kernel and the supporting
- +              OpenCL API calls.
- + \return      a string containing the valid D source code to be
- +              mixed in the invoking application code.
- +              This code includes the CLOP parser and stage 1 codegen
- +              invocations.  The ParseTree returned from the CLOP
- +              parser is used both by the stage1 and stage2 code
- +              generators.
+ Main entry point to the compiler.
+ The compilation proceeds in parsing and two stages of code
+ generation.  This function arranges for the parser to be invoked,
+ its result stored in a local enum constant to be passed as a
+ parameter to the code generator stages.
+
+ \param input a string containing the source code of a CLOP fragment
+              to be compiled into OpenCL kernel and the supporting
+              OpenCL API calls.
+ \return      a string containing the valid D source code to be
+              mixed in the invoking application code.
+              This code includes the CLOP parser and stage 1 codegen
+              invocations.  The ParseTree returned from the CLOP
+              parser is used both by the stage1 and stage2 code
+              generators.
  +/
 string compile(string input, string file = __FILE__, size_t line = __LINE__)
 {
@@ -56,11 +56,11 @@ string compile(string input, string file = __FILE__, size_t line = __LINE__)
 }
 
 /++
- + Stage 1 of the compiler.
- + \param AST   ParseTree object returned by the CLOP parser.
- + \return      a string containing the valid D source code to be
- +              mixed in the invoking application code.
- +              This code includes the stage 2 codegen invocation.
+ Stage 1 of the compiler.
+ \param AST   ParseTree object returned by the CLOP parser.
+ \return      a string containing the valid D source code to be
+              mixed in the invoking application code.
+              This code includes the stage 2 codegen invocation.
  +/
 string stage1_codegen(ParseTree AST, string file, size_t line)
 {
@@ -87,17 +87,15 @@ string stage1_codegen(ParseTree AST, string file, size_t line)
 }
 
 /++
- + Stage 2 the compiler.
- + \param AST   ParseTree object returned by the CLOP parser.
- + \param params
- +              list of parameter names.
- + \param template parameter TList
- +              list of parameter types.
- + \return      a string containing the valid D source code to be mixed
- +              in the invoking application code.  This code includes
- +              the generated OpenCL kernel code and everything needed
- +              to invoke the kernel along with the data movements to
- +              and from the OpenCL device used to execute the kernel.
+ Stage 2 the compiler.
+ \param AST   ParseTree object returned by the CLOP parser.
+ \param params list of parameter names.
+ \param template parameter TList list of parameter types.
+ \return      a string containing the valid D source code to be mixed
+              in the invoking application code.  This code includes
+              the generated OpenCL kernel code and everything needed
+              to invoke the kernel along with the data movements to
+              and from the OpenCL device used to execute the kernel.
  +/
 template stage2_codegen(TList...)
 {
